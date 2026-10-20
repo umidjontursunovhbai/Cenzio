@@ -14,7 +14,7 @@ The app has four tabs: **Dashboard, Expenses, Recurring, and Settings**. Spendin
 
 ## Your data stays in your hands
 
-SmartSpend does not require an account. This version stores your records on your device and shares them locally with its widgets. It does not currently sync your records to a SmartSpend server or CloudKit.
+SmartSpend does not require an account for local use. By default, records stay on your device and are shared locally with its widgets. CloudKit sync is not active. Development builds also offer the optional private connected preview described below.
 
 You can export a copy from **Settings → Export Data**. CSV expense records can be imported again; JSON/PDF reports and other exported sections are not a full restorable app backup. Keep exported files somewhere safe: they contain your financial information, and deleting data inside the app does not delete copies you have saved or shared elsewhere. See the [Privacy Policy](https://umidjontursunovhbai.github.io/SmartSpend/privacy.html) for details.
 
@@ -23,6 +23,15 @@ You can export a copy from **Settings → Export Data**. CSV expense records can
 New development builds include **Settings → AI tools (MCP)**. You can explicitly export an expense snapshot to your own MCP server, then review and approve its changes before importing them back. Adding, editing, archiving and restoring expenses are supported; stale changes and duplicate operations are checked before applying a batch.
 
 This preview uses **manual JSON file exchange**, not automatic iPhone or ChatGPT sync. Snapshots include private financial details, so share them only with services you trust. The separate [private MCP server guide](mcp-server/README.md) explains setup and its limits.
+
+The separate **Connected sync** preview can exchange expense changes with a private
+server after explicit enrollment. It checks while the app is open, retains offline
+edits for retry, and includes History & Trash. Google enrollment creates a new
+dedicated sheet; Notion requires administrator configuration. This is development
+code requiring its own HTTPS deployment and live integration QA, not a public
+consumer login or a verified ChatGPT connection. See the [connected sync operator
+guide](docs/CONNECTED_SYNC.md) before enabling it. Connecting sends expense records
+to your server and any providers you explicitly enable.
 
 To dictate an expense, **hold the + button briefly, then pull it down** on
 Dashboard or Expenses. Listening starts immediately (iOS asks permission the

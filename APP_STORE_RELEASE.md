@@ -14,6 +14,18 @@ Audit date: October 10, 2026. This is a preparation checklist, not proof of App 
 
 ## Blockers before upload
 
+The optional connected-sync development preview is documented in
+[the operator guide](docs/CONNECTED_SYNC.md). Explicit enrollment uploads expense
+records/categories/history to an owner-operated service; enabling Google Sheets
+or Notion also exchanges records with that provider. Reconcile in-app and public
+privacy disclosures, App Store privacy answers, retention/deletion behavior and
+reviewer access with the final shipped build. Native sync uses an administrator-issued
+ledger-scoped credential in Keychain, not consumer account onboarding. Remote MCP
+requires a separately configured upstream OAuth identity provider. Public HTTPS
+sync deployment, live Google/Notion/ChatGPT QA, and production authentication/review
+access remain release gates. The existing voice listener on port 10000 does not
+provide sync routes. Local tests or a successful build do not establish these gates.
+
 The inline voice flow now uses GPT-6 Luna rather than a static local parser.
 The owner's phone is provisioned over its paired Mac with a revocable device
 credential. This one-time file import is DEBUG-only and excluded from Release;
@@ -55,7 +67,9 @@ Description:
 >
 > No account is required. In the current version, SmartSpend records are stored on your device and can be shared with its iOS widget.
 
-Do not claim bank sync, live account balances, AI advice, or cloud sync in the listing; the current build does not provide those features.
+Do not claim bank sync, live account balances, AI advice, or generally available
+cloud sync in the listing. The private connected preview is not a verified public
+service; describe only features enabled and validated in the final release build.
 
 ## Submission boundary
 

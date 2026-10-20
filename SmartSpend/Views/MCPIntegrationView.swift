@@ -16,6 +16,9 @@ struct MCPIntegrationView: View {
         NavigationStack {
             Form {
                 Section {
+                    NavigationLink("Expense sync & history") {
+                        ExpenseSyncView()
+                    }
                     NavigationLink(voiceText("Voice connection", "Подключение голоса")) {
                         VoiceConnectionView()
                     }

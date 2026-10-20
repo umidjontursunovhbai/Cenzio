@@ -1,11 +1,17 @@
 # SmartSpend MCP — private, reviewable first version
 
+This page primarily describes the original **manual snapshot/patch** workflow and
+the separate voice gateway. The new `smartspend-sync` connected service has its own
+[operator guide](../docs/CONNECTED_SYNC.md), scoped authentication, incremental
+ledger, provider workers, and history. It requires separate deployment; running
+the commands below does not enable connected sync.
+
 A real MCP server for reading expenses and staging reversible changes from an AI
 client. Built on the [official MCP Python SDK](https://py.sdk.modelcontextprotocol.io/v1/),
 pinned to its supported `1.x` API in `uv.lock`.
 
-**This is not live iPhone sync and not a public ChatGPT connector.** The current
-iOS app keeps its records locally. The owner explicitly exports a snapshot, runs
+**The manual workflow is not live iPhone sync or a public ChatGPT connector.** In
+this mode the iOS app keeps its records locally. The owner explicitly exports a snapshot, runs
 this server against a separate SQLite mirror, and reviews/imports a patch in the
 app. Until that last step, a tool saying "created" means **created in the server
 mirror, pending app review**, not saved on the iPhone.

@@ -63,15 +63,27 @@ struct PrivacyPolicyView: View {
                             PolicySection(
                                 icon: "wifi",
                                 tint: Color(.systemOrange),
-                                title: "No account or cloud sync",
-                                text: "The current build does not require an account and does not sync your SmartSpend records to CloudKit or a SmartSpend server."
+                                title: "Local use without an account",
+                                text: "Local expense tracking does not require an account. Connected sync is optional and off by default. SmartSpend does not use CloudKit to sync your records."
                             ),
                             PolicySection(
                                 icon: "trash",
                                 tint: Color(.systemRed),
                                 title: "Delete your app data",
-                                text: "You can use Clear All Data in Settings to remove your SmartSpend records and reset app preferences. Export files are separate copies and are not recalled or deleted by that action; remove them from any location where you saved or shared them."
+                                text: "Clear All Data removes local SmartSpend records and resets app preferences. It does not erase exports, server history, backups, or copies in connected services. Disconnect and revoke access separately, and ask your server administrator to remove retained server copies."
                             )
+                        ]
+                    )
+
+                    policyGroup(
+                        title: "Optional connected sync",
+                        sections: [
+                            PolicySection(icon: "arrow-up-tray", tint: Color(.systemBlue),
+                                          title: "Only after you enable it",
+                                          text: "Connected sync sends expenses, archived expenses, categories, currency and timezone to your configured server after separate consent. Budgets, salary and recorded audio are not included. Changes and older versions are retained for history and restore."),
+                            PolicySection(icon: "key", tint: Color(.systemIndigo),
+                                          title: "Connected services and AI clients",
+                                          text: "If you authorize Google Sheets, Notion or an MCP AI client, it can access records within its granted permissions. Google tokens are encrypted on your server; the phone's sync credential is stored separately in Keychain. Provider policies also apply. Disconnecting stops access from this device but does not erase server history, backups or external copies. Retention and deletion of those copies are managed by your server administrator and the connected service.")
                         ]
                     )
 
@@ -163,7 +175,7 @@ struct PrivacyPolicyView: View {
                     icon: "arrow-up-tray",
                     tint: Color(.systemGreen),
                     title: "You choose when it leaves",
-                    detail: "Through exports, support email, or voice text you explicitly send to AI"
+                    detail: "Through exports, support email, consented AI drafts, or optional connected sync"
                 )
             }
             .padding(.horizontal, 18)

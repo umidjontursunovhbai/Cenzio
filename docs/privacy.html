@@ -24,13 +24,18 @@
     <section class="content-section" aria-labelledby="data-heading">
       <h2 id="data-heading">Information you enter</h2>
       <p>SmartSpend stores expenses, categories, budgets, spending goals, monthly income, recurring expenses, archived expenses, learned suggestions, and app preferences that you enter or create. This information is stored on your device. The app and widget share the information needed by the widget through Apple's App Group storage.</p>
-      <p>The current app does not require an account and does not upload your SmartSpend records to a SmartSpend server or sync them through CloudKit. Depending on your device settings, Apple's device backup may include app data; those backups are managed by Apple and your device settings, not by SmartSpend.</p>
+      <p>Local expense tracking does not require an account. Connected sync is optional and off by default; it uploads records only after separate consent. SmartSpend does not sync records through CloudKit. Depending on your device settings, Apple's device backup may include app data; those backups are managed by Apple and your device settings, not by SmartSpend.</p>
     </section>
     <section class="content-section" aria-labelledby="voice-heading">
       <h2 id="voice-heading">Optional voice and AI drafts</h2>
       <p>Recording starts only after you hold and pull the + button, or tap a microphone, and grant permission. Audio is kept in a temporary protected file on this iPhone, transcribed locally after Stop, and deleted after transcription or cancellation. The first use may download an Apple speech model. Recorded audio is not uploaded. Keyboard dictation follows your iPhone's own settings.</p>
       <p>The first time you use AI expense preparation, the app asks permission to send recognized text, current category names and IDs, currency, reference date and timezone through the authenticated server to OpenRouter/OpenAI. After you agree, stopping a recording automatically sends this context for an AI draft. Past expenses, income, budgets and audio are not sent. Provider retention policies apply; this is not a zero-retention guarantee. Draft text is kept temporarily in server memory for retry handling, not in its expense database. Nothing is saved until you review and tap Save.</p>
       <p>The OpenRouter key stays on your server. The phone's separate credential is stored in iOS Keychain without iCloud Keychain synchronization. Disconnect in Voice connection to remove it and request revocation. If your server is offline, revoke the device on the server separately. Clearing app data also removes the phone's connection.</p>
+    </section>
+    <section class="content-section" aria-labelledby="sync-heading">
+      <h2 id="sync-heading">Optional connected sync</h2>
+      <p>After you enable connected sync and consent, expenses, archived expenses, categories, currency and timezone are sent to your configured server. Budgets, salary and recorded audio are not included. The server retains changes and older versions for history and restore.</p>
+      <p>Google Sheets, Notion and MCP AI clients can access records only through connections you authorize and their granted permissions. Google tokens are encrypted on your server; the phone's separate sync credential is stored in iOS Keychain. Connected services have their own privacy policies. Server administrators manage server retention and backups. Disconnecting a device does not erase server history, backups or external copies; revoke grants and request deletion from the administrator and connected services separately.</p>
     </section>
     <section class="content-section" aria-labelledby="files-heading">
       <h2 id="files-heading">Imports and exports</h2>
@@ -46,11 +51,11 @@
     </section>
     <section class="content-section" aria-labelledby="deletion-heading">
       <h2 id="deletion-heading">Retention and deletion</h2>
-      <p>Your SmartSpend records remain on your device until you delete them in Settings or remove the app. An exported file or support email is a separate copy and is not deleted when you clear app data. You can delete exported copies from the places where you saved them. If you restored an iOS device backup, app data may be restored with it.</p>
+      <p>Your local SmartSpend records remain on your device until you delete them in Settings or remove the app. Exports, support email, server history, backups and connected-service records are separate copies and are not deleted when you clear app data. Delete external copies and revoke connections separately; contact your server administrator about retained history and backups. If you restore an iOS device backup, app data may be restored with it.</p>
     </section>
     <section class="content-section" aria-labelledby="changes-heading">
       <h2 id="changes-heading">Changes and contact</h2>
-      <p>If SmartSpend adds accounts, cloud sync, analytics, or other data practices in a later version, this policy will be updated before those features are released.</p>
+      <p>This policy will be updated before new data practices are released.</p>
       <p>To ask about a support email you sent or this policy, contact <a class="contact-link" href="mailto:tursunov.umidjon.uz@gmail.com">tursunov.umidjon.uz@gmail.com</a>.</p>
     </section>
   </main>
