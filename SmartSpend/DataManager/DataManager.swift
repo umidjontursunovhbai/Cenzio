@@ -50,14 +50,29 @@ class DataManager: ObservableObject {
     @Published var customEndDate: Date = Date()
     @Published var cloudSyncState: CloudSyncState = .idle
 
-    private let sharedDefaults = UserDefaults(suiteName: "group.com.tursunov.SmartSpend") ?? UserDefaults.standard
+    private let sharedDefaults: UserDefaults
+    private let activityManager: GamificationManager
+    private let flushMCPStorage: () -> Bool
     private var dataLastChangedAt: Date = Date()
     private var isApplyingRemoteSnapshot = false
 
-    private init() {
+    private convenience init() {
+        self.init(
+            defaults: UserDefaults(suiteName: "group.com.tursunov.SmartSpend") ?? .standard,
+            activityManager: .shared,
+            startBackgroundTasks: true
+        )
+    }
+
+    // Isolated stores allow persistence tests without changing the installed app's data.
+    init(defaults: UserDefaults, activityManager: GamificationManager, startBackgroundTasks: Bool = false,
+         mcpStorageSync: (() -> Bool)? = nil) {
+        self.sharedDefaults = defaults
+        self.activityManager = activityManager
+        self.flushMCPStorage = mcpStorageSync ?? { defaults.synchronize() }
         self.user = User(currency: .usd, language: .english)
         loadData()
-        startTimer()
+        if startBackgroundTasks { startTimer() }
     }
     
     // MARK: - Data Persistence
@@ -102,6 +117,9 @@ class DataManager: ObservableObject {
             sharedDefaults.set(customStartDate, forKey: "customStartDate")
             sharedDefaults.set(customEndDate, forKey: "customEndDate")
             sharedDefaults.set(dataLastChangedAt, forKey: "dataLastChangedAt")
+            // A complete newer app save supersedes any interrupted bridge batch.
+            // Never replay an older full-state journal over a later local edit.
+            sharedDefaults.removeObject(forKey: "mcpPendingCommit")
             
         } catch {
             print("Error saving data: \(error)")
@@ -111,6 +129,12 @@ class DataManager: ObservableObject {
 
     private func loadData() {
         let decoder = JSONDecoder()
+        // Complete a user-confirmed bridge batch interrupted between its persisted
+        // journal and the legacy app/widget keys. No automatic network writes.
+        if let pending = sharedDefaults.data(forKey: "mcpPendingCommit"),
+           let commit = try? decoder.decode(MCPExpenseCommit.self, from: pending) {
+            try? persistMCPCommit(commit)
+        }
         
         if let expensesData = sharedDefaults.data(forKey: "expenses"),
            let decodedExpenses = try? decoder.decode([Expense].self, from: expensesData) {
@@ -180,6 +204,133 @@ class DataManager: ObservableObject {
         loadData()
     }
 
+    // MARK: - Explicit MCP file exchange
+
+    private var mcpLedgerId: String {
+        if let value = sharedDefaults.string(forKey: "mcpLedgerId"), UUID(uuidString: value) != nil {
+            return value
+        }
+        let value = UUID().uuidString.lowercased()
+        sharedDefaults.set(value, forKey: "mcpLedgerId")
+        return value
+    }
+
+    private var mcpAppliedOperations: [String: String] {
+        sharedDefaults.dictionary(forKey: "mcpAppliedOperations") as? [String: String] ?? [:]
+    }
+
+    private func mcpRecord(_ expense: Expense) throws -> MCPExpenseRecord {
+        guard expense.amount.isFinite,
+              let amount = Decimal(string: String(expense.amount), locale: MCPExpenseExchange.locale) else {
+            throw MCPExpenseExchangeError.invalidRecord
+        }
+        return MCPExpenseRecord(
+            id: expense.id.uuidString.lowercased(), title: expense.title,
+            amount: MCPExpenseExchange.canonicalAmount(amount),
+            categoryId: expense.categoryId.uuidString.lowercased(),
+            date: MCPExpenseExchange.dateFormatter.string(from: expense.date)
+        )
+    }
+
+    private func mcpRecord(_ archived: ArchivedExpense) throws -> MCPExpenseRecord {
+        var expense = Expense(title: archived.title, amount: archived.amount,
+                              categoryId: archived.categoryId, date: archived.date)
+        expense.id = archived.id
+        return try mcpRecord(expense)
+    }
+
+    @MainActor
+    func exportMCPSnapshot() throws -> Data {
+        reloadFromSharedStorage()
+        let categories = userCategories.map {
+            MCPExchangeCategory(id: $0.id.uuidString.lowercased(), name: $0.name,
+                                iconSystemName: $0.iconSystemName, colorName: $0.colorName)
+        }
+        let ids = Set(categories.map(\.id))
+        guard categories.count <= 1_000,
+              ids.count == categories.count,
+              categories.allSatisfy({ !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && $0.name.unicodeScalars.count <= 100 }),
+              expenses.allSatisfy({ ids.contains($0.categoryId.uuidString.lowercased()) }),
+              deletedExpenses.allSatisfy({ ids.contains($0.categoryId.uuidString.lowercased()) }) else {
+            throw MCPExpenseExchangeError.missingCategory
+        }
+        let snapshot = MCPExchangeSnapshot(
+            schemaVersion: 1, ledgerId: mcpLedgerId, currency: user.currency.rawValue,
+            timeZone: TimeZone.current.identifier, categories: categories,
+            expenses: try expenses.map { try mcpRecord($0).validated(categoryIds: ids) },
+            archivedExpenses: try deletedExpenses.map { try mcpRecord($0).validated(categoryIds: ids) },
+            appliedOperationIds: mcpAppliedOperations.keys.sorted()
+        )
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        return try encoder.encode(snapshot)
+    }
+
+    @MainActor
+    func previewMCPChanges(_ document: MCPExpenseOperationsDocument) throws -> MCPExpenseExchangePlan {
+        try MCPExpenseExchange.plan(
+            document: document, ledgerId: mcpLedgerId, currency: user.currency.rawValue,
+            categoryIds: Set(userCategories.map { $0.id.uuidString.lowercased() }),
+            expenses: expenses.map { try mcpRecord($0) },
+            archivedExpenses: deletedExpenses.map { try mcpRecord($0) },
+            appliedOperations: mcpAppliedOperations
+        )
+    }
+
+    @MainActor
+    @discardableResult
+    func applyMCPChanges(_ document: MCPExpenseOperationsDocument) throws -> Int {
+        reloadFromSharedStorage()
+        let plan = try previewMCPChanges(document)
+        guard !plan.changes.isEmpty else { return 0 }
+        let existing = Dictionary(expenses.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        func localExpense(_ record: MCPExpenseRecord) throws -> Expense {
+            guard let id = UUID(uuidString: record.id), let category = UUID(uuidString: record.categoryId),
+                  let amount = Double(record.amount),
+                  let date = MCPExpenseExchange.dateFormatter.date(from: record.date) else {
+                throw MCPExpenseExchangeError.invalidRecord
+            }
+            var expense = Expense(title: record.title, amount: amount, categoryId: category,
+                                  date: date, notionId: existing[id]?.notionId)
+            expense.id = id
+            guard try mcpRecord(expense).amount == record.amount else { throw MCPExpenseExchangeError.invalidRecord }
+            return expense
+        }
+        let updatedExpenses = try plan.expenses.map(localExpense)
+        let updatedArchived = try plan.archivedExpenses.map { record -> ArchivedExpense in
+            if let previous = deletedExpenses.first(where: { $0.id.uuidString.lowercased() == record.id }),
+               try mcpRecord(previous) == record { return previous }
+            return ArchivedExpense(from: try localExpense(record))
+        }
+        let commit = MCPExpenseCommit(ledgerId: mcpLedgerId, expenses: updatedExpenses,
+                                     archivedExpenses: updatedArchived, appliedOperations: plan.appliedOperations)
+        sharedDefaults.set(try JSONEncoder().encode(commit), forKey: "mcpPendingCommit")
+        guard flushMCPStorage() else {
+            sharedDefaults.removeObject(forKey: "mcpPendingCommit")
+            throw MCPExpenseExchangeError.storageFailure
+        }
+        try persistMCPCommit(commit)
+        expenses = updatedExpenses
+        deletedExpenses = updatedArchived
+        rebuildLearnedPatternsFromRecentExpenses()
+        saveData()
+        return plan.changes.count
+    }
+
+    private func persistMCPCommit(_ commit: MCPExpenseCommit) throws {
+        // Values were encoded successfully before the journal was written.
+        let encoder = JSONEncoder()
+        guard let active = try? encoder.encode(commit.expenses),
+              let archived = try? encoder.encode(commit.archivedExpenses) else { throw MCPExpenseExchangeError.storageFailure }
+        sharedDefaults.set(active, forKey: "expenses")
+        sharedDefaults.set(archived, forKey: "archivedExpenses")
+        sharedDefaults.set(commit.ledgerId, forKey: "mcpLedgerId")
+        sharedDefaults.set(commit.appliedOperations, forKey: "mcpAppliedOperations")
+        sharedDefaults.set(Date(), forKey: "dataLastChangedAt")
+        guard flushMCPStorage() else { throw MCPExpenseExchangeError.storageFailure }
+        sharedDefaults.removeObject(forKey: "mcpPendingCommit")
+    }
+
     // MARK: - iCloud Sync
 
     var syncSnapshot: SmartSpendSyncSnapshot {
@@ -223,6 +374,12 @@ class DataManager: ObservableObject {
         isApplyingRemoteSnapshot = true
         defer { isApplyingRemoteSnapshot = false }
 
+        // A full restore has no matching MCP receipts. Require a new mirror
+        // rather than trusting acknowledgments from the replaced expense state.
+        sharedDefaults.removeObject(forKey: "mcpPendingCommit")
+        sharedDefaults.removeObject(forKey: "mcpAppliedOperations")
+        sharedDefaults.removeObject(forKey: "mcpLedgerId")
+
         expenses = snapshot.expenses
         user = snapshot.user
         deletedExpenses = snapshot.deletedExpenses
@@ -240,6 +397,38 @@ class DataManager: ObservableObject {
     }
     
     // MARK: - Expense Management
+
+    // Voice review must not claim success before the expense key is persisted.
+    // Its stable draft UUID also makes repeated Save taps safe.
+    func addReviewedVoiceExpense(_ expense: Expense, currency: String) throws {
+        guard Thread.isMainThread, currency == user.currency.rawValue,
+              expense.amount.isFinite, expense.amount > 0,
+              !expense.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              userCategories.contains(where: { $0.id == expense.categoryId }) else {
+            throw VoiceExpenseSaveError.invalidExpense
+        }
+        if let existing = expenses.first(where: { $0.id == expense.id }) {
+            guard existing == expense else { throw VoiceExpenseSaveError.invalidExpense }
+            return
+        }
+        let next = expenses + [expense]
+        let encoded = try JSONEncoder().encode(next)
+        let previous = sharedDefaults.data(forKey: "expenses")
+        sharedDefaults.set(encoded, forKey: "expenses")
+        guard flushMCPStorage() else {
+            if let previous { sharedDefaults.set(previous, forKey: "expenses") }
+            else { sharedDefaults.removeObject(forKey: "expenses") }
+            _ = flushMCPStorage()
+            throw VoiceExpenseSaveError.storageFailure
+        }
+        expenses = next
+        dataLastChangedAt = Date()
+        sharedDefaults.set(dataLastChangedAt, forKey: "dataLastChangedAt")
+        // A later complete save will encode the same already-persisted expense.
+        updateLearnedPatterns(for: expense)
+        gamificationManager.recordExpense()
+        WidgetCenter.shared.reloadAllTimelines()
+    }
     
     func addExpense(_ expense: Expense) {
         // Ensure this runs on main thread to avoid SwiftUI threading issues
@@ -286,12 +475,15 @@ class DataManager: ObservableObject {
     }
     
     func restoreExpense(_ deletedExpense: ArchivedExpense) {
-        let expense = Expense(
+        guard deletedExpenses.contains(where: { $0.id == deletedExpense.id }),
+              !expenses.contains(where: { $0.id == deletedExpense.id }) else { return }
+        var expense = Expense(
             title: deletedExpense.title,
             amount: deletedExpense.amount,
             categoryId: deletedExpense.categoryId,
             date: deletedExpense.date
         )
+        expense.id = deletedExpense.id
         expenses.append(expense)
         deletedExpenses.removeAll { $0.id == deletedExpense.id }
         saveData()
@@ -444,6 +636,7 @@ class DataManager: ObservableObject {
     func addRecurringExpense(_ expense: RecurringExpense) {
         recurringExpenses.append(expense)
         saveData()
+        processRecurringExpenses()
     }
     
     func updateRecurringExpense(_ expense: RecurringExpense) {
@@ -721,6 +914,14 @@ class DataManager: ObservableObject {
         recurringExpenses.removeAll()
         learnedPatterns.removeAll()
         userCategories.removeAll()
+        selectedTimePeriod = .currentMonth
+        customStartDate = Date()
+        customEndDate = customStartDate
+        sharedDefaults.removeObject(forKey: "openAddExpense")
+        sharedDefaults.removeObject(forKey: "mcpPendingCommit")
+        sharedDefaults.removeObject(forKey: "mcpAppliedOperations")
+        sharedDefaults.removeObject(forKey: "mcpLedgerId")
+        activityManager.reset()
         saveData()
     }
     
@@ -742,33 +943,28 @@ class DataManager: ObservableObject {
         saveData()
     }
     
-    func processRecurringExpenses() {
-        let calendar = Calendar.current
-        let today = Date()
-        
-        for recurringExpense in recurringExpenses {
-            if let lastProcessed = recurringExpense.lastProcessedDate,
-               calendar.isDate(lastProcessed, inSameDayAs: today) {
-                continue
+    func processRecurringExpenses(through date: Date = Date(), calendar: Calendar = .current) {
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async {
+                self.processRecurringExpenses(through: date, calendar: calendar)
             }
-            
-            if recurringExpense.shouldCreateExpense(on: today) {
-                let newExpense = Expense(
-                    title: recurringExpense.title,
-                    amount: recurringExpense.amount,
-                    categoryId: recurringExpense.categoryId,
-                    date: today
-                )
-                
-                addExpense(newExpense)
-                
-                // Update last processed date
-                if let index = recurringExpenses.firstIndex(where: { $0.id == recurringExpense.id }) {
-                    recurringExpenses[index].lastProcessedDate = today
-                    saveData()
-                }
-            }
+            return
         }
+
+        var generated: [Expense] = []
+        for index in recurringExpenses.indices {
+            let recurring = recurringExpenses[index]
+            let dueDates = recurring.dueDates(through: date, calendar: calendar)
+            guard let lastDueDate = dueDates.last else { continue }
+            generated.append(contentsOf: dueDates.map {
+                Expense(title: recurring.title, amount: recurring.amount,
+                        categoryId: recurring.categoryId, date: $0)
+            })
+            recurringExpenses[index].lastProcessedDate = lastDueDate
+        }
+        guard !generated.isEmpty else { return }
+        // Persist the occurrence cursors and their records together, before another refresh.
+        addExpensesBatch(generated)
     }
     
     // MARK: - Manager Access
@@ -782,7 +978,7 @@ class DataManager: ObservableObject {
     }
     
     var gamificationManager: GamificationManager {
-        return GamificationManager.shared
+        return activityManager
     }
     
     // MARK: - Deleted Expenses Helper

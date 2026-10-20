@@ -12,6 +12,20 @@ struct AddExpenseView: View {
     @State private var categorySuggestions: [(category: UserCategory, confidence: Double)] = []
     @State private var suggestedPrice: Double?
     @State private var showingCategoryManagement = false
+    @State private var voiceDateConfirmed = false
+    @State private var saveError: String?
+    private let prefill: VoiceExpensePrefill?
+    private let onSaved: (() -> Void)?
+
+    init(prefill: VoiceExpensePrefill? = nil, onSaved: (() -> Void)? = nil) {
+        self.prefill = prefill
+        self.onSaved = onSaved
+        _title = State(initialValue: prefill?.title ?? "")
+        _amount = State(initialValue: prefill?.amount.map { AmountInputFormatter.formatValue($0, maxFractionDigits: 6) } ?? "")
+        _selectedDate = State(initialValue: prefill?.date ?? Date())
+        _selectedCategory = State(initialValue: prefill?.categoryID.flatMap { id in DataManager.shared.userCategories.first { $0.id == id } })
+        _voiceDateConfirmed = State(initialValue: prefill?.requiresDateConfirmation != true)
+    }
 
     var body: some View {
         NavigationStack {
@@ -20,6 +34,7 @@ struct AddExpenseView: View {
                     // Title Field with Auto-completion
                     VStack(alignment: .leading, spacing: 8) {
                         TextField("expense_title_placeholder".localized, text: $title, axis: .vertical)
+                            .accessibilityIdentifier("expense.title")
                             .textFieldStyle(.plain)
                             .onChange(of: title) { _, _ in
                                 checkForSuggestions()
@@ -47,6 +62,7 @@ struct AddExpenseView: View {
                             .foregroundStyle(.secondary)
                             .font(.body)
                         TextField("0", text: $amount)
+                            .accessibilityIdentifier("expense.amount")
                             .keyboardType(.decimalPad)
                             .textFieldStyle(.plain)
                             .onChange(of: amount) {
@@ -97,6 +113,14 @@ struct AddExpenseView: View {
                     
                     // Date Picker
                     DatePicker("column_date".localized, selection: $selectedDate, displayedComponents: .date)
+                        .onChange(of: selectedDate) { _, _ in voiceDateConfirmed = true }
+                    if prefill?.requiresDateConfirmation == true {
+                        if let phrase = prefill?.dateExpression {
+                            Text(voiceText("Check the date for: \(phrase)", "Проверьте дату: \(phrase)"))
+                                .font(.footnote).foregroundStyle(.orange)
+                        }
+                        Toggle(voiceText("This date is correct", "Дата указана верно"), isOn: $voiceDateConfirmed)
+                    }
                 } header: {
                     Text("expense_details".localized)
                 }
@@ -115,15 +139,18 @@ struct AddExpenseView: View {
                     Button("save".localized) {
                         saveExpense()
                     }
-                    .disabled(title.isEmpty || amount.isEmpty || AmountInputFormatter.parse(amount) == nil || selectedCategory == nil)
+                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || amount.isEmpty || (AmountInputFormatter.parse(amount) ?? 0) <= 0 || selectedCategory == nil || !voiceDateConfirmed || (prefill != nil && prefill?.currency != dataManager.user.currency.rawValue))
                     .fontWeight(.semibold)
                 }
             }
             .sheet(isPresented: $showingCategoryManagement) {
                 CategoryManagementView()
             }
+            .alert(voiceText("Expense not saved", "Расход не сохранён"), isPresented: Binding(get: { saveError != nil }, set: { if !$0 { saveError = nil } })) {
+                Button("OK") { saveError = nil }
+            } message: { Text(saveError ?? "") }
             .onAppear {
-                if selectedCategory == nil {
+                if selectedCategory == nil && prefill == nil {
                     selectedCategory = dataManager.userCategories.first
                 }
             }
@@ -160,21 +187,29 @@ struct AddExpenseView: View {
     
     private func saveExpense() {
         guard let amountValue = AmountInputFormatter.parse(amount),
-              !title.isEmpty,
+              amountValue.isFinite, amountValue > 0,
+              !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, voiceDateConfirmed,
               let categoryId = selectedCategory?.id else { return }
 
-        let expense = Expense(
+        var expense = Expense(
             title: title,
             amount: amountValue,
             categoryId: categoryId,
             date: selectedDate
         )
-        dataManager.addExpense(expense)
+        if let prefill {
+            expense.id = prefill.id
+            do { try dataManager.addReviewedVoiceExpense(expense, currency: prefill.currency ?? "") }
+            catch { saveError = error.localizedDescription; return }
+        } else {
+            dataManager.addExpense(expense)
+        }
+        onSaved?()
         dismiss()
     }
     
     private func formatAmountInput() {
-        let formatted = AmountInputFormatter.formatEditingText(amount)
+        let formatted = AmountInputFormatter.formatEditingText(amount, maxFractionDigits: 6)
         if formatted != amount {
             amount = formatted
         }

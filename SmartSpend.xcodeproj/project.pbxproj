@@ -544,6 +544,8 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Record expenses when you tap the microphone. Audio is recognized on this iPhone.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Turn your spoken expenses into editable text on this iPhone before you choose to send it to AI.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -574,6 +576,8 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Record expenses when you tap the microphone. Audio is recognized on this iPhone.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Turn your spoken expenses into editable text on this iPhone before you choose to send it to AI.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

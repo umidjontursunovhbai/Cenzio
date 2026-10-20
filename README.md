@@ -16,12 +16,43 @@ The app has four tabs: **Dashboard, Expenses, Recurring, and Settings**. Spendin
 
 SmartSpend does not require an account. This version stores your records on your device and shares them locally with its widgets. It does not currently sync your records to a SmartSpend server or CloudKit.
 
-You can export a copy from **Settings → Export Data**. Keep exported files somewhere safe: they contain your financial information, and deleting data inside the app does not delete copies you have saved or shared elsewhere. See the [Privacy Policy](PRIVACY_POLICY.md) for details.
+You can export a copy from **Settings → Export Data**. CSV expense records can be imported again; JSON/PDF reports and other exported sections are not a full restorable app backup. Keep exported files somewhere safe: they contain your financial information, and deleting data inside the app does not delete copies you have saved or shared elsewhere. See the [Privacy Policy](https://umidjontursunovhbai.github.io/SmartSpend/privacy.html) for details.
+
+## Private AI tools preview
+
+New development builds include **Settings → AI tools (MCP)**. You can explicitly export an expense snapshot to your own MCP server, then review and approve its changes before importing them back. Adding, editing, archiving and restoring expenses are supported; stale changes and duplicate operations are checked before applying a batch.
+
+This preview uses **manual JSON file exchange**, not automatic iPhone or ChatGPT sync. Snapshots include private financial details, so share them only with services you trust. The separate [private MCP server guide](mcp-server/README.md) explains setup and its limits.
+
+To dictate an expense, **hold the + button briefly, then pull it down** on
+Dashboard or Expenses. Listening starts immediately (iOS asks permission the
+first time); a normal tap still opens the manual form. The same button becomes
+a red Stop button — no recording popup. Voice capture currently supports English only;
+there is no language picker or recording-language banner. Tap Stop to transcribe
+locally, then let **GPT-6 Luna** prepare an expense preview. First use may download
+Apple's speech model and asks permission to send text to AI. After that, Stop
+automatically runs STT → GPT → review. Check the amount, title, category and date,
+then tap Save. Each request includes your current category IDs/names, even when
+they are in different languages. GPT chooses from those options by meaning;
+there is no static expense/category parser or silent local fallback. Income,
+loans, cards and foreign-currency conversion are not recorded as expenses.
+
+GPT preparation requires an authenticated internet connection to the voice
+gateway. The owner's development iPhone can be provisioned from the paired Mac
+without typing a code; this uses a device-specific credential imported into
+Keychain, not an API key bundled in the app. This DEBUG-only provisioning is NOT
+public multi-user onboarding. Public release still needs production authentication.
+The temporary HTTPS connection works over Wi-Fi or mobile internet, without
+Tailscale on the iPhone. The OpenRouter key stays on Ubuntu; the phone stores only its own
+revocable credential in Keychain. Microphone speech requires on-device support
+for the chosen language; availability depends on the device/language assets.
+Only text and category/date/currency context go to OpenRouter/OpenAI after your
+consent—not audio or past expenses. This is not offline AI or live ledger sync.
 
 ## Availability and support
 
-SmartSpend is being prepared for App Store release; it is **not yet published on the App Store**. If you are using a development build, be sure to export and verify a backup before changing devices or reinstalling the app.
+SmartSpend is being prepared for App Store release; it is **not yet published on the App Store**. If you are using a development build, keep the existing installation until you have verified how to move all the records you need. Exported reports alone do not restore the entire app.
 
-Need help or want to share feedback? Email [tursunov.umidjon.uz@gmail.com](mailto:tursunov.umidjon.uz@gmail.com).
+Need help or want to share feedback? Visit [SmartSpend Support](https://umidjontursunovhbai.github.io/SmartSpend/support.html) or email [tursunov.umidjon.uz@gmail.com](mailto:tursunov.umidjon.uz@gmail.com).
 
 For developers: [release preparation](APP_STORE_RELEASE.md) · [deployment notes](DEPLOYMENT.md) · [third-party notices](THIRD_PARTY_NOTICES.md)

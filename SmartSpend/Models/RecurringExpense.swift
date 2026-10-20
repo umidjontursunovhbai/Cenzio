@@ -69,8 +69,7 @@ struct RecurringExpense: Identifiable, Codable {
     }
     
     var nextDueDate: Date {
-        let lastDate = lastProcessedDate ?? startDate
-        return recurrenceType.nextDate(from: lastDate)
+        occurrenceDate(at: nextOccurrenceIndex(calendar: .current), calendar: .current)
     }
     
     var isOverdue: Bool {
@@ -88,18 +87,68 @@ struct RecurringExpense: Identifiable, Codable {
     }
     
     func shouldCreateExpense(on date: Date = Date()) -> Bool {
-        guard isActive && !isExpired else { return false }
-        
-        // Check if we've already processed this date
-        if let lastProcessed = lastProcessedDate {
-            let calendar = Calendar.current
-            if calendar.isDate(lastProcessed, inSameDayAs: date) {
-                return false
-            }
+        guard isActive else { return false }
+        let calendar = Calendar.current
+        let dueDate = nextDueDate
+        if let endDate, dueDate > calendar.startOfDay(for: endDate) { return false }
+        return dueDate <= calendar.startOfDay(for: date)
+    }
+
+    /// Unprocessed calendar-day occurrences, including the chosen start date.
+    /// Always calculate from the original anchor so Jan 31 returns to Mar 31
+    /// after February, and reopening late never shifts future billing dates.
+    func dueDates(through date: Date, calendar: Calendar = .current) -> [Date] {
+        guard isActive else { return [] }
+        let limit = min(calendar.startOfDay(for: date), endDate.map { calendar.startOfDay(for: $0) } ?? .distantFuture)
+        var index = nextOccurrenceIndex(calendar: calendar)
+        var dueDate = occurrenceDate(at: index, calendar: calendar)
+        var result: [Date] = []
+        while dueDate <= limit {
+            result.append(dueDate)
+            index += 1
+            let next = occurrenceDate(at: index, calendar: calendar)
+            guard next > dueDate else { break }
+            dueDate = next
         }
-        
-        // Check if it's time for the next occurrence
-        return date >= nextDueDate
+        return result
+    }
+
+    private func occurrenceDate(at index: Int, calendar: Calendar) -> Date {
+        let anchor = calendar.startOfDay(for: startDate)
+        let component: Calendar.Component
+        let interval: Int
+        switch recurrenceType {
+        case .daily: (component, interval) = (.day, 1)
+        case .weekly: (component, interval) = (.day, 7)
+        case .biweekly: (component, interval) = (.day, 14)
+        case .monthly: (component, interval) = (.month, 1)
+        case .quarterly: (component, interval) = (.month, 3)
+        case .yearly: (component, interval) = (.year, 1)
+        }
+        return calendar.date(byAdding: component, value: index * interval, to: anchor) ?? anchor
+    }
+
+    private func nextOccurrenceIndex(calendar: Calendar) -> Int {
+        guard let lastProcessedDate else { return 0 }
+        let lastDay = calendar.startOfDay(for: lastProcessedDate)
+        let anchor = calendar.startOfDay(for: startDate)
+        let days = calendar.dateComponents([.day], from: anchor, to: lastDay).day ?? 0
+        let months = calendar.dateComponents([.month], from: anchor, to: lastDay).month ?? 0
+        let years = calendar.dateComponents([.year], from: anchor, to: lastDay).year ?? 0
+        var index: Int
+        switch recurrenceType {
+        case .daily: index = days
+        case .weekly: index = days / 7
+        case .biweekly: index = days / 14
+        case .monthly: index = months
+        case .quarterly: index = months / 3
+        case .yearly: index = years
+        }
+        index = max(0, index)
+        while occurrenceDate(at: index, calendar: calendar) <= lastDay {
+            index += 1
+        }
+        return index
     }
     
     func createExpense() -> Expense {
@@ -107,7 +156,7 @@ struct RecurringExpense: Identifiable, Codable {
             title: title,
             amount: amount,
             categoryId: categoryId,
-            date: Date()
+            date: nextDueDate
         )
     }
 }

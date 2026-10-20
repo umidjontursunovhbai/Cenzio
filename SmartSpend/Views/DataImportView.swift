@@ -18,6 +18,7 @@ struct DataImportView: View {
     
     var body: some View {
         NavigationStack {
+            ScrollView {
             VStack(spacing: 20) {
                 // Header
                 VStack(spacing: 12) {
@@ -31,6 +32,11 @@ struct DataImportView: View {
                     
                     Text("import_expenses_subtitle".localized)
                         .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+
+                    Text("CSV import adds expenses. Budgets, goals, and app settings need to be set up separately.")
+                        .font(.caption)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                 }
@@ -48,14 +54,13 @@ struct DataImportView: View {
                     previewSection(previewData: previewData)
                 }
                 
-                Spacer()
-                
                 // Import Button
                 if selectedFileURL != nil && previewData != nil {
                     importButton
                 }
             }
             .padding()
+            }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -308,16 +313,13 @@ struct DataImportView: View {
     
     private func handleFileSelection(_ url: URL) {
         selectedFileURL = url
+        previewData = nil
         
         // Start security-scoped resource access
-        guard url.startAccessingSecurityScopedResource() else {
-            alertMessage = "cannot_access_file".localized
-            showingAlert = true
-            return
-        }
+        let accessedResource = url.startAccessingSecurityScopedResource()
         
         defer {
-            url.stopAccessingSecurityScopedResource()
+            if accessedResource { url.stopAccessingSecurityScopedResource() }
         }
         
         // Preview the file
@@ -405,12 +407,6 @@ struct DocumentPicker: UIViewControllerRepresentable {
         
         func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
             guard let url = urls.first else { return }
-            
-            // Start accessing the security-scoped resource
-            guard url.startAccessingSecurityScopedResource() else {
-                print("❌ Failed to access security-scoped resource")
-                return
-            }
             
             // Store the URL and call the callback
             parent.selectedURL = url

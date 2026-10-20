@@ -10,6 +10,7 @@ struct ExpenseListView: View {
     @State private var selectedEndDate: Date = Date()
     @State private var showingMonthPicker = false
     @State private var showingAddExpense = false
+    @StateObject private var voice = InlineVoiceExpenseController()
     @State private var showingFilterSheet = false
     @State private var isDateRangeMode = true
     @State private var isSelectionMode = false
@@ -82,6 +83,7 @@ struct ExpenseListView: View {
     
     var filteredExpenses: [Expense] {
         var expenses = dataManager.expenses.sorted { $0.date > $1.date }
+        let referenceDate = Date()
         
         // Apply time period filter
         expenses = expenses.filter { expense in
@@ -93,13 +95,9 @@ struct ExpenseListView: View {
             case .yesterday:
                 return Calendar.current.isDateInYesterday(expense.date)
             case .weekly:
-                let calendar = Calendar.current
-                let startOfWeek = calendar.dateInterval(of: .weekOfYear, for: Date())?.start ?? Date()
-                return expense.date >= startOfWeek
+                return ExpenseDateFilter.contains(expense.date, in: .weekOfYear, relativeTo: referenceDate)
             case .monthly:
-                let calendar = Calendar.current
-                let startOfMonth = calendar.dateInterval(of: .month, for: Date())?.start ?? Date()
-                return expense.date >= startOfMonth
+                return ExpenseDateFilter.contains(expense.date, in: .month, relativeTo: referenceDate)
             case .customMonth:
                 let calendar = Calendar.current
                 if isDateRangeMode {
@@ -219,11 +217,16 @@ struct ExpenseListView: View {
                                 isSelectionMode = true
                             }
                         }
-                        ActionIconButton(icon: "plus", style: .primary) {
+                        ExpenseEntryButton(accessibilityID: "expenses.add-expense", isRecording: voice.isRecording, isProcessing: voice.isProcessing, onTap: {
                             showingAddExpense = true
-                        }
+                        }, onVoice: {
+                            voice.start()
+                        }, onStop: { voice.stop() })
                     }
                 }
+                .opacity(voice.isVisible && voice.prefill == nil ? 0 : 1)
+                .allowsHitTesting(!voice.isVisible || voice.prefill != nil)
+                .accessibilityHidden(voice.isVisible && voice.prefill == nil)
 
                 AppSearchField(text: $searchText, prompt: "search_expenses".localized)
                     .padding(.bottom, iOSDesignSystem.Spacing.small)
@@ -311,11 +314,15 @@ struct ExpenseListView: View {
                 }
             }
             .navigationTitle("")
+            .voiceExpenseOverlay(controller: voice)
             .navigationBarTitleDisplayMode(.inline)
             .navigationBarBackButtonHidden(true)
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $showingAddExpense) {
                 AddExpenseView()
+            }
+            .sheet(item: $voice.prefill, onDismiss: { voice.reviewDidDismiss() }) { item in
+                AddExpenseView(prefill: item) { voice.didSave() }
             }
             .sheet(isPresented: $showingFilterSheet) {
                 ExpenseFilterSheet(
@@ -349,6 +356,7 @@ struct ExpenseListView: View {
                 selectionInfoBar
             }
             .onChange(of: searchText) { _, _ in resetVisibleExpenses() }
+            .onDisappear { voice.cancel() }
             .onChange(of: selectedTimePeriod) { _, _ in resetVisibleExpenses() }
             .onChange(of: selectedCategoryIds) { _, _ in resetVisibleExpenses() }
         }

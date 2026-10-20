@@ -6,6 +6,7 @@ struct DashboardView: View {
     @ObservedObject private var dataManager = DataManager.shared
     @ObservedObject private var tabManager = TabManager.shared
     @State private var showingAddExpense = false
+    @StateObject private var voice = InlineVoiceExpenseController()
     @State private var showingMonthlySalary = false
     @State private var selectedBudgetAlertCategory: UserCategory?
     @State private var showingBudgetSettings = false
@@ -21,14 +22,22 @@ struct DashboardView: View {
             ScrollView {
                 LazyVStack(spacing: 18) {
                     AppScreenHeader("dashboard".localized) {
-                        ActionIconButton(icon: "plus", style: .primary) {
+                        ExpenseEntryButton(accessibilityID: "dashboard.add-expense", isRecording: voice.isRecording, isProcessing: voice.isProcessing, onTap: {
                             showingAddExpense = true
-                        }
-                        .accessibilityLabel("add_expense".localized)
+                        }, onVoice: {
+                            voice.start()
+                        }, onStop: { voice.stop() })
                     }
                     .padding(.horizontal, -iOSDesignSystem.Spacing.screenMargin)
+                    // The voice HUD temporarily replaces the header visually,
+                    // keeping its layout space without duplicate controls behind it.
+                    .opacity(voice.isVisible && voice.prefill == nil ? 0 : 1)
+                    .allowsHitTesting(!voice.isVisible || voice.prefill != nil)
+                    .accessibilityHidden(voice.isVisible && voice.prefill == nil)
 
                     monthlyOverviewCard
+                        .accessibilityElement(children: .contain)
+                        .accessibilityIdentifier("dashboard.overview")
                     if !budgetAlerts.isEmpty {
                         budgetAlertsCard
                     }
@@ -51,11 +60,15 @@ struct DashboardView: View {
                 .padding(.vertical, iOSDesignSystem.Spacing.screenMargin)
             }
             .background(iOSDesignSystem.appBackground)
+            .voiceExpenseOverlay(controller: voice)
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $showingAddExpense) {
                 AddExpenseView()
+            }
+            .sheet(item: $voice.prefill, onDismiss: { voice.reviewDidDismiss() }) { item in
+                AddExpenseView(prefill: item) { voice.didSave() }
             }
             .sheet(isPresented: $showingMonthlySalary) {
                 MonthlySalaryView()
@@ -67,6 +80,18 @@ struct DashboardView: View {
                 BudgetSettingsView()
             }
             .onAppear(perform: refreshOverview)
+            #if DEBUG
+            .onAppear {
+                // Explicit UI-test replay: no microphone, no save, synthetic text only.
+                if ProcessInfo.processInfo.environment["SMARTSPEND_GPT_UI_TEST"] == "1" {
+                    voice.prepareRecognizedText("for bus i spend 2500 today")
+                }
+                if let state = ProcessInfo.processInfo.environment["SMARTSPEND_VOICE_OVERLAY_TEST"] {
+                    voice.showOverlayForTesting(state: state)
+                }
+            }
+            #endif
+            .onDisappear { voice.cancel() }
             .onChange(of: dataManager.expenses) { _, _ in
                 refreshOverview()
             }
@@ -186,10 +211,6 @@ struct DashboardView: View {
                     )
                 }
 
-                Text("daily_guide_help".localized)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
             } else {
                 Button {
                     showingMonthlySalary = true

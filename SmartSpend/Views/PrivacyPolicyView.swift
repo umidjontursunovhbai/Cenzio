@@ -3,7 +3,7 @@ import SwiftUI
 struct PrivacyPolicyView: View {
     @Environment(\.dismiss) private var dismiss
 
-    private let effectiveDate = "September 27, 2026"
+    private let effectiveDate = "October 20, 2026"
 
     var body: some View {
         NavigationStack {
@@ -11,6 +11,21 @@ struct PrivacyPolicyView: View {
                 LazyVStack(alignment: .leading, spacing: 24) {
                     privacyHero
                     dataPath
+
+                    policyGroup(
+                        title: "Optional voice and AI drafts",
+                        sections: [
+                            PolicySection(icon: "lock-closed", tint: Color(.systemBlue),
+                                          title: "Your choice before sending",
+                                          text: "Recording starts only after you hold and pull the + button, or tap a microphone, and grant permission. Audio is kept in a temporary protected file on this iPhone, transcribed locally after Stop, and deleted after transcription or cancellation. The first use may download an Apple speech model. Recorded audio is not uploaded. Keyboard dictation follows your iPhone's own settings."),
+                            PolicySection(icon: "arrow-up-tray", tint: Color(.systemBlue),
+                                          title: "Text sent to AI only with consent",
+                                          text: "The first time you use AI expense preparation, the app asks permission to send recognized text, current category names and IDs, currency, reference date and timezone through the authenticated server to OpenRouter/OpenAI. After you agree, stopping a recording automatically sends this context for an AI draft. Past expenses, salary, budgets and audio are not sent. Provider retention policies apply; this is not a zero-retention guarantee. Drafts are kept temporarily in server memory for safe retries, not in the expense database. Nothing is saved until you review and tap Save."),
+                            PolicySection(icon: "key", tint: Color(.systemBlue),
+                                          title: "Disconnect any time",
+                                          text: "The provider API key stays on your server. Your phone's separate revocable connection credential is stored in iOS Keychain and does not sync to iCloud Keychain. Disconnect in Voice connection to remove it and request server revocation. If your server is offline, revoke the device from the server separately.")
+                        ]
+                    )
 
                     policyGroup(
                         title: "Your data",
@@ -148,7 +163,7 @@ struct PrivacyPolicyView: View {
                     icon: "arrow-up-tray",
                     tint: Color(.systemGreen),
                     title: "You choose when it leaves",
-                    detail: "Only through an export or support email you send"
+                    detail: "Through exports, support email, or voice text you explicitly send to AI"
                 )
             }
             .padding(.horizontal, 18)

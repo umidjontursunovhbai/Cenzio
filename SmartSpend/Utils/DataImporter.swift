@@ -9,14 +9,11 @@ class DataImporter: ObservableObject {
     
     enum ImportFormat: String, CaseIterable {
         case csv = "CSV"
-        case json = "JSON"
         
         var fileExtension: String {
             switch self {
             case .csv:
                 return "csv"
-            case .json:
-                return "json"
             }
         }
         
@@ -24,8 +21,6 @@ class DataImporter: ObservableObject {
             switch self {
             case .csv:
                 return "tablecells"
-            case .json:
-                return "doc.text"
             }
         }
         
@@ -33,8 +28,6 @@ class DataImporter: ObservableObject {
             switch self {
             case .csv:
                 return "CSV"
-            case .json:
-                return "JSON"
             }
         }
     }
@@ -48,12 +41,10 @@ class DataImporter: ObservableObject {
     
     func importFromCSV(fileURL: URL, dataManager: DataManager) -> ImportResult {
         // Start accessing the security-scoped resource
-        guard fileURL.startAccessingSecurityScopedResource() else {
-            return .failure(error: "Failed to access file")
-        }
+        let accessedResource = fileURL.startAccessingSecurityScopedResource()
         
         defer {
-            fileURL.stopAccessingSecurityScopedResource()
+            if accessedResource { fileURL.stopAccessingSecurityScopedResource() }
         }
         
         do {
@@ -78,29 +69,25 @@ class DataImporter: ObservableObject {
                 .replacingOccurrences(of: "\r\n", with: "\n") // Normalize line endings
                 .replacingOccurrences(of: "\r", with: "\n")
             
-            let lines = cleanedContent.components(separatedBy: .newlines)
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
-            
-            guard lines.count > 1 else {
-                return .failure(error: "CSV file is empty or has no data rows")
-            }
-            
-            // Detect separator (comma or semicolon)
-            let headerLine = lines[0]
-            // Heuristic: If there are semicolons but no commas, assume semicolon separator
-            let separator: Character = headerLine.contains(";") && !headerLine.contains(",") ? ";" : ","
-            print("📝 Detected Separator: '\(separator)'")
-            
-            // Parse header to understand column structure
-            let header = parseCSVRow(headerLine, separator: separator)
-            print("📝 CSV Header: \(header)")
+            let document = try ExpenseCSVDocument.parse(cleanedContent)
+            let header = document.headers
             
             guard !header.isEmpty else {
                 return .failure(error: "Invalid CSV header")
             }
             
-            let dataRows = Array(lines.dropFirst())
+            let dataRows = document.rows
+            // Currency is ledger-wide. Validate the entire file before creating categories
+            // or expenses so an incompatible import cannot partially change the store.
+            let importedCurrency = try currencyFromCSV(header: header, rows: dataRows)
+            let validateLedgerCurrency = {
+                if let importedCurrency, importedCurrency != dataManager.user.currency,
+                   !self.isFinancialStoreEmpty(dataManager) {
+                    throw ImportError.invalidData("This CSV uses \(importedCurrency.rawValue), but your existing data uses \(dataManager.user.currency.rawValue). Import a file in your current currency; currency conversion is not supported.")
+                }
+            }
+            if Thread.isMainThread { try validateLedgerCurrency() }
+            else { try DispatchQueue.main.sync(execute: validateLedgerCurrency) }
             
             // Detect CSV format (SmartSpend or custom)
             let format = detectCSVFormat(header: header)
@@ -115,11 +102,7 @@ class DataImporter: ObservableObject {
             // First pass: collect all categories from the CSV
             print("🔄 First Pass: Collecting categories...")
             for row in dataRows {
-                if row.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    continue
-                }
-                
-                let parsedColumns = parseCSVRow(row, separator: separator)
+                let parsedColumns = row
                 if let categoryString = extractCategoryString(parsedColumns, header: header, format: format) {
                     let normalized = categoryString.trimmingCharacters(in: .whitespacesAndNewlines)
                     
@@ -139,9 +122,7 @@ class DataImporter: ObservableObject {
             // Sync with DataManager to create categories and get IDs
             // We need a map of category name -> UserCategory ID
             var categoryMap: [String: UUID] = [:]
-            let semaphore = DispatchSemaphore(value: 0)
-            
-            DispatchQueue.main.async {
+            let syncCategories = {
                 print("🔄 Syncing categories with DataManager...")
                 for categoryName in foundCategories {
                     let normalized = categoryName.lowercased()
@@ -159,25 +140,20 @@ class DataImporter: ObservableObject {
                         print("   Created new user category for '\(categoryName)'")
                     }
                 }
-                semaphore.signal()
             }
-            
-            semaphore.wait()
+            if Thread.isMainThread { syncCategories() }
+            else { DispatchQueue.main.sync(execute: syncCategories) }
             
             // Second pass: parse and create expenses
             print("🔄 Second Pass: Parsing expenses...")
             for (index, row) in dataRows.enumerated() {
-                if row.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    continue
-                }
-                
                 do {
-                    let parsedColumns = parseCSVRow(row, separator: separator)
+                    let parsedColumns = row
                     let expense = try parseExpenseFromRow(parsedColumns, header: header, format: format, categoryMap: categoryMap)
                     expensesToAdd.append(expense)
                     importedCount += 1
                 } catch {
-                    let parsedColumns = parseCSVRow(row, separator: separator)
+                    let parsedColumns = row
                     let rowPreview = parsedColumns.prefix(3).joined(separator: ", ")
                     let errorMessage = "Row \(index + 2) [\(rowPreview)...]: \(error.localizedDescription)"
                     errors.append(errorMessage)
@@ -191,16 +167,16 @@ class DataImporter: ObservableObject {
             }
             
             // Add all expenses on main thread in a single batch
-            let group = DispatchGroup()
-            group.enter()
-
-            DispatchQueue.main.async {
+            let addExpenses = {
                 print("🔄 Adding \(expensesToAdd.count) expenses to DataManager...")
+                if !expensesToAdd.isEmpty, let importedCurrency,
+                   self.isFinancialStoreEmpty(dataManager) {
+                    dataManager.updateCurrency(importedCurrency)
+                }
                 dataManager.addExpensesBatch(expensesToAdd)
-                group.leave()
             }
-
-            group.wait()
+            if Thread.isMainThread { addExpenses() }
+            else { DispatchQueue.main.sync(execute: addExpenses) }
             
             print("✅ Import completed: \(importedCount) imported, \(skippedCount) skipped")
             
@@ -209,19 +185,52 @@ class DataImporter: ObservableObject {
             }
             
             return .success(importedCount: importedCount, skippedCount: skippedCount, errors: errors)
+        } catch {
+            return .failure(error: error.localizedDescription)
         }
     }
     
     // MARK: - Preview Import
+
+    private func isFinancialStoreEmpty(_ manager: DataManager) -> Bool {
+        manager.expenses.isEmpty && manager.recurringExpenses.isEmpty &&
+        manager.categoryBudgets.isEmpty && manager.spendingGoals.isEmpty &&
+        manager.monthlySalaries.isEmpty && manager.deletedExpenses.isEmpty
+    }
+
+    private func currencyFromCSV(header: [String], rows: [[String]]) throws -> Currency? {
+        guard let index = header.firstIndex(where: {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "currency"
+        }) else { return nil } // Legacy CSV amounts use the selected ledger currency.
+        var selected: Currency?
+        for (rowIndex, row) in rows.enumerated() {
+            let code = index < row.count ? row[index].trimmingCharacters(in: .whitespacesAndNewlines).uppercased() : ""
+            guard let currency = Currency(rawValue: code) else {
+                throw ImportError.invalidData("Row \(rowIndex + 2) has an unsupported or missing currency: '\(code)'. Use a supported currency code such as USD or UZS.")
+            }
+            if let selected, selected != currency {
+                throw ImportError.invalidData("This CSV contains mixed currencies. Import one currency at a time; currency conversion is not supported.")
+            }
+            selected = currency
+        }
+        return selected
+    }
+
+    /// Parses without touching persisted state, for preview tools and round-trip verification.
+    func expensesFromCSV(_ content: String, categoryMap: [String: UUID]) throws -> [Expense] {
+        let document = try ExpenseCSVDocument.parse(content)
+        let format = detectCSVFormat(header: document.headers)
+        return try document.rows.map {
+            try parseExpenseFromRow($0, header: document.headers, format: format, categoryMap: categoryMap)
+        }
+    }
     
     func previewCSVImport(fileURL: URL) -> (headers: [String], sampleRows: [[String]], totalRows: Int)? {
         // Start accessing the security-scoped resource
-        guard fileURL.startAccessingSecurityScopedResource() else {
-            return nil
-        }
+        let accessedResource = fileURL.startAccessingSecurityScopedResource()
         
         defer {
-            fileURL.stopAccessingSecurityScopedResource()
+            if accessedResource { fileURL.stopAccessingSecurityScopedResource() }
         }
         
         // Try multiple encodings to handle different CSV formats
@@ -245,31 +254,8 @@ class DataImporter: ObservableObject {
             .replacingOccurrences(of: "\r\n", with: "\n") // Normalize line endings
             .replacingOccurrences(of: "\r", with: "\n")
         
-        let lines = cleanedContent.components(separatedBy: .newlines)
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        
-        guard lines.count > 1 else {
-            return nil
-        }
-        
-        // Detect separator (comma or semicolon)
-        let headerLine = lines[0]
-        let separator: Character = headerLine.contains(";") && !headerLine.contains(",") ? ";" : ","
-        
-        // Parse header
-        let header = parseCSVRow(headerLine, separator: separator)
-        
-        guard !header.isEmpty else {
-            return nil
-        }
-        
-        let dataRows = Array(lines.dropFirst())
-        
-        // Take first 5 rows as sample
-        let sampleRows = Array(dataRows.prefix(5)).map { parseCSVRow($0, separator: separator) }
-        
-        return (headers: header, sampleRows: sampleRows, totalRows: dataRows.count)
+        guard let document = try? ExpenseCSVDocument.parse(cleanedContent) else { return nil }
+        return (headers: document.headers, sampleRows: Array(document.rows.prefix(5)), totalRows: document.rows.count)
     }
     
     // MARK: - Format Detection
@@ -325,7 +311,9 @@ class DataImporter: ObservableObject {
             throw ImportError.invalidData("Invalid amount: '\(amountString)'")
         }
         
-        let date = parseDate(dateString) ?? Date()
+        guard let date = parseDate(dateString) else {
+            throw ImportError.invalidData("Invalid date: '\(dateString)'")
+        }
         
         // Parse category and find/assign categoryId
         let categoryId = parseCategoryWithMap(categoryString, categoryMap: categoryMap)
@@ -423,53 +411,6 @@ class DataImporter: ObservableObject {
         }
     }
     
-    private func parseCSVRow(_ row: String, separator: Character = ",") -> [String] {
-        var columns: [String] = []
-        var currentColumn = ""
-        var insideQuotes = false
-        var escapeNext = false
-        
-        for (index, char) in row.enumerated() {
-            if escapeNext {
-                currentColumn.append(char)
-                escapeNext = false
-                continue
-            }
-            
-            if char == "\\" {
-                escapeNext = true
-                continue
-            }
-            
-            if char == "\"" {
-                if insideQuotes && index + 1 < row.count && row[row.index(row.startIndex, offsetBy: index + 1)] == "\"" {
-                    // Handle escaped quotes: ""
-                    currentColumn.append("\"")
-                    // Skip the next quote
-                    continue
-                }
-                insideQuotes.toggle()
-            } else if char == separator && !insideQuotes {
-                columns.append(currentColumn.trimmingCharacters(in: .whitespaces))
-                currentColumn = ""
-            } else {
-                currentColumn.append(char)
-            }
-        }
-        
-        // Add the last column
-        columns.append(currentColumn.trimmingCharacters(in: .whitespaces))
-        
-        // Clean up the columns - remove quotes and extra whitespace
-        return columns.map { column in
-            var cleaned = column.trimmingCharacters(in: .whitespaces)
-            if cleaned.hasPrefix("\"") && cleaned.hasSuffix("\"") {
-                cleaned = String(cleaned.dropFirst().dropLast())
-            }
-            return cleaned.trimmingCharacters(in: .whitespaces)
-        }
-    }
-    
     private func parseAmount(_ value: String) -> Double? {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         
@@ -514,7 +455,7 @@ class DataImporter: ObservableObject {
         let positiveAmount = abs(amount)
         
         // Validate amount is not zero
-        guard positiveAmount > 0 else {
+        guard positiveAmount.isFinite, positiveAmount > 0 else {
             return nil
         }
         

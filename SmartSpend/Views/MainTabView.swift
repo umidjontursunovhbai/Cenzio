@@ -26,6 +26,8 @@ struct MainTabView: View {
             AddExpenseView()
         }
         .onAppear {
+            dataManager.reloadFromSharedStorage()
+            dataManager.processRecurringExpenses()
             checkAddExpenseIntent()
         }
         .onReceive(NotificationCenter.default.publisher(for: .smartSpendOpenAddExpense)) { _ in
@@ -34,6 +36,7 @@ struct MainTabView: View {
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active {
                 dataManager.reloadFromSharedStorage()
+                dataManager.processRecurringExpenses()
                 checkAddExpenseIntent()
             }
         }
@@ -58,6 +61,7 @@ struct SettingsView: View {
     @State private var showingDeletedExpenses = false
     @State private var showingDataExport = false
     @State private var showingDataImport = false
+    @State private var showingMCPIntegration = false
     @State private var showingPrivacyPolicy = false
     @State private var showingAlert = false
     
@@ -112,6 +116,9 @@ struct SettingsView: View {
             }
             .sheet(isPresented: $showingDataImport) {
                 DataImportView()
+            }
+            .sheet(isPresented: $showingMCPIntegration) {
+                MCPIntegrationView()
             }
             .alert("clear_all_data".localized, isPresented: $showingAlert) {
                 Button("cancel".localized, role: .cancel) { }
@@ -178,6 +185,16 @@ struct SettingsView: View {
                         tint: Color(.systemGray)
                     ) {
                         showingDeletedExpenses = true
+                    }
+
+                    settingsDivider
+
+                    settingsButtonRow(
+                        icon: "arrow-path",
+                        title: "AI tools (MCP)",
+                        tint: Color(.systemBlue)
+                    ) {
+                        showingMCPIntegration = true
                     }
                 }
 
@@ -419,6 +436,7 @@ struct SettingsView: View {
     }
 
     private func clearAllData() {
+        Task { await VoiceConnectionStore.shared.disconnect() }
         dataManager.clearAllData()
     }
 
