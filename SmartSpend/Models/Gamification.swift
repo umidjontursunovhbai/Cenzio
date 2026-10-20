@@ -224,10 +224,23 @@ class GamificationManager: ObservableObject {
     private let achievementsKey = "achievements"
     private let userLevelKey = "userLevel"
     private let expenseStreakKey = "expenseStreak"
+    private let defaults: UserDefaults
     
-    private init() {
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
         loadData()
         setupDefaultAchievements()
+    }
+
+    /// Clear earned progress in memory and on disk without removing app preferences.
+    func reset() {
+        achievements = []
+        recentUnlocks = []
+        userLevel = UserLevel()
+        expenseStreak = ExpenseStreak()
+        setupDefaultAchievements()
+        saveUserLevel()
+        saveExpenseStreak()
     }
     
     private func loadData() {
@@ -237,7 +250,7 @@ class GamificationManager: ObservableObject {
     }
     
     private func loadAchievements() {
-        if let data = UserDefaults.standard.data(forKey: achievementsKey),
+        if let data = defaults.data(forKey: achievementsKey),
            let decoded = try? JSONDecoder().decode([Achievement].self, from: data) {
             achievements = decoded
         }
@@ -245,12 +258,12 @@ class GamificationManager: ObservableObject {
     
     private func saveAchievements() {
         if let encoded = try? JSONEncoder().encode(achievements) {
-            UserDefaults.standard.set(encoded, forKey: achievementsKey)
+            defaults.set(encoded, forKey: achievementsKey)
         }
     }
     
     private func loadUserLevel() {
-        if let data = UserDefaults.standard.data(forKey: userLevelKey),
+        if let data = defaults.data(forKey: userLevelKey),
            let decoded = try? JSONDecoder().decode(UserLevel.self, from: data) {
             userLevel = decoded
         }
@@ -258,12 +271,12 @@ class GamificationManager: ObservableObject {
     
     private func saveUserLevel() {
         if let encoded = try? JSONEncoder().encode(userLevel) {
-            UserDefaults.standard.set(encoded, forKey: userLevelKey)
+            defaults.set(encoded, forKey: userLevelKey)
         }
     }
     
     private func loadExpenseStreak() {
-        if let data = UserDefaults.standard.data(forKey: expenseStreakKey),
+        if let data = defaults.data(forKey: expenseStreakKey),
            let decoded = try? JSONDecoder().decode(ExpenseStreak.self, from: data) {
             expenseStreak = decoded
         }
@@ -271,7 +284,7 @@ class GamificationManager: ObservableObject {
     
     private func saveExpenseStreak() {
         if let encoded = try? JSONEncoder().encode(expenseStreak) {
-            UserDefaults.standard.set(encoded, forKey: expenseStreakKey)
+            defaults.set(encoded, forKey: expenseStreakKey)
         }
     }
     

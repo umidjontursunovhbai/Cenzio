@@ -1,0 +1,21 @@
+[Unit]
+Description=SmartSpend private voice draft gateway
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/ubuntu/smartspend-mcp
+ExecStart=/home/ubuntu/smartspend-mcp/.venv/bin/smartspend-voice --config /home/ubuntu/smartspend-mcp/.data/openrouter.json --state /home/ubuntu/smartspend-mcp/.data/voice.sqlite3 serve --port 18769
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+RestrictSUIDSGID=true
+MemoryMax=384M
+TasksMax=32
+LimitNOFILE=128
+StandardOutput=null
+StandardError=journal
+
+[Install]
+WantedBy=default.target

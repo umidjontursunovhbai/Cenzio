@@ -1,5 +1,7 @@
 import Foundation
 import SwiftUI
+import UIKit
+import CoreText
 
 class DataExporter: ObservableObject {
     static let shared = DataExporter()
@@ -82,10 +84,9 @@ class DataExporter: ObservableObject {
     func exportData(
         dataTypes: Set<ExportData>,
         format: ExportFormat,
-        dateRange: DateInterval? = nil
+        dateRange: DateInterval? = nil,
+        dataManager: DataManager = .shared
     ) -> URL? {
-        let dataManager = DataManager.shared
-        
         switch format {
         case .csv:
             return exportToCSV(dataTypes: dataTypes, dataManager: dataManager, dateRange: dateRange)
@@ -228,19 +229,19 @@ class DataExporter: ObservableObject {
         
         if dataTypes.contains(.expenses) || dataTypes.contains(.all) {
             let filteredExpenses = filterExpensesByDate(dataManager.expenses, dateRange: dateRange)
-            exportData["expenses"] = filteredExpenses.map { expenseToDict($0, currency: dataManager.user.currency) }
+            exportData["expenses"] = filteredExpenses.map { expenseToDict($0, currency: dataManager.user.currency, dataManager: dataManager) }
         }
         
         if dataTypes.contains(.recurringExpenses) || dataTypes.contains(.all) {
-            exportData["recurringExpenses"] = dataManager.recurringExpenses.map(recurringExpenseToDict)
+            exportData["recurringExpenses"] = dataManager.recurringExpenses.map { recurringExpenseToDict($0, dataManager: dataManager) }
         }
         
         if dataTypes.contains(.budgets) || dataTypes.contains(.all) {
-            exportData["budgets"] = dataManager.categoryBudgets.map(budgetToDict)
+            exportData["budgets"] = dataManager.categoryBudgets.map { budgetToDict($0, dataManager: dataManager) }
         }
         
         if dataTypes.contains(.spendingGoals) || dataTypes.contains(.all) {
-            exportData["spendingGoals"] = dataManager.spendingGoals.map(spendingGoalToDict)
+            exportData["spendingGoals"] = dataManager.spendingGoals.map { spendingGoalToDict($0, dataManager: dataManager) }
         }
         
         if dataTypes.contains(.monthlySalaries) || dataTypes.contains(.all) {
@@ -263,8 +264,6 @@ class DataExporter: ObservableObject {
         dataManager: DataManager,
         dateRange: DateInterval?
     ) -> URL? {
-        // For now, return a simple text-based PDF export
-        // In a full implementation, you would use PDFKit or similar
         var content = "SMARTSPEND DATA EXPORT\n"
         content += "Generated on: \(DateFormatter.exportDateTime.string(from: Date()))\n\n"
         
@@ -282,7 +281,64 @@ class DataExporter: ObservableObject {
             content += "\n\n"
         }
         
-        return saveToFile(content: content, fileName: "SmartSpend_Export", extension: "txt")
+        if dataTypes.contains(.budgets) || dataTypes.contains(.all) {
+            content += "BUDGETS\n"
+            for budget in dataManager.categoryBudgets {
+                content += "\(dataManager.resolveCategory(id: budget.categoryId).name) — \(CurrencyFormatter.formatFull(budget.amount, currency: dataManager.user.currency)) — \(budget.isEnabled ? "Enabled" : "Disabled")\n"
+            }
+            content += "\n"
+        }
+        if dataTypes.contains(.spendingGoals) || dataTypes.contains(.all) {
+            content += "SPENDING GOALS\n"
+            for goal in dataManager.spendingGoals {
+                content += "\(goal.title) — \(dataManager.resolveCategory(id: goal.categoryId).name)\n"
+                content += "\(CurrencyFormatter.formatFull(goal.currentAmount, currency: dataManager.user.currency)) / \(CurrencyFormatter.formatFull(goal.targetAmount, currency: dataManager.user.currency)) — Due \(DateFormatter.exportDate.string(from: goal.deadline)) — \(goal.isCompleted ? "Completed" : "In progress")\n"
+            }
+            content += "\n"
+        }
+        if dataTypes.contains(.monthlySalaries) || dataTypes.contains(.all) {
+            content += "MONTHLY SALARIES\n"
+            for salary in dataManager.monthlySalaries.sorted(by: { ($0.year, $0.month) > ($1.year, $1.month) }) {
+                content += "\(salary.year)-\(String(format: "%02d", salary.month)) — \(CurrencyFormatter.formatFull(salary.amount, currency: salary.currency))\n"
+            }
+        }
+
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("SmartSpend_Export_\(UUID().uuidString).pdf")
+        do {
+            try Self.pdfData(content: content).write(to: url, options: .atomic)
+            return url
+        } catch {
+            return nil
+        }
+    }
+
+    /// Core Text flows long reports across pages without truncating long titles.
+    static func pdfData(content: String) -> Data {
+        let page = CGRect(x: 0, y: 0, width: 595, height: 842)
+        let textBounds = page.insetBy(dx: 36, dy: 40)
+        let attributed = NSAttributedString(string: content, attributes: [
+            .font: UIFont.systemFont(ofSize: 11),
+            .foregroundColor: UIColor.black
+        ])
+        let framesetter = CTFramesetterCreateWithAttributedString(attributed as CFAttributedString)
+        return UIGraphicsPDFRenderer(bounds: page).pdfData { context in
+            var offset = 0
+            repeat {
+                context.beginPage()
+                let graphics = context.cgContext
+                graphics.saveGState()
+                graphics.translateBy(x: 0, y: page.height)
+                graphics.scaleBy(x: 1, y: -1)
+                let path = CGPath(rect: textBounds, transform: nil)
+                let frame = CTFramesetterCreateFrame(framesetter, CFRange(location: offset, length: 0), path, nil)
+                CTFrameDraw(frame, graphics)
+                graphics.restoreGState()
+                let visible = CTFrameGetVisibleStringRange(frame)
+                guard visible.length > 0 else { break }
+                offset += visible.length
+            } while offset < attributed.length
+        }
     }
     
     private func exportExpensesToText(dataManager: DataManager, dateRange: DateInterval?) -> String {
@@ -308,7 +364,8 @@ class DataExporter: ObservableObject {
         for recurring in dataManager.recurringExpenses {
             let amount = CurrencyFormatter.formatFull(recurring.amount, currency: dataManager.user.currency)
             let status = recurring.isActive ? "Active" : "Inactive"
-            text += "\(recurring.title) - \(amount) - \(recurring.recurrenceType.rawValue) - \(status)\n"
+            text += "\(recurring.title) - \(amount) - \(dataManager.resolveCategory(id: recurring.categoryId).name) - \(recurring.recurrenceType.rawValue) - \(status)\n"
+            text += "Start: \(DateFormatter.exportDate.string(from: recurring.startDate)); End: \(recurring.endDate.map { DateFormatter.exportDate.string(from: $0) } ?? "None"); Last processed: \(recurring.lastProcessedDate.map { DateFormatter.exportDate.string(from: $0) } ?? "Never")\n"
         }
         
         return text
@@ -327,7 +384,7 @@ class DataExporter: ObservableObject {
     private func saveToFile(content: String, fileName: String, extension: String) -> URL? {
         let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
         let timestamp = DateFormatter.fileTimestamp.string(from: Date())
-        let fullFileName = "\(fileName)_\(timestamp).\(`extension`)"
+        let fullFileName = "\(fileName)_\(timestamp)_\(UUID().uuidString).\(`extension`)"
         let fileURL = documentsPath.appendingPathComponent(fullFileName)
         
         do {
@@ -339,31 +396,28 @@ class DataExporter: ObservableObject {
     }
     
     private func escapeCSVField(_ field: String) -> String {
-        if field.contains(",") || field.contains("\"") || field.contains("\n") {
-            return "\"\(field.replacingOccurrences(of: "\"", with: "\"\""))\""
-        }
-        return field
+        ExpenseCSVDocument.escape(field)
     }
     
     // MARK: - Dictionary Converters
     
-    private func expenseToDict(_ expense: Expense, currency: Currency) -> [String: Any] {
+    private func expenseToDict(_ expense: Expense, currency: Currency, dataManager: DataManager) -> [String: Any] {
         return [
             "id": expense.id.uuidString,
             "title": expense.title,
             "amount": expense.amount,
-            "category": DataManager.shared.resolveCategory(id: expense.categoryId).name,
+            "category": dataManager.resolveCategory(id: expense.categoryId).name,
             "date": DateFormatter.exportDate.string(from: expense.date),
             "currency": currency.rawValue
         ]
     }
     
-    private func recurringExpenseToDict(_ recurring: RecurringExpense) -> [String: Any] {
+    private func recurringExpenseToDict(_ recurring: RecurringExpense, dataManager: DataManager) -> [String: Any] {
         var dict: [String: Any] = [
             "id": recurring.id.uuidString,
             "title": recurring.title,
             "amount": recurring.amount,
-            "category": DataManager.shared.resolveCategory(id: recurring.categoryId).name,
+            "category": dataManager.resolveCategory(id: recurring.categoryId).name,
             "recurrenceType": recurring.recurrenceType.rawValue,
             "startDate": DateFormatter.exportDate.string(from: recurring.startDate),
             "isActive": recurring.isActive
@@ -380,22 +434,22 @@ class DataExporter: ObservableObject {
         return dict
     }
     
-    private func budgetToDict(_ budget: CategoryBudget) -> [String: Any] {
+    private func budgetToDict(_ budget: CategoryBudget, dataManager: DataManager) -> [String: Any] {
         return [
-            "category": DataManager.shared.resolveCategory(id: budget.categoryId).name,
+            "category": dataManager.resolveCategory(id: budget.categoryId).name,
             "amount": budget.amount,
             "isEnabled": budget.isEnabled
         ]
     }
     
-    private func spendingGoalToDict(_ goal: SpendingGoal) -> [String: Any] {
+    private func spendingGoalToDict(_ goal: SpendingGoal, dataManager: DataManager) -> [String: Any] {
         return [
             "id": goal.id.uuidString,
             "title": goal.title,
             "targetAmount": goal.targetAmount,
             "currentAmount": goal.currentAmount,
             "deadline": DateFormatter.exportDate.string(from: goal.deadline),
-            "category": DataManager.shared.resolveCategory(id: goal.categoryId).name,
+            "category": dataManager.resolveCategory(id: goal.categoryId).name,
             "isCompleted": goal.isCompleted
         ]
     }
@@ -414,6 +468,8 @@ class DataExporter: ObservableObject {
 extension DateFormatter {
     static let exportDate: DateFormatter = {
         let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian)
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter
     }()

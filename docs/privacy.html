@@ -20,11 +20,17 @@
     <p class="eyebrow">SmartSpend / privacy</p>
     <h1>Privacy policy</h1>
     <p class="lead">SmartSpend is a personal expense tracker. This policy describes the current iOS app and widget.</p>
-    <p class="date">Effective September 27, 2026</p>
+    <p class="date">Effective October 20, 2026</p>
     <section class="content-section" aria-labelledby="data-heading">
       <h2 id="data-heading">Information you enter</h2>
       <p>SmartSpend stores expenses, categories, budgets, spending goals, monthly income, recurring expenses, archived expenses, learned suggestions, and app preferences that you enter or create. This information is stored on your device. The app and widget share the information needed by the widget through Apple's App Group storage.</p>
       <p>The current app does not require an account and does not upload your SmartSpend records to a SmartSpend server or sync them through CloudKit. Depending on your device settings, Apple's device backup may include app data; those backups are managed by Apple and your device settings, not by SmartSpend.</p>
+    </section>
+    <section class="content-section" aria-labelledby="voice-heading">
+      <h2 id="voice-heading">Optional voice and AI drafts</h2>
+      <p>Recording starts only after you hold and pull the + button, or tap a microphone, and grant permission. Audio is kept in a temporary protected file on this iPhone, transcribed locally after Stop, and deleted after transcription or cancellation. The first use may download an Apple speech model. Recorded audio is not uploaded. Keyboard dictation follows your iPhone's own settings.</p>
+      <p>The first time you use AI expense preparation, the app asks permission to send recognized text, current category names and IDs, currency, reference date and timezone through the authenticated server to OpenRouter/OpenAI. After you agree, stopping a recording automatically sends this context for an AI draft. Past expenses, income, budgets and audio are not sent. Provider retention policies apply; this is not a zero-retention guarantee. Draft text is kept temporarily in server memory for retry handling, not in its expense database. Nothing is saved until you review and tap Save.</p>
+      <p>The OpenRouter key stays on your server. The phone's separate credential is stored in iOS Keychain without iCloud Keychain synchronization. Disconnect in Voice connection to remove it and request revocation. If your server is offline, revoke the device on the server separately. Clearing app data also removes the phone's connection.</p>
     </section>
     <section class="content-section" aria-labelledby="files-heading">
       <h2 id="files-heading">Imports and exports</h2>
