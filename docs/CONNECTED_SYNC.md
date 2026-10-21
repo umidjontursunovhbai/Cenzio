@@ -1,37 +1,68 @@
-# Private connected sync preview
+# Optional integrations and connected sync preview
 
 This development branch adds an opt-in canonical expense ledger, foreground iPhone
 sync, Google Sheets/Notion adapters, history and OAuth-protected remote MCP. It is
 separate from [manual snapshot/patch exchange](../mcp-server/README.md) and the
-transcript-only voice gateway. Public HTTPS deployment is **not done**; the existing
-voice listener on port 10000 does not serve these routes. No live Google, Notion or
-ChatGPT success is established by this guide or mocked tests. The change is for
-PR review, not evidence of merge, deployment or App Store availability.
+transcript-only voice gateway. The mobile entry is **Settings → Integrations**;
+technical MCP/file-exchange tools are not exposed in normal mobile settings.
+
+Deployment evidence must stay separate from source: the October 20 private
+service deployed at revision `aa06b38` had healthy sync, rejected unauthenticated
+requests, and exposed the previously configured HTTPS routes alongside voice.
+That does **not** mean the new per-installation enrollment, public Notion OAuth,
+or mapped-table preview in this branch is deployed. This turn made no deployment:
+SSH to Ubuntu was unavailable from the Mac's current tailnet. No live
+Google/Notion/ChatGPT end-to-end success is established by mocked tests or this
+guide. PR review, merge, deployment, device install and App Store release are
+separate gates.
 
 ## Connect an iPhone
 
-1. Obtain the iPhone's ledger UUID from its reviewed MCP snapshot. Keep that file
-   private: it contains financial records. Provision a dedicated credential for
-   that UUID with the owner CLI below; voice credentials are not accepted.
-2. Deploy the separate service behind HTTPS at an origin such as
-   `https://sync.example.com`. The native app accepts an HTTPS origin without a
-   path, credentials, query or fragment.
-3. Open Settings → AI tools (MCP) → Connected sync. Enter the server and dedicated
-   token privately. Review the consent prompt. Enable initialization only for an
-   empty server ledger; bootstrap sends categories, expenses and Trash once.
-   Existing initialized ledgers cannot be overwritten by another snapshot.
-4. Without bootstrap, initial connection requires the same ledger/currency and
-   matching active/archived records. Different contents are blocked; reconcile
-   with reviewed manual exchange first.
+1. The operator deploys a dedicated HTTPS origin and configures the Google/Notion
+   **public application** credentials once. Users must not create OAuth clients,
+   paste integration tokens, or configure MCP to connect their own accounts.
+2. In **Settings → Integrations**, choose Google Sheets or Notion. Review the
+   upload consent, then authorize the chosen provider in its browser consent
+   screen. Each installation connects its own authorized accounts/workspace;
+   one owner's provider token is not a shared credential for everybody.
+3. Google creates a dedicated spreadsheet. Notion lets the user choose an
+   OAuth-shared page for a new dedicated database. Existing Notion tables can
+   instead be inspected through **read-only mapping preview**, described below.
+4. The initial sync bootstrap sends categories, current expenses and Trash once,
+   only after upload consent and only into an empty ledger. An initialized ledger
+   is never replaced by another snapshot. Different existing contents are blocked
+   for reviewed reconciliation rather than silently merged.
 
-This is administrator enrollment, not consumer login. The iPhone stores its
-credential in device-only, when-unlocked Keychain; the durable outbox/state file
-contains no token. Changes are checked about every 12 seconds while the app is
-open; local expense/Trash notifications are debounced for 800 ms. Offline edits
-retry later. There is no background or guaranteed instant delivery. Concurrent
-edits and unsafe removals pause sync for review rather than silently replacing data.
-Disconnect removes the iPhone credential but leaves server/provider copies and
-the server grant intact; revoke that grant separately.
+Self-service enrollment is **disabled unless `serve --allow-device-enrollment`
+is explicitly supplied**. It is a bounded installation-ownership preview, not a
+consumer account system: a random 256-bit owner proof is retained in device-only
+Keychain, and the server verifies it before resuming/renewing that installation.
+A ledger UUID alone cannot claim another installation or an operator-created
+ledger. Session grants last 30 days and can be renewed only by the same proof;
+revoked installations cannot renew. Losing the Keychain proof is not account
+recovery; there is no supported cross-device login, transfer or recovery flow.
+The durable expense outbox contains no credential.
+
+Default server limits are 1,000 lifetime installation records, 100 new
+installations per rolling day, 30 enrollment attempts per direct peer/hour and
+3,000 attempts globally/hour. Failed ownership guesses count. Behind a loopback
+proxy, peers may share that limit; untrusted forwarding headers are not accepted
+as identity. These bounds are **not App Attest** or sufficient internet abuse
+protection. Configure an edge policy, resource/storage limits, operational
+monitoring, a verified App Attest strategy or equivalent production authentication,
+and reviewer access before enabling public enrollment. Do not ship the preview as
+production account security.
+
+Expense changes are checked about every 12 seconds while the app is open; local
+edits are debounced for 800 ms. Provider workers poll independently about every
+15 seconds. Offline edits retry later; there is no guaranteed background or
+instant delivery. Concurrent edits and unsafe removals pause for review.
+Disconnecting a provider stops scheduled changes and removes that connection's
+server tokens. Notion also attempts provider revocation. Google project-wide grant
+revocation is deliberately not automatic because it could disconnect the same
+person's other installations; remove the grant in Google settings when desired.
+Disconnect does not erase the external table, server history or backups. The
+disconnect response waits for a worker already using that connection to finish.
 
 ## Start the private service
 
@@ -60,9 +91,14 @@ chat, logs, shell arguments or source. `--read-only` limits grants to
 
 `serve` binds only `127.0.0.1:18770`. Configure and verify a dedicated HTTPS reverse
 proxy separately, preserving the expected host. The CLI does not deploy it, change
-ports of the voice service, register OAuth clients or provide public onboarding.
+ports of the voice service or register provider OAuth clients. Installation
+enrollment is off unless the explicit flag above is supplied.
 REST routes are `/v1/sync/{context,snapshot,bootstrap,exchange,categories,restore}`
 and `/v1/sync/history/{expense_id}`; `/health` checks this service only.
+`GET /v1/connectors/capabilities` reports configured enrollment/providers without tokens;
+`POST /v1/device/enroll` requires installation proof and explicit consent. Voice
+credentials are not accepted as sync credentials. Operator-issued tokens remain
+available for controlled administration; they are not the normal mobile flow.
 
 ## Google Sheets enrollment
 
@@ -89,7 +125,7 @@ This command refuses visible input fallback and existing output files, and write
 an owner-only file. Keep the existing secret until the replacement works; do not
 delete the OAuth client. The callback must be deployed before testing login.
 
-After native enrollment, tap **Connect Google Sheets…** and approve the separate
+After native enrollment, tap **Google Sheets → Connect** and approve the separate
 consent. Authorization uses S256 PKCE and single-use state and requests only
 `https://www.googleapis.com/auth/drive.file`. It creates a **new dedicated**
 SmartSpend spreadsheet with `Sheet1`; choosing an existing file requires Picker
@@ -104,11 +140,112 @@ An uncertain enrollment/create outcome stays pending instead of creating another
 sheet automatically. Owner reconciliation is required; no repair CLI is provided.
 Do not remove pending state and repeatedly reconnect without inspecting the outcome.
 
+Google Cloud's project/client configuration is an operator task, not a task for
+each user. In **Testing**, external-user sign-in is limited to configured test
+users and refresh-token lifetime may be restricted. An enabled Drive/Sheets API
+alone does not make OAuth public. Before general availability, configure the
+external audience, approved domains and consent disclosures, production status,
+exact HTTPS callback, minimum scopes and any required Google verification; test
+with a separate eligible account. Do not promise universal sign-in while the
+OAuth app is still test-user-only. No API key or client secret belongs in iOS.
+
+## Notion public OAuth enrollment
+
+The operator creates one **public Notion connection** that other users can
+authorize in their own workspaces. An internal workspace-only token does not
+provide multi-user onboarding. Configure the exact callback
+`https://sync.example.com/oauth/notion/callback` and the minimum page/database
+capabilities needed to read/update expense records and create the dedicated table.
+Keep the application secret in an owner-only server file, never in the app:
+
+```json
+{
+  "client_id": "YOUR_PUBLIC_NOTION_CLIENT_ID",
+  "client_secret": "ENTER_PRIVATELY_NOT_IN_SOURCE",
+  "redirect_uri": "https://sync.example.com/oauth/notion/callback"
+}
+```
+
+This is the **file shape**, not a usable credential or a suggestion to paste a
+secret into chat. Restrict the parent directory to 0700 and file to 0600. Add
+`--notion-client-config /private/operator/notion-public-client.json` to `serve`.
+The app reports Notion as unavailable if this server configuration is absent.
+
+Prefer the hidden-input helper instead of writing the secret through shell text:
+
+```sh
+uv run smartspend-sync --root /private/operator/sync configure-notion-client \
+  --client-id YOUR_PUBLIC_NOTION_CLIENT_ID \
+  --public-url https://sync.example.com \
+  --output /private/operator/notion-public-client.json
+```
+
+It refuses existing output files and visible-input fallback. Enter the secret
+only at its hidden prompt; do not put it in an argument, screenshot or chat.
+
+Every user then follows their own Notion OAuth consent/page picker. State is
+single-use and ledger-bound; tokens are encrypted in private `notion-oauth/`
+storage and rotating refresh outcomes are guarded against ambiguous retries.
+Authorization alone does not start Notion sync. For the new-table flow, the user
+explicitly chooses an accessible shared page; the service creates **one dedicated**
+SmartSpend database and its data source there, leaving other content untouched.
+The selected schema uses Title/title, Amount/number, Date/date, Deleted/checkbox,
+and SmartSpend ID, Category ID, Currency/rich_text. No broad financial-row search
+is needed to select the destination. Unknown create outcomes stay pending for
+owner reconciliation rather than automatically creating a duplicate table.
+
+Public-integration configuration, capabilities, consent, token revoke/refresh and
+real workspace behavior still need live validation. No real workspace/table
+write is authorized merely by the presence of the preview UI or these examples.
+
+## Existing Notion tables: read-only preview only
+
+Users may already have a table with their own property names and types—for
+example Expense/title, Amount/number, Category/select and Date/date. Do not
+rename it, add identity columns or create a second table without approval.
+The current implementation can discover OAuth-shared data-source metadata/schema
+and, after separate consent, preview the **explicitly chosen** table's rows.
+
+Mapping is per ledger, not hardcoded to English property/category names:
+
+```json
+{
+  "title": "Expense",
+  "amount": "Amount",
+  "date": "Date",
+  "category": "Category",
+  "categoryMap": {"Groceries": "22222222-2222-4222-8222-222222222222"}
+}
+```
+
+Category targets must belong to the authenticated ledger's current categories.
+Category source properties may be select or rich text. Currency and timezone
+come from the canonical ledger, not caller-supplied values; date-only values are
+interpreted in that timezone. The preview checks complete bounded pagination,
+rejects incomplete/duplicate results, reports unmapped category labels and
+returns at most five samples. Archived rows are excluded, not treated as delete
+instructions. Schema/row properties and extra columns are never modified.
+
+Routes: `GET /v1/connectors/notion/sources` returns metadata/schema;
+`POST /v1/connectors/notion/preview` requires
+`{consent:true,dataSourceId,mapping}`. Its result explicitly says `readOnly:true`
+and `canSync:false`. It does **not** bind the existing table, import expenses,
+mark it connected, or schedule sync. No canonical financial copy is persisted by
+preview. This is a staged safety boundary, not completed bidirectional sync.
+
+Full existing-table sync still needs durable page↔expense identities and
+destination/mapping revision binding; safe unknown-create handling without a
+Notion idempotency guarantee; mapped-field-only updates preserving extras;
+explicit reverse category/date/currency semantics; conflict and trash guards;
+reviewed initial merge; and reconnect/disconnect worker serialization. Matching
+rows by similar titles/amounts is not a safe substitute.
+
 ## Provider configuration and workers
 
-Notion currently uses an administrator-configured integration token shared only
-with the selected data source; there is no public Notion OAuth enrollment flow.
-Prepare properties exactly as follows: `Title` (title), `SmartSpend ID`,
+Public Notion OAuth above is the consumer connection path. The following legacy
+token-based runner is an **operator-only alternative**, not a mobile-user setup
+requirement. It expects a dedicated data source prepared exactly as follows:
+`Title` (title), `SmartSpend ID`,
 `Category ID`, `Currency` (rich text), `Amount` (number), `Date` (date), `Deleted`
 (checkbox). Category IDs must already exist in the canonical ledger. Sheets use
 the seven header cells `SmartSpend ID`, `Title`, `Amount`, `Category ID`, `Date`,
@@ -188,9 +325,36 @@ uv run smartspend-sync --root /private/tmp/smartspend-preview \
 
 Backup creates a separate new file and validates SQLite/record integrity. Copy it
 to a separately protected location. It contains ledger/history, not grants,
-connector reconciliation state, Google keys/tokens, or the full iOS app settings,
-budgets and goals. Validation is not a tested disaster restore; there is no automatic
+connector reconciliation state, Google/Notion keys/tokens, installation ownership
+keys/grants, or the full iOS app settings, budgets and goals. Validation is not a
+tested disaster restore; there is no automatic
 restore-backup CLI. Preserve and separately protect service configuration/state.
+
+## Privacy and retention boundaries
+
+Local use sends no expenses to this sync service. Enabling Integrations requires
+separate upload consent and sends current/archived expense titles, amounts,
+dates, category IDs/names and currency/timezone context to the configured server.
+Enabled providers receive the mapped expense records; budgets, goals, salary and
+microphone audio are not included by the sync protocol. Voice interpretation has
+its own transcript-only consent and service, not an implicit ledger upload.
+
+The server retains canonical expenses, immutable before/after history, operation
+receipts, connection/reconciliation state, installation ownership/grant metadata
+and protected backups. Provider access/refresh tokens are encrypted with private
+local keys; ledger/history SQLite itself is not encrypted by this package. Use
+disk encryption, owner-only filesystem permissions and HTTPS. Encryption at rest
+does not protect against compromise of the running service account.
+
+Disconnect is not erasure. It stops future polling/revokes the link as described
+above but leaves existing server history, provider tables and backups intact.
+Deleting the iPhone app also does not delete those copies. There is no completed
+self-service server-account/history/backup erasure or automatic retention policy;
+an operator must define one, provide a support/deletion procedure and reconcile
+it with user disclosures before public release. Do not advertise indefinite
+recoverability, zero retention, account deletion, or a full app backup. The
+in-app policy, public privacy page and App Store answers must describe the final
+enabled deployment; changing documentation does not publish the privacy site.
 
 ## Remote MCP authentication
 

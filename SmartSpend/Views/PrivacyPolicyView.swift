@@ -3,7 +3,7 @@ import SwiftUI
 struct PrivacyPolicyView: View {
     @Environment(\.dismiss) private var dismiss
 
-    private let effectiveDate = "October 20, 2026"
+    private let effectiveDate = "October 21, 2026"
 
     var body: some View {
         NavigationStack {
@@ -80,10 +80,13 @@ struct PrivacyPolicyView: View {
                         sections: [
                             PolicySection(icon: "arrow-up-tray", tint: Color(.systemBlue),
                                           title: "Only after you enable it",
-                                          text: "Connected sync sends expenses, archived expenses, categories, currency and timezone to your configured server after separate consent. Budgets, salary and recorded audio are not included. Changes and older versions are retained for history and restore."),
+                                          text: "Connected sync sends expenses, archived expenses, categories, currency and timezone to SmartSpend's configured sync service after separate consent. Budgets, salary and recorded audio are not included. Changes and older versions are retained for history and restore. A random installation credential is stored in this iPhone's Keychain to keep your ledger separate; it is not a cross-device account or recovery service."),
                             PolicySection(icon: "key", tint: Color(.systemIndigo),
                                           title: "Connected services and AI clients",
-                                          text: "If you authorize Google Sheets, Notion or an MCP AI client, it can access records within its granted permissions. Google tokens are encrypted on your server; the phone's sync credential is stored separately in Keychain. Provider policies also apply. Disconnecting stops access from this device but does not erase server history, backups or external copies. Retention and deletion of those copies are managed by your server administrator and the connected service.")
+                                          text: "You choose your own Google or Notion account and which Notion pages to share. Provider tokens are encrypted on the sync service; the phone's separate credential stays in Keychain. An independently authorized MCP AI client can access only its granted ledger permissions, but connecting Google or Notion does not authorize an AI client. Provider policies also apply. Disconnecting does not erase server history, backups or external copies. Contact support about retained service copies, and manage external copies and permissions in the connected account."),
+                            PolicySection(icon: "document", tint: Color(.systemTeal),
+                                          title: "Existing Notion table previews",
+                                          text: "After you select a shared table and approve a preview, its expense rows are read by the sync service to check your column and category mapping. A preview does not import rows into your ledger, start sync, or change the Notion table.")
                         ]
                     )
 

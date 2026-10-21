@@ -6,8 +6,10 @@ does not import any private iPhone or provider data without explicit enrollment.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import sqlite3
+import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -133,10 +135,27 @@ def create_mcp(repository: SyncRepository, verifier: OAuthVerifier, public_url: 
     return mcp
 
 
-def create_app(repository: SyncRepository, *, public_url: str, oauth: OAuthVerifier | None = None, google_oauth=None):
+def create_app(repository: SyncRepository, *, public_url: str, oauth: OAuthVerifier | None = None, google_oauth=None,
+               notion_oauth=None, device_enrollment=None):
     public_url = https_url(public_url).rstrip("/")
     remote = create_mcp(repository, oauth, public_url).streamable_http_app() if oauth else None
-    worker_status = {"configured":google_oauth is not None,"needsAttention":False}
+    managers = {"google": google_oauth, "notion": notion_oauth}
+    worker_status = {name: {"configured": manager is not None, "needsAttention": False} for name, manager in managers.items()}
+    discovery_failed = {name: False for name in managers}
+    connection_attention = {}
+    locks, locks_guard = {}, threading.Lock()
+
+    def connection_lock(provider, ledger, connector):
+        with locks_guard:
+            return locks.setdefault((provider, ledger, connector), threading.RLock())
+
+    def connector_key(provider, status):
+        # Each explicit destination gets its own durable reconciliation state.
+        # Reconnecting must never replay an old destination's pending outbox.
+        resource = status.get("spreadsheetId") if provider == "google" else status.get("databaseId")
+        if not resource:
+            return provider + "-default"
+        return provider + "-default-" + hashlib.sha256(resource.encode()).hexdigest()[:20]
 
     def reply(data, status=200, **headers):
         return JSONResponse(data,status_code=status,headers={"Cache-Control":"no-store","X-Content-Type-Options":"nosniff","Referrer-Policy":"no-referrer",**headers})
@@ -154,19 +173,54 @@ def create_app(repository: SyncRepository, *, public_url: str, oauth: OAuthVerif
         result.require("ledger:write" if write else "ledger:read")
         return result
 
-    async def body(request):
+    async def body(request, maximum=5*1024*1024):
         if request.headers.get("content-type", "").split(";")[0] != "application/json" or request.headers.get("content-encoding","identity") != "identity":
             raise LedgerError("JSON without compression is required")
         value = bytearray()
         async with asyncio.timeout(10):
             async for chunk in request.stream():
                 value.extend(chunk)
-                if len(value)>5*1024*1024:
-                    raise LedgerError("Request exceeds 5 MiB")
+                if len(value)>maximum:
+                    raise LedgerError("Request exceeds size limit")
         result = json.loads(value)
         if not isinstance(result,dict):
             raise LedgerError("Expected JSON object")
         return result
+
+    async def capabilities(request):
+        return reply({"deviceEnrollment": device_enrollment is not None,
+                      "google": google_oauth is not None, "notion": notion_oauth is not None})
+
+    async def enroll_device(request):
+        from .device_enrollment import EnrollmentLimitError
+        if device_enrollment is None:
+            return reply({"error": "device_enrollment_unavailable"}, 503)
+        try:
+            data = await body(request, 2048)
+            # Never trust caller-supplied forwarding headers as a quota identity.
+            peer = request.client.host if request.client else "unknown"
+            result = await asyncio.to_thread(device_enrollment.enroll, data, peer=peer)
+            return reply(result)
+        except EnrollmentLimitError:
+            return reply({"error": "enrollment_rate_limited"}, 429, **{"Retry-After": "3600"})
+        except PermissionError:
+            return reply({"error": "installation_ownership_required"}, 403)
+        except (LedgerError, ValueError, TypeError, KeyError, TimeoutError):
+            return reply({"error": "invalid_enrollment_request"}, 400)
+
+    async def revoke_device(request):
+        if device_enrollment is None:
+            return reply({"error": "device_enrollment_unavailable"}, 503)
+        try:
+            data = await body(request, 2048)
+            if set(data) != {"installationId", "ownerProof", "consent"} or data["consent"] is not True:
+                raise LedgerError("Explicit revocation consent required")
+            await asyncio.to_thread(device_enrollment.revoke, data["installationId"], data["ownerProof"])
+            return reply({"revoked": True})
+        except PermissionError:
+            return reply({"error": "installation_ownership_required"}, 403)
+        except (LedgerError, ValueError, TypeError, KeyError, TimeoutError):
+            return reply({"error": "invalid_revocation_request"}, 400)
 
     async def handle(request):
         try:
@@ -193,10 +247,13 @@ def create_app(repository: SyncRepository, *, public_url: str, oauth: OAuthVerif
                     result = await asyncio.to_thread(ledger.upsert_categories,data.get("categories"),data.get("expectedRevision"))
                 else:
                     return reply({"error":"not_found"},404)
-            elif action == "context":
-                result = await asyncio.to_thread(ledger.context)
-            elif action == "snapshot":
-                result = await asyncio.to_thread(ledger.state_snapshot)
+            elif action in ("context", "snapshot"):
+                try:
+                    result = await asyncio.to_thread(ledger.context if action == "context" else ledger.state_snapshot)
+                except LedgerError as exc:
+                    if str(exc) == "Sync ledger is not initialized":
+                        return reply({"error": "ledger_not_initialized"}, 404)
+                    raise
             else:
                 return reply({"error":"not_found"},404)
             return reply(result)
@@ -223,90 +280,131 @@ def create_app(repository: SyncRepository, *, public_url: str, oauth: OAuthVerif
     async def unavailable(request):
         return reply({"error":"oauth_not_configured","message":"Configure an OAuth authorization server before connecting remote MCP clients."},503)
 
-    async def google_start(request):
+    async def provider_action(request):
         from .connectors import ConnectorError
+        provider, action = request.path_params["provider"], request.path_params["action"]
+        if provider not in managers:
+            return reply({"error": "not_found"}, 404)
+        manager, connector = managers[provider], provider + "-default"
         try:
-            identity = await principal(request,True)
-            if google_oauth is None:
-                return reply({"error":"google_oauth_not_configured"},503)
-            data = await body(request)
-            if set(data) != {"consent","connectorId"} or data["consent"] is not True:
-                raise LedgerError("Explicit Google enrollment consent is required")
-            ledger = await asyncio.to_thread(repository.ledger,identity.ledger_id)
-            await asyncio.to_thread(ledger.context)
-            return reply(await asyncio.to_thread(google_oauth.start,identity.ledger_id,data["connectorId"]))
+            identity = await principal(request, request.method == "POST")
+            if manager is None:
+                if action == "status" and request.method == "GET":
+                    return reply({"connected": False, "pending": False, "configured": False})
+                return reply({"error": "provider_not_configured"}, 503)
+            if action == "status" and request.method == "GET":
+                result = await asyncio.to_thread(manager.connection_status, identity.ledger_id, connector)
+                path = repository.root / (identity.ledger_id + ".sqlite3.connectors.sqlite3")
+                if path.exists() and result.get("connected"):
+                    from .connector_sync import status
+                    saved = await asyncio.to_thread(status, path, connector_key(provider, result))
+                    result.update({"lastSuccessAt": saved.get("lastSuccessAt"),
+                        "conflictCount": len(saved.get("conflicts", {})), "pendingCount": len(saved.get("pending", {})),
+                        "needsAttention": bool(saved.get("error") or saved.get("conflicts"))})
+                return reply({**result, "configured": True, "needsAttention": bool(result.get("needsAttention") or
+                    discovery_failed[provider] or connection_attention.get((provider, identity.ledger_id, connector), False))})
+            if provider == "notion" and action == "parents" and request.method == "GET":
+                return reply(await asyncio.to_thread(manager.parent_pages, identity.ledger_id, connector))
+            if provider == "notion" and action == "sources" and request.method == "GET":
+                return reply(await asyncio.to_thread(manager.authorized_sources, identity.ledger_id, connector))
+            if provider == "notion" and action == "preview" and request.method == "POST":
+                data = await body(request, 131072)
+                if set(data) != {"consent", "dataSourceId", "mapping"} or data["consent"] is not True:
+                    raise LedgerError("Explicit preview consent and mapping required")
+                def preview():
+                    with connection_lock(provider, identity.ledger_id, connector):
+                        context = repository.ledger(identity.ledger_id).context()
+                        return manager.preview_existing_source(identity.ledger_id, connector, data["dataSourceId"],
+                            data["mapping"], context["categories"], context["currency"], context["timeZone"])
+                return reply(await asyncio.to_thread(preview))
+            if request.method != "POST" or action not in ("start", "select", "disconnect"):
+                return reply({"error": "not_found"}, 404)
+            data = await body(request, 4096)
+            fields = {"consent", "parentPageId"} if action == "select" else {"consent", "connectorId"}
+            if set(data) != fields or data.get("consent") is not True or (action != "select" and data["connectorId"] != connector):
+                raise LedgerError("Explicit provider consent and the default connection are required")
+            def perform():
+                with connection_lock(provider, identity.ledger_id, connector):
+                    if action == "disconnect":
+                        result = manager.disconnect(identity.ledger_id, connector)
+                        connection_attention.pop((provider, identity.ledger_id, connector), None)
+                        return result
+                    repository.ledger(identity.ledger_id).context()
+                    if action == "start":
+                        return manager.start(identity.ledger_id, connector)
+                    if provider != "notion":
+                        raise LedgerError("Unsupported provider action")
+                    return manager.select_parent(identity.ledger_id, connector, data["parentPageId"])
+            return reply(await asyncio.to_thread(perform))
         except PermissionError as exc:
-            return reply({"error":str(exc)},401 if str(exc)=="unauthorized" else 403)
-        except (LedgerError,ConnectorError,ValueError,TypeError,TimeoutError):
-            return reply({"error":"google_connection_could_not_start"},400)
+            return reply({"error": str(exc)}, 401 if str(exc) == "unauthorized" else 403)
+        except (ConnectorError, LedgerError, ValueError, TypeError, KeyError, TimeoutError, OSError, sqlite3.Error):
+            return reply({"error": "provider_connection_needs_attention"}, 400)
 
-    async def google_callback(request):
+    async def provider_callback(request):
         from .connectors import ConnectorError
-        if google_oauth is None:
-            return reply({"error":"google_oauth_not_configured"},503)
+        provider = request.path_params["provider"]
+        manager = managers.get(provider)
+        if manager is None:
+            return reply({"error": "provider_not_configured"}, 503)
         try:
-            result = await asyncio.to_thread(google_oauth.callback,request.query_params.get("state"),request.query_params.get("code"))
-            return reply({"connected":True,"spreadsheetId":result["spreadsheetId"],
-                          "message":"Google Sheets connected. You can return to SmartSpend. Expense changes sync while your iPhone is open."})
-        except (ConnectorError,LedgerError,ValueError,TypeError):
-            return reply({"error":"google_connection_incomplete","message":"Return to SmartSpend. No existing files were replaced. Ask the server owner to inspect any pending enrollment before retrying."},400)
+            result = await asyncio.to_thread(manager.callback, request.query_params.get("state"), request.query_params.get("code"))
+            if provider == "notion":
+                return reply({"connected": False, "needsSelection": True,
+                              "message": "Return to SmartSpend to choose a Notion destination. No existing database was changed."})
+            return reply({"connected": True, "spreadsheetId": result["spreadsheetId"],
+                          "message": "Google Sheets connected. You can return to SmartSpend."})
+        except (ConnectorError, LedgerError, ValueError, TypeError, KeyError):
+            return reply({"error": "provider_connection_incomplete",
+                "message": "Return to SmartSpend. Existing files were not replaced. Pending connection outcomes need review before retrying."}, 400)
 
-    async def google_status(request):
-        from .connectors import ConnectorError
-        try:
-            identity = await principal(request)
-            if google_oauth is None:
-                return reply({"connected":False,"pending":False,"configured":False})
-            result = await asyncio.to_thread(google_oauth.connection_status,identity.ledger_id,"google-default")
-            path = repository.root / (identity.ledger_id+".sqlite3.connectors.sqlite3")
-            # Operational counters only: never return provider credentials or full conflict records.
-            if path.exists():
-                from .connector_sync import status
-                saved = await asyncio.to_thread(status,path,"google-default")
-                result.update({"lastSuccessAt":saved.get("lastSuccessAt"),"conflictCount":len(saved.get("conflicts",{})),
-                               "pendingCount":len(saved.get("pending",{})),"needsAttention":bool(saved.get("error") or saved.get("conflicts"))})
-            return reply({**result,"configured":True,
-                          "needsAttention":bool(result.get("needsAttention") or worker_status["needsAttention"])})
-        except PermissionError as exc:
-            return reply({"error":str(exc)},401 if str(exc)=="unauthorized" else 403)
-        except (ConnectorError,LedgerError,ValueError,TypeError):
-            return reply({"error":"google_status_unavailable"},400)
-
-    async def google_worker():
+    async def provider_worker(provider, manager):
         import httpx
         from .connector_sync import reconcile
-        from .connectors import SheetsAdapter, ConnectorError
-        while True:
-            failed = False
-            try:
-                connections = await asyncio.to_thread(google_oauth.ready_connections)
-            except (ConnectorError,LedgerError,ValueError,OSError,sqlite3.Error):
-                # A transient database lock or unreadable enrollment must never
-                # permanently kill the sole polling worker. Retry next interval.
-                connections = []
-                failed = True
-            for connection in connections:
-                def poll():
-                    config = google_oauth.config(connection["ledgerId"],connection["connectorId"])
-                    ledger = repository.ledger(config["ledgerId"])
+        from .connectors import SheetsAdapter, NotionAdapter, ConnectorError
+        semaphore = asyncio.Semaphore(8)
+        async def poll_one(connection):
+            ledger_id, connector = connection["ledgerId"], connection["connectorId"]
+            key = (provider, ledger_id, connector)
+            def poll():
+                with connection_lock(*key):
+                    # Fetch state/token only after acquiring the disconnect lock.
+                    if not manager.connection_status(ledger_id, connector).get("connected"):
+                        return
+                    config = manager.config(ledger_id, connector)
+                    ledger = repository.ledger(ledger_id)
                     with httpx.Client(follow_redirects=False) as client:
-                        adapter = SheetsAdapter(client,config["token"],config["spreadsheetId"],config["tab"],ledger.context()["currency"])
-                        return reconcile(ledger,adapter,config["connectorId"])
+                        if provider == "google":
+                            adapter = SheetsAdapter(client, config["token"], config["spreadsheetId"], config["tab"], ledger.context()["currency"])
+                        else:
+                            adapter = NotionAdapter(client, config["token"], config["dataSourceId"], ledger.context()["currency"])
+                        return reconcile(ledger, adapter, connector_key(provider, manager.connection_status(ledger_id, connector)))
+            async with semaphore:
                 try:
                     await asyncio.to_thread(poll)
-                except (ConnectorError,LedgerError,ValueError,OSError,sqlite3.Error):
-                    # Provider failure never starts a destructive reconciliation.
-                    failed = True
-            worker_status["needsAttention"] = failed
+                    connection_attention[key] = False
+                except (ConnectorError, LedgerError, ValueError, OSError, sqlite3.Error):
+                    connection_attention[key] = True
+        while True:
+            try:
+                connections = await asyncio.to_thread(manager.ready_connections)
+                discovery_failed[provider] = False
+            except (ConnectorError, LedgerError, ValueError, OSError, sqlite3.Error):
+                connections = []
+                discovery_failed[provider] = True
+            await asyncio.gather(*(poll_one(connection) for connection in connections))
+            worker_status[provider]["needsAttention"] = discovery_failed[provider] or any(
+                value for key, value in connection_attention.items() if key[0] == provider)
             await asyncio.sleep(15)
 
     async def health(request):
-        return reply({"service":"smartspend-sync","status":"degraded" if worker_status["needsAttention"] else "ok",
-                      "oauthConfigured":oauth is not None,"googleWorker":dict(worker_status)})
+        return reply({"service":"smartspend-sync","status":"degraded" if any(v["needsAttention"] for v in worker_status.values()) else "ok",
+                      "oauthConfigured":oauth is not None,"googleWorker":dict(worker_status["google"]),
+                      "notionWorker": dict(worker_status["notion"])})
 
     @asynccontextmanager
     async def lifespan(app):
-        worker = asyncio.create_task(google_worker()) if google_oauth else None
+        workers = [asyncio.create_task(provider_worker(name, manager)) for name, manager in managers.items() if manager is not None]
         try:
             if remote:
                 async with remote.router.lifespan_context(remote):
@@ -314,15 +412,18 @@ def create_app(repository: SyncRepository, *, public_url: str, oauth: OAuthVerif
             else:
                 yield
         finally:
-            if worker:
+            for worker in workers:
                 worker.cancel()
                 try:
                     await worker
                 except asyncio.CancelledError:
                     pass
 
-    routes = [Route("/health",health),Route("/v1/connectors/google/start",google_start,methods=["POST"]),
-              Route("/v1/connectors/google/status",google_status),Route("/oauth/google/callback",google_callback),
+    routes = [Route("/health",health), Route("/v1/device/enroll", enroll_device, methods=["POST"]),
+              Route("/v1/device/revoke", revoke_device, methods=["POST"]),
+              Route("/v1/connectors/capabilities", capabilities),
+              Route("/v1/connectors/{provider}/{action}", provider_action, methods=["GET", "POST"]),
+              Route("/oauth/{provider}/callback", provider_callback),
               Route("/v1/sync/history/{expense_id}",history),
               Route("/v1/sync/{action}",handle,methods=["GET","POST"])]
     routes.append(Mount("/",app=remote) if remote else Route("/mcp",unavailable,methods=["GET","POST","DELETE"]))

@@ -131,12 +131,18 @@ def parser():
     google_config.add_argument("--client-id", required=True)
     google_config.add_argument("--public-url", required=True)
     google_config.add_argument("--output", required=True)
+    notion_config = commands.add_parser("configure-notion-client", help="Save a Notion public OAuth client secret via a hidden terminal prompt")
+    notion_config.add_argument("--client-id", required=True)
+    notion_config.add_argument("--public-url", required=True)
+    notion_config.add_argument("--output", required=True)
     serve = commands.add_parser("serve")
     serve.add_argument("--public-url", required=True)
     serve.add_argument("--port", type=int, default=18770)
     serve.add_argument("--oauth-issuer")
     serve.add_argument("--oauth-jwks-url")
     serve.add_argument("--google-client-config", help="Owner-only downloaded Google web OAuth JSON")
+    serve.add_argument("--notion-client-config", help="Owner-only Notion public OAuth client JSON")
+    serve.add_argument("--allow-device-enrollment", action="store_true", help="Explicitly enable bounded per-installation signup; configure edge abuse protection before public use")
     token = commands.add_parser("create-token")
     token.add_argument("--ledger", required=True)
     token.add_argument("--public-url", required=True)
@@ -178,22 +184,29 @@ def run(args):
         _watch(args)
         return None
     repo = SyncRepository(_private_root(args.root))
-    if args.command == "configure-google-client":
-        if not re.fullmatch(r"[A-Za-z0-9_-]{5,200}\.apps\.googleusercontent\.com", args.client_id):
+    if args.command in ("configure-google-client", "configure-notion-client"):
+        notion = args.command == "configure-notion-client"
+        if notion:
+            args.client_id = uuid_text(args.client_id)
+        elif not re.fullmatch(r"[A-Za-z0-9_-]{5,200}\.apps\.googleusercontent\.com", args.client_id):
             raise LedgerError("Expected a Google OAuth client ID")
         public = https_url(args.public_url).rstrip("/")
         # Never fall back to a visible stdin prompt in non-interactive sessions.
         with warnings.catch_warnings():
             warnings.simplefilter("error", getpass.GetPassWarning)
             try:
-                secret = getpass.getpass("Paste Google client secret (hidden): ")
+                secret = getpass.getpass("Paste " + ("Notion" if notion else "Google") + " client secret (hidden): ")
             except (getpass.GetPassWarning, EOFError):
                 raise LedgerError("Run this command in an interactive terminal; the secret must not be visible") from None
         if not isinstance(secret, str) or not 10 <= len(secret) <= 1024 or any(char.isspace() for char in secret):
-            raise LedgerError("Expected a nonblank Google client secret without whitespace")
-        _write_new_private(args.output, {"web":{"client_id":args.client_id,"client_secret":secret,
-            "redirect_uris":[public+"/oauth/google/callback"],"auth_uri":"https://accounts.google.com/o/oauth2/auth",
-            "token_uri":"https://oauth2.googleapis.com/token"}})
+            raise LedgerError("Expected a nonblank client secret without whitespace")
+        if notion:
+            _write_new_private(args.output, {"client_id": args.client_id, "client_secret": secret,
+                                            "redirect_uri": public + "/oauth/notion/callback"})
+        else:
+            _write_new_private(args.output, {"web":{"client_id":args.client_id,"client_secret":secret,
+                "redirect_uris":[public+"/oauth/google/callback"],"auth_uri":"https://accounts.google.com/o/oauth2/auth",
+                "token_uri":"https://oauth2.googleapis.com/token"}})
         return {"configurationWritten":True}
     scopes = ("ledger:read",) if getattr(args, "read_only", False) else ("ledger:read", "ledger:write")
     if args.command == "serve":
@@ -207,6 +220,12 @@ def run(args):
         app_options = {"public_url": public, "oauth": oauth}
         if google is not None:
             app_options["google_oauth"] = google
+        if args.notion_client_config:
+            from .notion_oauth import NotionOAuth
+            app_options["notion_oauth"] = NotionOAuth.from_private_file(repo.root, public, Path(args.notion_client_config).expanduser())
+        if args.allow_device_enrollment:
+            from .device_enrollment import DeviceEnrollment
+            app_options["device_enrollment"] = DeviceEnrollment(repo.grants, repo.root)
         uvicorn.run(create_app(repo, **app_options), host="127.0.0.1", port=args.port,
                     access_log=False, log_level="warning", proxy_headers=False)
         return None

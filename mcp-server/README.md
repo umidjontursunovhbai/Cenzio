@@ -1,10 +1,21 @@
-# SmartSpend MCP — private, reviewable first version
+# SmartSpend server tools — optional integrations and MCP
 
-This page primarily describes the original **manual snapshot/patch** workflow and
-the separate voice gateway. The new `smartspend-sync` connected service has its own
-[operator guide](../docs/CONNECTED_SYNC.md), scoped authentication, incremental
-ledger, provider workers, and history. It requires separate deployment; running
-the commands below does not enable connected sync.
+The normal mobile surface is **Settings → Integrations**, with Google Sheets and
+Notion account consent. MCP is an AI-client/server protocol, not a setting every
+iPhone user needs to configure. Its legacy manual snapshot/patch tooling remains
+available to operators; it is no longer a visible mobile settings entry.
+
+The `smartspend-sync` service has a separate [operator guide](../docs/CONNECTED_SYNC.md)
+for per-installation ownership, optional public-provider OAuth, incremental ledger
+sync, history and remote MCP. Public installation signup is **off by default**;
+`--allow-device-enrollment` enables a bounded preview, not production App Attest
+or cross-device accounts. Provider app credentials are configured once by the
+operator; every user separately authorizes their own Google/Notion account.
+
+New dedicated provider tables have a sync implementation. Existing Notion tables
+support **schema discovery and mapped read-only preview only**: no import, schema
+modification or bidirectional sync. Running the manual commands below does not
+enable either provider flow or deploy this branch.
 
 A real MCP server for reading expenses and staging reversible changes from an AI
 client. Built on the [official MCP Python SDK](https://py.sdk.modelcontextprotocol.io/v1/),
@@ -139,8 +150,8 @@ On the private Ubuntu installation, replace `uv run smartspend-ai` with
 
 On Dashboard or Expenses, hold **+** briefly and pull it down to start listening.
 A normal tap opens only the manual form. Recording requires microphone/speech
-permission. The voice screen uses Apple's on-device recognizer for the
-selected `en-US`/`ru-RU` locale. Runtime language/model availability is checked;
+permission. The current inline voice flow uses Apple's on-device English recognizer.
+Runtime language/model availability is checked;
 unavailable local recognition does not silently fall back to uploading audio.
 The transcript remains editable; keyboard dictation follows iOS's own settings.
 

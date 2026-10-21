@@ -14,24 +14,38 @@ The app has four tabs: **Dashboard, Expenses, Recurring, and Settings**. Spendin
 
 ## Your data stays in your hands
 
-SmartSpend does not require an account for local use. By default, records stay on your device and are shared locally with its widgets. CloudKit sync is not active. Development builds also offer the optional private connected preview described below.
+SmartSpend does not require an account for local use. By default, records stay on your device and are shared locally with its widgets. CloudKit sync is not active. Development builds also offer the optional Integrations preview described below.
 
 You can export a copy from **Settings → Export Data**. CSV expense records can be imported again; JSON/PDF reports and other exported sections are not a full restorable app backup. Keep exported files somewhere safe: they contain your financial information, and deleting data inside the app does not delete copies you have saved or shared elsewhere. See the [Privacy Policy](https://umidjontursunovhbai.github.io/SmartSpend/privacy.html) for details.
 
-## Private AI tools preview
+## Optional Google Sheets and Notion connections
 
-New development builds include **Settings → AI tools (MCP)**. You can explicitly export an expense snapshot to your own MCP server, then review and approve its changes before importing them back. Adding, editing, archiving and restoring expenses are supported; stale changes and duplicate operations are checked before applying a batch.
+**Settings → Integrations** is the place to connect your own Google or Notion
+account. There is no technical MCP/token/file-exchange setup in the normal mobile
+settings. Connections are optional; check the upload consent before continuing.
 
-This preview uses **manual JSON file exchange**, not automatic iPhone or ChatGPT sync. Snapshots include private financial details, so share them only with services you trust. The separate [private MCP server guide](mcp-server/README.md) explains setup and its limits.
+- **Google Sheets:** authorize your Google account to create a dedicated SmartSpend
+  spreadsheet. Selecting an existing spreadsheet is not supported yet.
+- **Notion:** authorize your own workspace, then choose a shared page for a new
+  dedicated expense database. Existing pages and tables are not replaced.
+- **Existing Notion tables:** inspect their fields, map them to your categories,
+  and preview records without changing the table. This is **read-only preview**,
+  not import or bidirectional sync. An existing table such as Expense / Amount /
+  Category / Date does not need to be renamed or modified to preview it.
 
-The separate **Connected sync** preview can exchange expense changes with a private
-server after explicit enrollment. It checks while the app is open, retains offline
-edits for retry, and includes History & Trash. Google enrollment creates a new
-dedicated sheet; Notion requires administrator configuration. This is development
-code requiring its own HTTPS deployment and live integration QA, not a public
-consumer login or a verified ChatGPT connection. See the [connected sync operator
-guide](docs/CONNECTED_SYNC.md) before enabling it. Connecting sends expense records
-to your server and any providers you explicitly enable.
+The preview retains offline expense edits, checks for changes while SmartSpend is
+open, and includes History & Trash. It is tied to this installation, not a
+cross-device account or a recovery service. Disconnecting stops future sync but
+does not erase server history, backups, or external copies; an operation already
+in progress may finish. Those copies need separate deletion/revocation.
+
+This branch contains the connection flow, but public availability still requires
+server configuration, provider consent setup and live QA. A successful build is
+not proof that Google, Notion or ChatGPT is connected. See the [operator guide](docs/CONNECTED_SYNC.md)
+for rollout limits. The separate [MCP guide](mcp-server/README.md) is for operators
+and AI clients, not a required mobile setup step.
+
+## Add an expense by voice
 
 To dictate an expense, **hold the + button briefly, then pull it down** on
 Dashboard or Expenses. Listening starts immediately (iOS asks permission the

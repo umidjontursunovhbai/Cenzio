@@ -1,6 +1,6 @@
 # SmartSpend App Store release preparation
 
-Audit date: October 10, 2026. This is a preparation checklist, not proof of App Store approval or publication.
+Baseline audit date: October 10, 2026; integrations rollout notes updated October 21, 2026. This is a preparation checklist, not proof of App Store approval or publication.
 
 ## Verified locally
 
@@ -9,22 +9,49 @@ Audit date: October 10, 2026. This is a preparation checklist, not proof of App 
 - Minimum OS: iOS 18.5. The project currently supports iPhone **and iPad**; both need release QA and appropriate screenshots.
 - Xcode 27 Release archive built successfully with signing disabled during the October 10 audit. The paid-team signing check failed because the available profile does not support the current App Group. An unsigned archive is not an App Store IPA.
 - The app and widget bundle their privacy manifests. The 1024×1024 app icons have no alpha channel.
-- The app uses local storage/App Group and has no active CloudKit sync, in-app account, ads, or third-party analytics in this build.
+- The October 10 audited build used local storage/App Group without active CloudKit sync, in-app accounts, ads or third-party analytics. New optional Integrations code changes the data-flow disclosures and needs separate release QA.
 - An in-app privacy policy and support email are reachable from Settings.
 
 ## Blockers before upload
 
-The optional connected-sync development preview is documented in
-[the operator guide](docs/CONNECTED_SYNC.md). Explicit enrollment uploads expense
-records/categories/history to an owner-operated service; enabling Google Sheets
-or Notion also exchanges records with that provider. Reconcile in-app and public
-privacy disclosures, App Store privacy answers, retention/deletion behavior and
-reviewer access with the final shipped build. Native sync uses an administrator-issued
-ledger-scoped credential in Keychain, not consumer account onboarding. Remote MCP
-requires a separately configured upstream OAuth identity provider. Public HTTPS
-sync deployment, live Google/Notion/ChatGPT QA, and production authentication/review
-access remain release gates. The existing voice listener on port 10000 does not
-provide sync routes. Local tests or a successful build do not establish these gates.
+The optional connected-sync preview is documented in
+[the operator guide](docs/CONNECTED_SYNC.md). The mobile surface is now
+**Settings → Integrations**, not technical MCP/token/file-exchange setup. Each
+installation can authorize its own Google account/Notion workspace after upload
+consent when the operator has enabled/configured the relevant services.
+Enrollment uploads expense records/categories/Trash to a canonical service that
+then retains history; enabled dedicated provider tables exchange expense records.
+
+Per-installation enrollment is off by default (`--allow-device-enrollment` opts in)
+and uses a random device-held ownership proof, not a reusable cross-device account
+or recovery service. Quotas do not replace App Attest, edge abuse prevention,
+production authentication, resource limits or an App Review access path. Those
+remain release gates. Native ownership cannot be claimed with a ledger UUID alone.
+Provider application secrets stay server-side; each user separately approves the
+provider's consent screen. Google testing-only consent/test-user configuration
+must not be advertised as generally available OAuth; Notion needs a public
+integration eligible for the intended users/workspaces.
+
+The October 20 `aa06b38` private service deployment had health/unauthenticated-
+request checks and the configured HTTPS routes. The new enrollment/Notion/mapped-
+preview changes have **not** been deployed or live-tested by this update; SSH was
+unavailable from the current Mac tailnet. Do not conflate that older deployment
+with this branch. Live independent-user Google/Notion consent, refresh/revoke,
+sync and recovery QA, plus upstream OAuth for ChatGPT/MCP, remain outstanding.
+Local tests and signed builds do not establish these gates.
+
+Existing Notion tables have metadata discovery and **read-only mapped preview**
+only (`canSync:false`): no import, bidirectional sync, schema change or binding.
+Keep this limitation visible; do not claim all existing budgets/databases sync.
+The dedicated-new-table path has sync code, but also needs deployment/live QA.
+
+Reconcile in-app/public policies, App Store privacy answers and reviewer notes
+with the final binary/deployment. Disconnecting does not erase provider copies,
+immutable server history or backups. There is no completed public account/history
+erasure or automated retention policy; define an operational deletion procedure
+and retention schedule before release. Provider tokens are encrypted locally;
+canonical SQLite/history still requires private permissions and disk encryption.
+Do not claim that no data leaves the device when optional integrations are enabled.
 
 The inline voice flow now uses GPT-6 Luna rather than a static local parser.
 The owner's phone is provisioned over its paired Mac with a revocable device
@@ -65,7 +92,7 @@ Description:
 >
 > Add expenses and organize them by category. Set category budgets and spending goals. See this month's spending, recent expenses, and upcoming recurring bills at a glance. Import expenses from a CSV file or export a copy of your records when you need one.
 >
-> No account is required. In the current version, SmartSpend records are stored on your device and can be shared with its iOS widget.
+> No account is required for local use. By default, SmartSpend records stay on your device and can be shared with its iOS widget.
 
 Do not claim bank sync, live account balances, AI advice, or generally available
 cloud sync in the listing. The private connected preview is not a verified public

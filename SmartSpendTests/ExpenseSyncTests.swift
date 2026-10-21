@@ -141,10 +141,10 @@ struct ExpenseSyncTests {
         let manager = DataManager(defaults: defaults, activityManager: GamificationManager(defaults: defaults))
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("ExpenseSyncTest-\(UUID().uuidString).json")
         var requests = 0
-        let controller = ExpenseSyncController(dataManager: manager, stateURL: url) { _, _, _, _ in
+        let controller = ExpenseSyncController(dataManager: manager, stateURL: url, transport: { _, _, _, _ in
             requests += 1
             throw ExpenseSyncError.response
-        }
+        })
         controller.foreground(true)
         await controller.sync()
         #expect(!controller.enabled)

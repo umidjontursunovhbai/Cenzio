@@ -107,6 +107,35 @@ def test_serve_loopback_no_access_log_and_oauth_pair(root, monkeypatch):
     serve.assert_not_called()
 
 
+def test_notion_client_hidden_configuration_is_private_and_not_overwritten(root, tmp_path, monkeypatch, capsys):
+    output = tmp_path / "notion-client.json"
+    monkeypatch.setattr(sync_cli.getpass, "getpass", lambda prompt: "synthetic-notion-client-value")
+    arguments = ("configure-notion-client", "--client-id", LEDGER, "--public-url", "https://sync.example", "--output", output)
+    assert call(root, *arguments) == 0
+    assert output.stat().st_mode & 0o777 == 0o600
+    assert json.loads(output.read_text()) == {"client_id": LEDGER, "client_secret": "synthetic-notion-client-value",
+                                             "redirect_uri": "https://sync.example/oauth/notion/callback"}
+    before = output.read_bytes()
+    assert call(root, *arguments) == 1
+    assert output.read_bytes() == before
+    assert "synthetic-notion-client-value" not in capsys.readouterr().out
+
+
+def test_serve_explicitly_enables_device_enrollment_and_notion_only_when_configured(root, monkeypatch):
+    app, enrollment, notion = Mock(), Mock(), Mock()
+    monkeypatch.setattr(sync_cli, "create_app", app)
+    monkeypatch.setattr(sync_cli.uvicorn, "run", Mock())
+    monkeypatch.setattr("smartspend_mcp.device_enrollment.DeviceEnrollment", enrollment)
+    monkeypatch.setattr("smartspend_mcp.notion_oauth.NotionOAuth.from_private_file", notion)
+    assert call(root, "serve", "--public-url", "https://sync.example") == 0
+    assert "device_enrollment" not in app.call_args.kwargs
+    assert "notion_oauth" not in app.call_args.kwargs
+    assert call(root, "serve", "--public-url", "https://sync.example", "--allow-device-enrollment",
+                "--notion-client-config", "/private/example-notion.json") == 0
+    assert app.call_args.kwargs["device_enrollment"] == enrollment.return_value
+    assert app.call_args.kwargs["notion_oauth"] == notion.return_value
+
+
 def test_serve_oauth_resource_is_exact(root, monkeypatch):
     verifier, app = Mock(), Mock()
     monkeypatch.setattr(sync_cli, "OAuthVerifier", verifier)

@@ -86,6 +86,42 @@ def test_unknown_state_and_expired_state_never_exchange(tmp_path):
     assert calls == []
 
 
+def test_disconnect_erases_tokens_invalidates_states_and_allows_new_consent(tmp_path):
+    oauth, calls = setup(tmp_path)
+    old_state = start(oauth)
+    assert oauth.disconnect(LEDGER, "google") == {"disconnected": True, "providerRevoked": False}
+    assert oauth.connection_status(LEDGER, "google") == {"connected": False, "pending": False}
+    with pytest.raises(ConnectorError, match="expired"):
+        oauth.callback(old_state, "old-code")
+    assert calls == []
+    new_state = start(oauth)
+    oauth.callback(new_state, "new-code")
+    oauth.disconnect(LEDGER, "google")
+    assert oauth.ready_connections() == []
+    with pytest.raises(ConnectorError):
+        oauth.config(LEDGER, "google")
+    # No provider revoke endpoint or external file deletion was called.
+    assert len(calls) == 3
+
+
+def test_disconnect_cannot_affect_another_ledger(tmp_path):
+    oauth, _ = setup(tmp_path)
+    state = start(oauth)
+    oauth.callback(state, "code")
+    oauth.disconnect(OTHER, "google")
+    assert oauth.connection_status(LEDGER, "google")["connected"]
+
+
+def test_missing_token_encryption_key_never_generates_a_replacement(tmp_path):
+    oauth, _ = setup(tmp_path)
+    oauth.callback(start(oauth), "code")
+    key_path = tmp_path / "google-oauth/owner.key"
+    key_path.unlink()
+    with pytest.raises(ConnectorError, match="restore"):
+        GoogleOAuth(tmp_path, "client", "secret-client", URL)
+    assert not key_path.exists()
+
+
 def test_unknown_creation_does_not_duplicate_or_retry_code(tmp_path):
     oauth, calls = setup(tmp_path, fail_create=True)
     state = start(oauth)

@@ -70,7 +70,7 @@ struct SettingsView: View {
     @State private var showingDeletedExpenses = false
     @State private var showingDataExport = false
     @State private var showingDataImport = false
-    @State private var showingMCPIntegration = false
+    @State private var showingIntegrations = false
     @State private var showingPrivacyPolicy = false
     @State private var showingAlert = false
     
@@ -126,8 +126,15 @@ struct SettingsView: View {
             .sheet(isPresented: $showingDataImport) {
                 DataImportView()
             }
-            .sheet(isPresented: $showingMCPIntegration) {
-                MCPIntegrationView()
+            .sheet(isPresented: $showingIntegrations) {
+                NavigationStack {
+                    ExpenseSyncView()
+                        .toolbar {
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button("Done") { showingIntegrations = false }
+                            }
+                        }
+                }
             }
             .alert("clear_all_data".localized, isPresented: $showingAlert) {
                 Button("cancel".localized, role: .cancel) { }
@@ -135,7 +142,7 @@ struct SettingsView: View {
                     clearAllData()
                 }
             } message: {
-                Text("clear_all_data_message".localized)
+                Text("\("clear_all_data_message".localized) Google Sheets, Notion, server copies and remote history are not deleted. A sync change already in progress may finish. Revoke SmartSpend in your provider account settings and contact the server administrator to remove remote copies or retained access.")
             }
         }
     }
@@ -200,11 +207,12 @@ struct SettingsView: View {
 
                     settingsButtonRow(
                         icon: "arrow-path",
-                        title: "AI tools (MCP)",
+                        title: "Integrations",
                         tint: Color(.systemBlue)
                     ) {
-                        showingMCPIntegration = true
+                        showingIntegrations = true
                     }
+                    .accessibilityIdentifier("settings.integrations")
                 }
 
                 settingsGroup("support".localized) {
@@ -445,6 +453,7 @@ struct SettingsView: View {
     }
 
     private func clearAllData() {
+        ExpenseSyncController.shared.clearLocalConnection()
         Task { await VoiceConnectionStore.shared.disconnect() }
         dataManager.clearAllData()
     }

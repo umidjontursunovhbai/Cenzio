@@ -5,6 +5,51 @@ import Combine
 struct ExpenseSyncCredential: Codable {
     let server: URL
     let token: String
+    var expiresAt: Int? = nil
+    var deviceEnrolled: Bool? = nil
+}
+
+struct ExpenseSyncDeviceIdentity: Codable {
+    let installationId: String
+    let ownerProof: String
+    let ledgerId: String
+
+    static func remove() {
+        SecItemDelete([kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: "com.tursunov.SmartSpend.expense-sync-device",
+            kSecAttrAccount as String: "installation"] as CFDictionary)
+    }
+
+    static func loadOrCreate(ledgerId: String) throws -> Self {
+        let key: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: "com.tursunov.SmartSpend.expense-sync-device",
+            kSecAttrAccount as String: "installation"]
+        var query = key
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        var result: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        if status == errSecSuccess {
+            guard let data = result as? Data else { throw ExpenseSyncError.storage }
+            let existing = try JSONDecoder().decode(Self.self, from: data)
+            guard existing.ledgerId == ledgerId else { throw ExpenseSyncError.wrongLedger }
+            return existing
+        }
+        guard status == errSecItemNotFound else { throw ExpenseSyncError.storage }
+        let identity = try create(ledgerId: ledgerId)
+        let attributes = key.merging([kSecValueData as String: try JSONEncoder().encode(identity),
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly]) { _, new in new }
+        guard SecItemAdd(attributes as CFDictionary, nil) == errSecSuccess else { throw ExpenseSyncError.storage }
+        return identity
+    }
+
+    static func create(ledgerId: String) throws -> Self {
+        var random = [UInt8](repeating: 0, count: 32)
+        guard SecRandomCopyBytes(kSecRandomDefault, random.count, &random) == errSecSuccess else { throw ExpenseSyncError.storage }
+        let proof = Data(random).base64EncodedString().replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: "")
+        return Self(installationId: UUID().uuidString.lowercased(), ownerProof: proof, ledgerId: ledgerId)
+    }
 }
 
 struct ExpenseSyncRecord: Codable, Equatable {
@@ -79,6 +124,38 @@ struct ExpenseSyncGoogleStatus: Decodable {
     }
 }
 
+enum ExpenseSyncProvider: String, CaseIterable, Identifiable {
+    case google, notion
+    var id: String { rawValue }
+    var name: String { self == .google ? "Google Sheets" : "Notion" }
+}
+
+struct ExpenseSyncProviderStatus: Decodable {
+    let connected: Bool
+    let pending: Bool
+    let needsAttention: Bool?
+    let spreadsheetId: String?
+    let needsSelection: Bool?
+    let configured: Bool?
+    var spreadsheetURL: URL? {
+        guard connected, let spreadsheetId,
+              spreadsheetId.range(of: #"^[A-Za-z0-9_-]{10,150}$"#, options: .regularExpression) != nil else { return nil }
+        return URL(string: "https://docs.google.com/spreadsheets/d/\(spreadsheetId)")
+    }
+}
+
+struct ExpenseSyncNotionPage: Decodable, Identifiable {
+    let id: String
+    let title: String
+}
+
+struct ExpenseSyncCapabilities: Decodable {
+    let deviceEnrollment: Bool
+    let google: Bool
+    let notion: Bool
+    func supports(_ provider: ExpenseSyncProvider) -> Bool { provider == .google ? google : notion }
+}
+
 struct ExpenseSyncHistoryItem: Decodable, Identifiable {
     let sequence: Int
     let operationId: String
@@ -137,6 +214,16 @@ enum ExpenseSyncAPI {
         return url
     }
 
+    static func authorizationURL(_ text: String, provider: ExpenseSyncProvider) throws -> URL {
+        if provider == .google { return try googleAuthorizationURL(text) }
+        guard let parts = URLComponents(string: text), parts.scheme == "https", let host = parts.host,
+              ["api.notion.com", "www.notion.so"].contains(host), parts.port == nil,
+              parts.user == nil, parts.password == nil, parts.fragment == nil,
+              parts.path == "/v1/oauth/authorize" || parts.path == "/oauth/authorize",
+              let url = parts.url else { throw ExpenseSyncError.response }
+        return url
+    }
+
     static func request(_ credential: ExpenseSyncCredential, path: String, method: String = "GET", body: Data? = nil) async throws -> Data {
         _ = try server(credential.server.absoluteString)
         let configuration = URLSessionConfiguration.ephemeral
@@ -147,12 +234,14 @@ enum ExpenseSyncAPI {
         let session = URLSession(configuration: configuration, delegate: ExpenseSyncNoRedirects(), delegateQueue: nil)
         defer { session.invalidateAndCancel() }
         guard let url = URL(string: path, relativeTo: credential.server.appendingPathComponent("/"))?.absoluteURL,
-              url.host == credential.server.host, url.scheme == "https" else { throw ExpenseSyncError.invalidServer }
+              url.host == credential.server.host, url.port == credential.server.port,
+              url.user == nil, url.password == nil,
+              url.scheme == "https" else { throw ExpenseSyncError.invalidServer }
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.httpBody = body
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(credential.token)", forHTTPHeaderField: "Authorization")
+        if !credential.token.isEmpty { request.setValue("Bearer \(credential.token)", forHTTPHeaderField: "Authorization") }
         let (data, response) = try await session.data(for: request)
         try Task.checkCancellation()
         guard let response = response as? HTTPURLResponse else { throw ExpenseSyncError.response }
@@ -295,17 +384,23 @@ final class ExpenseSyncController: ObservableObject {
     private var observedLocalRecords: Data?
     private let dataManager: DataManager
     private let file: URL
-    private let transport: (ExpenseSyncCredential, String, String, Data?) async throws -> Data
+    private let usesPersistentCredentials: Bool
+    private let identityProvider: (String) throws -> ExpenseSyncDeviceIdentity
+    private let send: (ExpenseSyncCredential, String, String, Data?) async throws -> Data
+    private var generation: UInt64 = 0
     private var keychain: [String: Any] {
         [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "com.tursunov.SmartSpend.expense-sync", kSecAttrAccount as String: "sync-only"]
     }
-    var connected: Bool { credential != nil }
+    var connected: Bool { credential != nil && state != nil }
     var enabled: Bool { state?.enabled == true }
 
     init(dataManager: DataManager = .shared, stateURL: URL? = nil,
+         identityProvider: ((String) throws -> ExpenseSyncDeviceIdentity)? = nil,
          transport: @escaping (ExpenseSyncCredential, String, String, Data?) async throws -> Data = { try await ExpenseSyncAPI.request($0, path: $1, method: $2, body: $3) }) {
         self.dataManager = dataManager
-        self.transport = transport
+        usesPersistentCredentials = stateURL == nil
+        self.identityProvider = identityProvider ?? (stateURL == nil ? ExpenseSyncDeviceIdentity.loadOrCreate : ExpenseSyncDeviceIdentity.create)
+        self.send = transport
         file = stateURL ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("ExpenseSync/state.json")
         if let data = try? Data(contentsOf: file) { state = try? JSONDecoder().decode(ExpenseSyncState.self, from: data) }
         if stateURL == nil {
@@ -320,6 +415,19 @@ final class ExpenseSyncController: ObservableObject {
     }
 
     private func snapshot() throws -> MCPExchangeSnapshot { try JSONDecoder().decode(MCPExchangeSnapshot.self, from: dataManager.exportMCPSnapshot()) }
+    private func transport(_ credential: ExpenseSyncCredential, _ path: String, _ method: String, _ body: Data?) async throws -> Data {
+        let started = generation
+        try Task.checkCancellation()
+        do {
+            let response = try await send(credential, path, method, body)
+            guard generation == started else { throw CancellationError() }
+            try Task.checkCancellation()
+            return response
+        } catch {
+            guard generation == started else { throw CancellationError() }
+            throw error
+        }
+    }
     private func persist(_ updated: ExpenseSyncState) throws {
         let data = try JSONEncoder().encode(updated)
         try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -328,17 +436,83 @@ final class ExpenseSyncController: ObservableObject {
     }
 
     /// Explicit consent is presented by ExpenseSyncView before this can run.
+    func prepareConnection() async throws {
+        guard !connected else { return }
+        let started = generation
+        let registered = try await registeredCredential()
+        guard generation == started else { throw CancellationError() }
+        await connect(server: registered.server.absoluteString, token: registered.token, bootstrap: true)
+        guard generation == started else { throw CancellationError() }
+        guard connected else { throw ExpenseSyncError.response }
+        try saveCredential(registered)
+        credential = registered
+    }
+
+    private func registeredCredential() async throws -> ExpenseSyncCredential {
+        let started = generation
+        let local = try snapshot()
+        let identity = try identityProvider(local.ledgerId)
+        struct Enrollment: Encodable {
+            let installationId: String
+            let ownerProof: String
+            let ledgerId: String
+            let consent = true
+        }
+        struct Registered: Decodable { let token: String; let ledgerId: String; let expiresAt: Int }
+        let server = try ExpenseSyncAPI.server(VoiceConnectionStore.defaultServer)
+        let request = Enrollment(installationId: identity.installationId, ownerProof: identity.ownerProof, ledgerId: identity.ledgerId)
+        let registered = try JSONDecoder().decode(Registered.self,
+            from: await transport(.init(server: server, token: ""), "v1/device/enroll", "POST", JSONEncoder().encode(request)))
+        guard generation == started else { throw CancellationError() }
+        guard registered.ledgerId == local.ledgerId else { throw ExpenseSyncError.wrongLedger }
+        guard registered.token.count >= 32, registered.token.count <= 512,
+              !registered.token.contains(where: \.isWhitespace) else { throw ExpenseSyncError.response }
+        guard registered.expiresAt > Int(Date().timeIntervalSince1970) else { throw ExpenseSyncError.response }
+        return .init(server: server, token: registered.token, expiresAt: registered.expiresAt, deviceEnrolled: true)
+    }
+
+    private func saveCredential(_ credential: ExpenseSyncCredential) throws {
+        guard usesPersistentCredentials else { return }
+        let attributes: [String: Any] = [kSecValueData as String: try JSONEncoder().encode(credential), kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly]
+        var result = SecItemUpdate(keychain as CFDictionary, attributes as CFDictionary)
+        if result == errSecItemNotFound { result = SecItemAdd(keychain.merging(attributes) { _, new in new } as CFDictionary, nil) }
+        guard result == errSecSuccess else { throw ExpenseSyncError.storage }
+    }
+
+    private func renewCredential() async throws {
+        let started = generation
+        guard credential?.deviceEnrolled == true,
+              credential?.server == (try ExpenseSyncAPI.server(VoiceConnectionStore.defaultServer)) else { throw ExpenseSyncError.unauthorized }
+        let renewed = try await registeredCredential()
+        guard generation == started else { throw CancellationError() }
+        try saveCredential(renewed)
+        credential = renewed
+    }
+
+    /// Explicit consent is presented by ExpenseSyncView before this can run.
     func connect(server: String, token: String, bootstrap: Bool) async {
         guard !isBusy else { return }
+        let started = generation
         isBusy = true
-        defer { isBusy = false }
+        defer { if generation == started { isBusy = false } }
         do {
             let credential = ExpenseSyncCredential(server: try ExpenseSyncAPI.server(server), token: token.trimmingCharacters(in: .whitespacesAndNewlines))
             guard credential.token.count >= 32, credential.token.count <= 512,
                   !credential.token.contains(where: \.isWhitespace) else { throw ExpenseSyncError.unauthorized }
             let local = try snapshot()
-            if bootstrap { _ = try await transport(credential, "v1/sync/bootstrap", "POST", JSONEncoder().encode(local)) }
+            if bootstrap {
+                do { _ = try await transport(credential, "v1/sync/bootstrap", "POST", JSONEncoder().encode(local)) }
+                catch is CancellationError { throw CancellationError() }
+                catch let error as ExpenseSyncError where error == .unauthorized { throw error }
+                catch {
+                    // A bootstrap response can be lost after the ledger was created.
+                    // Read back and validate the complete snapshot below. Never replace
+                    // an initialized ledger or discard a mismatching remote copy.
+                }
+            }
+            guard generation == started else { throw CancellationError() }
             let remote = try JSONDecoder().decode(ExpenseSyncRemoteSnapshot.self, from: await transport(credential, "v1/sync/snapshot", "GET", nil))
+            guard generation == started else { throw CancellationError() }
             let records = try ExpenseSyncState.localRecords(local)
             guard remote.ledgerId == local.ledgerId, remote.currency == local.currency,
                   Set(remote.records.map { $0.expense.id }).count == remote.records.count,
@@ -347,29 +521,54 @@ final class ExpenseSyncController: ObservableObject {
             let updated = ExpenseSyncState(ledgerId: local.ledgerId, currency: local.currency, endpoint: credential.server.absoluteString,
                                           clientId: UUID().uuidString.lowercased(), cursor: remote.nextSequence,
                                           baseline: Dictionary(uniqueKeysWithValues: remote.records.map { ($0.expense.id, $0) }), outbox: [], enabled: true)
-            let attributes: [String: Any] = [kSecValueData as String: try JSONEncoder().encode(credential), kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly]
-            var result = SecItemUpdate(keychain as CFDictionary, attributes as CFDictionary)
-            if result == errSecItemNotFound { result = SecItemAdd(keychain.merging(attributes) { _, new in new } as CFDictionary, nil) }
-            guard result == errSecSuccess else { throw ExpenseSyncError.storage }
+            try saveCredential(credential)
             try persist(updated)
             self.credential = credential
             message = nil
             conflicts = []
             foreground(true)
-        } catch { message = error.localizedDescription }
+        } catch is CancellationError { }
+        catch { if generation == started { message = error.localizedDescription } }
     }
 
     func setEnabled(_ enabled: Bool) {
         guard var updated = state else { return }
+        // A response already in flight must not persist its old enabled=true
+        // state after the user pauses sync.
+        generation &+= 1
+        isBusy = false
         updated.enabled = enabled
         do { try persist(updated); message = nil; foreground(enabled) } catch { message = error.localizedDescription }
     }
 
     func disconnect() {
+        generation &+= 1
         setEnabled(false)
-        SecItemDelete(keychain as CFDictionary)
+        if usesPersistentCredentials { SecItemDelete(keychain as CFDictionary) }
         credential = nil
+        isBusy = false
         message = "Disconnected on this iPhone. Server copies and the server-issued credential are not deleted; revoke access on your server if needed."
+    }
+
+    /// Called only after the user confirms Clear all data. No remote rows are deleted.
+    func clearLocalConnection() {
+        generation &+= 1
+        loop?.cancel()
+        loop = nil
+        if usesPersistentCredentials {
+            SecItemDelete(keychain as CFDictionary)
+            ExpenseSyncDeviceIdentity.remove()
+        }
+        credential = nil
+        state = nil
+        observedLocalRecords = nil
+        conflicts = []
+        lastSynced = nil
+        isBusy = false
+        message = nil
+        do {
+            if FileManager.default.fileExists(atPath: file.path) { try FileManager.default.removeItem(at: file) }
+        } catch { message = "The local sync file could not be removed. Close and reopen SmartSpend before connecting again." }
     }
 
     func foreground(_ active: Bool) {
@@ -396,13 +595,21 @@ final class ExpenseSyncController: ObservableObject {
     }
 
     func sync() async {
-        guard !isBusy, var state, state.enabled, let credential else { return }
+        guard !isBusy, var state, state.enabled, credential != nil else { return }
+        let started = generation
         isBusy = true
-        defer { isBusy = false }
+        defer { if generation == started { isBusy = false } }
         do {
+            if credential?.deviceEnrolled == true,
+               let expiresAt = credential?.expiresAt, expiresAt <= Int(Date().timeIntervalSince1970) + 60 {
+                try await renewCredential()
+            }
+            guard generation == started else { throw CancellationError() }
+            guard let credential else { throw ExpenseSyncError.unauthorized }
             guard state.endpoint == credential.server.absoluteString else { throw ExpenseSyncError.wrongLedger }
             let local = try snapshot()
             let context = try JSONDecoder().decode(ExpenseSyncContext.self, from: await transport(credential, "v1/sync/context", "GET", nil))
+            guard generation == started else { throw CancellationError() }
             guard context.ledgerId == local.ledgerId, context.currency == local.currency else { throw ExpenseSyncError.wrongLedger }
             let knownCategories = Set(context.categories.map(\.id))
             let additions = local.categories.filter { !knownCategories.contains($0.id) }
@@ -416,6 +623,7 @@ final class ExpenseSyncController: ObservableObject {
                 let update = Categories(ledgerId: local.ledgerId, currency: local.currency,
                                         expectedRevision: context.revision, categories: context.categories + additions)
                 _ = try await transport(credential, "v1/sync/categories", "POST", JSONEncoder().encode(update))
+                guard generation == started else { throw CancellationError() }
             }
             try state.enqueue(local)
             try persist(state) // Stable operation IDs are durable before network submission.
@@ -431,6 +639,7 @@ final class ExpenseSyncController: ObservableObject {
                 let request = Exchange(ledgerId: state.ledgerId, currency: state.currency, clientId: state.clientId,
                                        afterSequence: state.cursor, operations: Array(state.outbox.prefix(100)))
                 let response = try JSONDecoder().decode(ExpenseSyncResponse.self, from: await transport(credential, "v1/sync/exchange", "POST", JSONEncoder().encode(request)))
+                guard generation == started else { throw CancellationError() }
                 conflicts = response.conflicts
                 // Re-read after suspension so edits made during the request are never overwritten.
                 let (next, document) = try state.plan(response, local: snapshot())
@@ -446,6 +655,18 @@ final class ExpenseSyncController: ObservableObject {
             lastSynced = Date()
         } catch is CancellationError { }
         catch {
+            guard generation == started else { return }
+            if error as? ExpenseSyncError == .unauthorized {
+                do {
+                    // Recover this installation's scoped access without re-uploading or
+                    // replacing the server ledger. The next polling pass resumes the outbox.
+                    try await renewCredential()
+                    guard generation == started else { return }
+                    message = nil
+                    return
+                } catch { }
+            }
+            guard generation == started else { return }
             message = error.localizedDescription
             if let error = error as? ExpenseSyncError,
                [ExpenseSyncError.unauthorized, .wrongLedger, .unsafeRemoval, .conflict, .storage].contains(error) {
@@ -476,7 +697,65 @@ final class ExpenseSyncController: ObservableObject {
                                        from: await transport(credential, "v1/connectors/google/status", "GET", nil))
     }
 
+    func providerStatus(_ provider: ExpenseSyncProvider) async throws -> ExpenseSyncProviderStatus {
+        guard let credential else { throw ExpenseSyncError.unauthorized }
+        return try JSONDecoder().decode(ExpenseSyncProviderStatus.self,
+                                        from: await transport(credential, "v1/connectors/\(provider.rawValue)/status", "GET", nil))
+    }
+
+    func capabilities() async throws -> ExpenseSyncCapabilities {
+        let server = try ExpenseSyncAPI.server(VoiceConnectionStore.defaultServer)
+        return try JSONDecoder().decode(ExpenseSyncCapabilities.self,
+            from: await transport(.init(server: server, token: ""), "v1/connectors/capabilities", "GET", nil))
+    }
+
+    func connectProvider(_ provider: ExpenseSyncProvider) async throws -> URL {
+        guard let credential else { throw ExpenseSyncError.unauthorized }
+        let body = try JSONSerialization.data(withJSONObject: ["consent": true, "connectorId": "\(provider.rawValue)-default"])
+        struct Authorization: Decodable { let authorizationUrl: String }
+        let result = try JSONDecoder().decode(Authorization.self,
+            from: await transport(credential, "v1/connectors/\(provider.rawValue)/start", "POST", body))
+        return try ExpenseSyncAPI.authorizationURL(result.authorizationUrl, provider: provider)
+    }
+
+    func disconnectProvider(_ provider: ExpenseSyncProvider) async throws {
+        guard let credential else { throw ExpenseSyncError.unauthorized }
+        let body = try JSONSerialization.data(withJSONObject: ["consent": true, "connectorId": "\(provider.rawValue)-default"])
+        _ = try await transport(credential, "v1/connectors/\(provider.rawValue)/disconnect", "POST", body)
+    }
+
+    func notionPages() async throws -> [ExpenseSyncNotionPage] {
+        guard let credential else { throw ExpenseSyncError.unauthorized }
+        struct Pages: Decodable { let pages: [ExpenseSyncNotionPage] }
+        return try JSONDecoder().decode(Pages.self,
+            from: await transport(credential, "v1/connectors/notion/parents", "GET", nil)).pages
+    }
+
+    func existingNotionSources() async throws -> [ExistingNotionSource] {
+        guard let credential else { throw ExpenseSyncError.unauthorized }
+        struct Sources: Decodable { let sources: [ExistingNotionSource]; let hasMore: Bool }
+        let result = try JSONDecoder().decode(Sources.self,
+            from: await transport(credential, "v1/connectors/notion/sources", "GET", nil))
+        guard !result.hasMore else { throw ExpenseSyncError.response }
+        return result.sources
+    }
+
+    func existingNotionPreview(sourceId: String, mapping: ExistingNotionMapping) async throws -> ExistingNotionPreview {
+        guard let credential else { throw ExpenseSyncError.unauthorized }
+        struct PreviewRequest: Encodable { let consent = true; let dataSourceId: String; let mapping: ExistingNotionMapping }
+        let body = try JSONEncoder().encode(PreviewRequest(dataSourceId: sourceId, mapping: mapping))
+        return try JSONDecoder().decode(ExistingNotionPreview.self,
+            from: await transport(credential, "v1/connectors/notion/preview", "POST", body))
+    }
+
+    func selectNotionPage(_ page: ExpenseSyncNotionPage) async throws {
+        guard let credential, UUID(uuidString: page.id) != nil else { throw ExpenseSyncError.response }
+        let body = try JSONSerialization.data(withJSONObject: ["consent": true, "parentPageId": page.id])
+        _ = try await transport(credential, "v1/connectors/notion/select", "POST", body)
+    }
+
     func restore(_ item: ExpenseSyncHistoryItem) async throws {
+        let started = generation
         guard !isBusy, let credential, let state,
               let current = state.baseline[item.expenseId] else { throw ExpenseSyncError.conflict }
         // Do not restore over an unsent local edit.
@@ -486,6 +765,7 @@ final class ExpenseSyncController: ObservableObject {
                                                               "expectedRevision": current.revision, "operationId": UUID().uuidString.lowercased()])
         struct RestoreResponse: Decodable { let acknowledged: Bool? }
         let response = try JSONDecoder().decode(RestoreResponse.self, from: await transport(credential, "v1/sync/restore", "POST", body))
+        guard generation == started else { throw CancellationError() }
         guard response.acknowledged == true else { throw ExpenseSyncError.conflict }
         // Pull even when previously paused; explicit restore is a user action.
         setEnabled(true)

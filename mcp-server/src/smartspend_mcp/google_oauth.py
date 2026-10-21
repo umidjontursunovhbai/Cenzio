@@ -65,6 +65,8 @@ class GoogleOAuth:
         if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
             raise ConnectorError("Google storage must be an owner-only directory")
         key_path = private / "owner.key"
+        if not key_path.exists() and (private / "oauth.sqlite3").exists():
+            raise ConnectorError("Missing Google storage key; restore the matching key and token backup")
         try:
             fd = os.open(key_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
         except FileExistsError:
@@ -120,6 +122,28 @@ class GoogleOAuth:
                 result["spreadsheetId"] = value["spreadsheetId"]
             return result
 
+    def disconnect(self, ledger_id, connector_id="google-default"):
+        """Stop this connection and erase its tokens; never delete the sheet.
+
+        Do not revoke Google's project-wide grant here: it could also disconnect
+        this person's other installations. They can revoke it in Google settings.
+        """
+        ledger_id, connector_id = self._identity(ledger_id, connector_id)
+        with self._lock, self._connect() as db:
+            row = db.execute("SELECT payload FROM connections WHERE ledger=? AND connector=?", (ledger_id, connector_id)).fetchone()
+            saved = self._open(row[0]) if row else {}
+            tombstone = {"status": "disconnected"}
+            if saved.get("spreadsheetId"):
+                tombstone["spreadsheetId"] = saved["spreadsheetId"]
+            db.execute("INSERT OR REPLACE INTO connections VALUES(?,?,?)", (ledger_id, connector_id, self._seal(tombstone)))
+            # Invalidate in-flight authorization states so a late callback cannot
+            # silently reconnect after the user disconnects this installation.
+            for digest, payload in db.execute("SELECT hash,payload FROM states WHERE used=0").fetchall():
+                value = self._open(payload)
+                if value.get("ledgerId") == ledger_id and value.get("connectorId") == connector_id:
+                    db.execute("UPDATE states SET used=1 WHERE hash=?", (digest,))
+        return {"disconnected": True, "providerRevoked": False}
+
     @classmethod
     def from_private_file(cls, root, public_url, filePath, client=None):
         with os.fdopen(_private_file(filePath), "rb") as stream:
@@ -154,9 +178,11 @@ class GoogleOAuth:
     def start(self, ledger_id, connector_id):
         ledger_id, connector_id = self._identity(ledger_id, connector_id)
         with self._lock, self._connect() as db:
-            existing = db.execute("SELECT 1 FROM connections WHERE ledger=? AND connector=?", (ledger_id, connector_id)).fetchone()
-            if existing:
+            existing = db.execute("SELECT payload FROM connections WHERE ledger=? AND connector=?", (ledger_id, connector_id)).fetchone()
+            if existing and self._open(existing[0]).get("status") != "disconnected":
                 raise ConnectorError("Connection already exists or needs owner reconciliation")
+            if existing:
+                db.execute("DELETE FROM connections WHERE ledger=? AND connector=?", (ledger_id, connector_id))
             state, verifier = secrets.token_urlsafe(32), secrets.token_urlsafe(48)
             payload = {"ledgerId": ledger_id, "connectorId": connector_id, "verifier": verifier}
             db.execute("DELETE FROM states WHERE expires<?", (time.time(),))
