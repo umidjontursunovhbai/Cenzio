@@ -6,15 +6,17 @@ separate from [manual snapshot/patch exchange](../mcp-server/README.md) and the
 transcript-only voice gateway. The mobile entry is **Settings → Integrations**;
 technical MCP/file-exchange tools are not exposed in normal mobile settings.
 
-Deployment evidence must stay separate from source: the October 20 private
-service deployed at revision `aa06b38` had healthy sync, rejected unauthenticated
-requests, and exposed the previously configured HTTPS routes alongside voice.
-That does **not** mean the new per-installation enrollment, public Notion OAuth,
-or mapped-table preview in this branch is deployed. This turn made no deployment:
-SSH to Ubuntu was unavailable from the Mac's current tailnet. No live
-Google/Notion/ChatGPT end-to-end success is established by mocked tests or this
-guide. PR review, merge, deployment, device install and App Store release are
-separate gates.
+Deployment evidence must stay separate from source. On October 21 the sync-only
+service was updated from `aa06b38` to `c349aa5` in a separate release directory.
+The previous unit and stopped-service data were backed up before switching;
+voice, credentials and existing HTTPS routing were preserved. The public
+`/v1/connectors/capabilities` now returns HTTP 200 instead of 404, reporting
+`deviceEnrollment=false`, `google=true`, `notion=false`. `/sync-health` reports
+`ok`; unauthenticated sync returns HTTP 401. The local backend suite passed all
+327 tests before deployment. This does not establish live Google/Notion/ChatGPT
+end-to-end success: public installation enrollment remains disabled and Notion
+application credentials are not configured. PR review, merge, deployment, device
+install and App Store release are separate gates.
 
 ## Connect an iPhone
 

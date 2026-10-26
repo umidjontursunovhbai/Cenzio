@@ -146,6 +146,20 @@ def test_serve_oauth_resource_is_exact(root, monkeypatch):
     assert verifier.call_args.kwargs == {"issuer": "https://auth.example", "resource": "https://sync.example/mcp", "jwks_url": "https://auth.example/keys"}
 
 
+def test_account_signin_is_explicit_and_separate_from_connectors(root, monkeypatch):
+    factory, app = Mock(), Mock()
+    monkeypatch.setattr(sync_cli, "create_app", app)
+    monkeypatch.setattr(sync_cli.uvicorn, "run", Mock())
+    monkeypatch.setattr("smartspend_mcp.account_auth.AccountAuth.from_private_file", factory)
+    assert call(root, "serve", "--public-url", "https://sync.example") == 0
+    assert "account_auth" not in app.call_args.kwargs
+    assert call(root, "serve", "--public-url", "https://sync.example",
+                "--account-client-config", "/private/account-clients.json") == 0
+    assert factory.call_args.args == (root.resolve(), "https://sync.example", Path("/private/account-clients.json"))
+    assert app.call_args.kwargs["account_auth"] == factory.return_value
+    assert "google_oauth" not in app.call_args.kwargs
+
+
 @pytest.mark.parametrize("kind", ["permissions", "symlink", "oversize", "bad_json", "wrong_fields"])
 def test_private_config_validation(root, tmp_path, capsys, kind):
     path = config(tmp_path)

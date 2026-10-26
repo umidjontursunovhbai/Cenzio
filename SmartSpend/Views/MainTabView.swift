@@ -71,6 +71,7 @@ struct SettingsView: View {
     @State private var showingDataExport = false
     @State private var showingDataImport = false
     @State private var showingIntegrations = false
+    @State private var showingAccount = false
     @State private var showingPrivacyPolicy = false
     @State private var showingAlert = false
     
@@ -107,6 +108,9 @@ struct SettingsView: View {
 
             .sheet(isPresented: $showingPrivacyPolicy) {
                 PrivacyPolicyView()
+            }
+            .sheet(isPresented: $showingAccount) {
+                NavigationStack { AccountView() }
             }
 
             .sheet(isPresented: $showingMonthlySalary) {
@@ -151,6 +155,26 @@ struct SettingsView: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 26) {
                 moneySetupPanel
+
+                settingsGroup("Account") {
+                    Button {
+                        showingAccount = true
+                    } label: {
+                        HStack(spacing: 13) {
+                            Image(systemName: "person.crop.circle")
+                                .font(.system(size: 21))
+                                .foregroundStyle(Color(.systemBlue))
+                                .frame(width: 24)
+                            Text("Account").font(.body.weight(.medium)).foregroundStyle(.primary)
+                            Spacer(minLength: 12)
+                            HeroIcon("chevron-right", size: 14).foregroundStyle(.tertiary)
+                        }
+                        .padding(16)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(SettingsPressStyle())
+                    .accessibilityIdentifier("settings.account")
+                }
 
                 settingsGroup("planning".localized) {
                     NavigationLink(destination: BudgetSettingsView()) {

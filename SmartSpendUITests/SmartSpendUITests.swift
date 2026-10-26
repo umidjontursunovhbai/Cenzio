@@ -49,6 +49,9 @@ final class SmartSpendUITests: XCTestCase {
         XCTAssertFalse(app.textFields["https://your-server.example"].exists)
         XCTAssertFalse(app.secureTextFields["Dedicated sync access token"].exists)
         XCTAssertFalse(app.staticTexts["AI tools (MCP)"].exists)
+        XCTAssertFalse(app.staticTexts["Privacy"].exists)
+        XCTAssertTrue(app.buttons["Connect Google Sheets"].exists)
+        XCTAssertTrue(app.buttons["Connect Notion"].exists)
         let screenshot = XCTAttachment(screenshot: app.screenshot())
         screenshot.name = "Integrations — personal providers without developer credentials"
         screenshot.lifetime = .keepAlways

@@ -8,55 +8,88 @@ struct ExpenseSyncView: View {
     @State private var disconnectProvider: ExpenseSyncProvider?
     @State private var statuses: [ExpenseSyncProvider: ExpenseSyncProviderStatus] = [:]
     @State private var busy = false
+    @State private var activeProvider: ExpenseSyncProvider?
     @State private var connectionMessage: String?
+    @State private var refreshError: String?
     @State private var notionPages: [ExpenseSyncNotionPage] = []
     @State private var choosingNotionPage = false
     @State private var available: ExpenseSyncCapabilities?
     @State private var notionSelectionMessage: String?
 
     var body: some View {
-        Form {
-            Section {
-                Text("Connect your own accounts")
-                    .font(.headline)
-                Text("Keep your expenses in Google Sheets or Notion. Connections are optional, and you choose which accounts to use.")
-                    .font(.subheadline).foregroundStyle(.secondary)
-            }
-            Section {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                Text("Your expenses, in the tools you use.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .padding(.bottom, 4)
+
                 ForEach(ExpenseSyncProvider.allCases) { provider in
                     providerRow(provider)
                 }
-                if busy { ProgressView("Connecting…") }
-                if let connectionMessage { Text(connectionMessage).font(.footnote).foregroundStyle(.secondary) }
-            } footer: {
-                Text("Google Sheets creates a dedicated spreadsheet. For Notion, choose a page for a dedicated expense database. Existing files and pages are not replaced.")
-            }
-            if sync.connected {
-                Section {
-                    Toggle("Sync while the app is open", isOn: Binding(get: { sync.enabled }, set: { sync.setEnabled($0) }))
-                    if let last = sync.lastSynced { Text("Last synced \(last.formatted(date: .omitted, time: .shortened))").foregroundStyle(.secondary) }
-                    Button("Sync now") { Task { await sync.sync() } }.disabled(sync.isBusy || !sync.enabled)
-                    NavigationLink("History & Trash") { ExpenseSyncHistoryView() }
-                } header: { Text("Connection") } footer: {
-                    Text("Changes sync while SmartSpend is open. Offline edits stay on your iPhone and retry when you reconnect.")
-                }
-            }
-            if let message = sync.message {
-                Section("Needs attention") {
-                    Text(message).foregroundStyle(.orange)
-                    ForEach(sync.conflicts) { conflict in
-                        Text("Expense \(conflict.expenseId.prefix(8)): \(conflict.reason)").font(.caption)
+
+                if let connectionMessage {
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: "info.circle")
+                            .accessibilityHidden(true)
+                        Text(connectionMessage)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                    Text("Neither copy is overwritten automatically. Keep a backup and review the saved versions before continuing.")
-                        .font(.footnote).foregroundStyle(.secondary)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 4)
                 }
+
+                if let refreshError {
+                    Label(refreshError, systemImage: "exclamationmark.circle")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 4)
+                }
+
+                if sync.connected {
+                    VStack(alignment: .leading, spacing: 16) {
+                        Toggle("Sync while the app is open", isOn: Binding(get: { sync.enabled }, set: { sync.setEnabled($0) }))
+                        if let last = sync.lastSynced {
+                            Text("Last synced \(last.formatted(date: .omitted, time: .shortened))")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                        Divider()
+                        HStack {
+                            NavigationLink("History & Trash") { ExpenseSyncHistoryView() }
+                            Spacer()
+                            Button("Sync now") { Task { await sync.sync() } }
+                                .disabled(sync.isBusy || !sync.enabled)
+                        }
+                        .font(.subheadline.weight(.medium))
+                    }
+                    .padding(20)
+                    .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 22))
+                }
+
+                if let message = sync.message {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("Needs attention", systemImage: "exclamationmark.circle")
+                            .font(.subheadline.weight(.semibold))
+                        Text(message).font(.footnote)
+                        ForEach(sync.conflicts) { conflict in
+                            Text("Expense \(conflict.expenseId.prefix(8)): \(conflict.reason)")
+                                .font(.caption)
+                        }
+                    }
+                    .foregroundStyle(Color(.systemOrange))
+                    .padding(20)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 22))
+                }
+                if sync.isBusy { ProgressView("Syncing…").font(.footnote) }
             }
-            if sync.isBusy { ProgressView("Connecting safely…") }
-            Section("Privacy") {
-                Text("Connecting sends your current and archived expenses, dates, amounts and categories to SmartSpend's sync service and the account you choose. Budgets, goals, salary and microphone audio are not included. Disconnecting stops future changes; saved copies and history are not erased.")
-                    .font(.footnote).foregroundStyle(.secondary)
-            }
+            .padding(.horizontal, 20)
+            .padding(.top, 24)
+            .padding(.bottom, 32)
         }
+        .background(Color(.systemGroupedBackground))
         .navigationTitle("Integrations")
         .navigationBarTitleDisplayMode(.inline)
         .task { await refreshConnections() }
@@ -120,27 +153,61 @@ struct ExpenseSyncView: View {
 
     @ViewBuilder private func providerRow(_ provider: ExpenseSyncProvider) -> some View {
         let status = statuses[provider]
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                VStack(alignment: .leading, spacing: 3) {
+        let connected = status?.connected == true
+        let pending = status?.pending == true || status?.needsSelection == true || status?.needsAttention == true
+        let unavailable = available?.supports(provider) == false || status?.configured == false
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(spacing: 14) {
+                providerIcon(provider)
+                VStack(alignment: .leading, spacing: 5) {
                     Text(provider.name).font(.headline)
-                    Text(available?.supports(provider) == false || status?.configured == false ? "Not available yet" : status?.needsAttention == true ? "Needs attention" : status?.connected == true ? "Connected" : status?.needsSelection == true ? "Choose a page to finish" : status?.pending == true ? "Finish in your browser" : "Not connected")
-                        .font(.subheadline).foregroundStyle(.secondary)
+                    HStack(spacing: 5) {
+                        if connected {
+                            Circle().fill(Color(.systemGreen)).frame(width: 6, height: 6)
+                                .accessibilityHidden(true)
+                        }
+                        Text(unavailable ? "Not available yet" : status?.needsAttention == true ? "Needs attention" : connected ? "Connected" : status?.needsSelection == true ? "Choose a destination" : pending ? "Connection pending" : "Not connected")
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(connected ? Color.primary : Color.secondary)
+                    }
                 }
-                Spacer()
-                if status?.connected == true || status?.pending == true || status?.needsSelection == true || status?.needsAttention == true {
+                Spacer(minLength: 0)
+                if connected || pending {
                     Menu {
-                        Button(status?.connected == true ? "Disconnect" : "Cancel connection", role: .destructive) { disconnectProvider = provider }
+                        Button(connected ? "Disconnect" : "Cancel connection", role: .destructive) { disconnectProvider = provider }
                     } label: {
-                        Image(systemName: "ellipsis.circle").font(.title3)
+                        Image(systemName: "ellipsis")
+                            .font(.body.weight(.semibold))
+                            .frame(minWidth: 44, minHeight: 44)
                     }.accessibilityLabel("\(provider.name) connection options")
-                } else {
-                    Button("Connect") { consentProvider = provider }
-                        .buttonStyle(.bordered).disabled(busy || sync.isBusy || available?.supports(provider) == false)
                 }
             }
+
+            if !connected && !pending {
+                Text(provider == .google ? "Create a spreadsheet for your expenses." : "Choose a page for a new table, or preview one you already use.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button { consentProvider = provider } label: {
+                    HStack(spacing: 8) {
+                        if activeProvider == provider { ProgressView().controlSize(.small) }
+                        Text("Connect")
+                    }
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity, minHeight: 46)
+                }
+                .buttonStyle(.bordered)
+                .buttonBorderShape(.roundedRectangle(radius: 13))
+                .tint(Color(.systemBlue))
+                .disabled(busy || sync.isBusy || unavailable)
+                .accessibilityLabel("Connect \(provider.name)")
+            }
             if provider == .google, let url = status?.spreadsheetURL {
-                Link("Open spreadsheet", destination: url).font(.subheadline)
+                Link(destination: url) {
+                    Label("Open spreadsheet", systemImage: "arrow.up.right")
+                        .font(.subheadline.weight(.medium))
+                        .frame(minHeight: 44)
+                }
             }
             if provider == .notion, status?.needsSelection == true {
                 Button("Create new table") { Task { await chooseNotionPage() } }
@@ -155,12 +222,31 @@ struct ExpenseSyncView: View {
                 Text("Finish the consent screen in your browser, or use connection options to cancel. If a file may already have been created, review it before reconnecting.")
                     .font(.footnote).foregroundStyle(.secondary)
             }
-        }.padding(.vertical, 5)
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 22))
+        .accessibilityIdentifier("integration.card.\(provider.rawValue)")
+    }
+
+    private func providerIcon(_ provider: ExpenseSyncProvider) -> some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 13)
+                .fill(provider == .google ? Color(.systemGreen).opacity(0.10) : Color.primary.opacity(0.06))
+            Image(provider == .google ? "GoogleSheetsBrand" : "NotionBrand")
+                .renderingMode(.original)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 32, height: 32)
+        }
+        .frame(width: 48, height: 48)
+        .accessibilityHidden(true)
     }
 
     @MainActor private func connect(_ provider: ExpenseSyncProvider) async {
         busy = true
-        defer { busy = false }
+        activeProvider = provider
+        defer { busy = false; activeProvider = nil }
         do {
             let capabilities = try await sync.capabilities()
             guard capabilities.supports(provider), sync.connected || capabilities.deviceEnrollment else {
@@ -171,7 +257,13 @@ struct ExpenseSyncView: View {
             let url = try await sync.connectProvider(provider)
             connectionMessage = "Complete the \(provider == .google ? "Google" : "Notion") consent screen, then return here."
             openURL(url)
-        } catch { connectionMessage = "This connection is unavailable right now. Please try again later. No existing files were replaced." }
+        } catch {
+            guard !Task.isCancelled, !(error is CancellationError),
+                  (error as? URLError)?.code != .cancelled else { return }
+            connectionMessage = error as? ExpenseSyncError == .connectionsUnavailable
+                ? ExpenseSyncError.connectionsUnavailable.localizedDescription
+                : "Couldn't connect right now. Please try again later."
+        }
     }
 
     @MainActor private func chooseNotionPage() async {
@@ -187,14 +279,42 @@ struct ExpenseSyncView: View {
     @MainActor private func refreshConnections() async {
         guard !busy else { return }
         busy = true
+        refreshError = nil
         defer { busy = false }
-        do { available = try await sync.capabilities() }
-        catch { connectionMessage = "Connection availability could not be checked. Try again when you are online." }
-        guard sync.connected else { return }
-        for provider in ExpenseSyncProvider.allCases {
-            do { statuses[provider] = try await sync.providerStatus(provider) }
-            catch { connectionMessage = "Some connection details could not be loaded. Pull to refresh or try again later." }
+        var failure: String?
+        do {
+            let capabilities = try await sync.capabilities()
+            try Task.checkCancellation()
+            available = capabilities
+        } catch {
+            // Leaving the screen/backgrounding cancels requests; that is not a
+            // connection failure and must not leave a persistent warning.
+            guard !Task.isCancelled, !(error is CancellationError),
+                  (error as? URLError)?.code != .cancelled else { return }
+            if error as? ExpenseSyncError == .connectionsUnavailable {
+                // This server does not offer account connections yet. Retrying
+                // cannot fix a missing endpoint; disable Connect until supported.
+                available = ExpenseSyncCapabilities(deviceEnrollment: false, google: false, notion: false)
+                refreshError = "Account connections aren't available yet. Please try again later."
+                return
+            }
+            failure = "Couldn't check connections. Pull down to retry."
         }
+        if sync.connected {
+            for provider in ExpenseSyncProvider.allCases {
+                do {
+                    let status = try await sync.providerStatus(provider)
+                    try Task.checkCancellation()
+                    statuses[provider] = status
+                } catch {
+                    guard !Task.isCancelled, !(error is CancellationError),
+                          (error as? URLError)?.code != .cancelled else { return }
+                    failure = "Some connection details could not be loaded. Pull down to retry."
+                }
+            }
+        }
+        // A successful refresh clears only refresh errors, not action feedback.
+        refreshError = failure
     }
 }
 

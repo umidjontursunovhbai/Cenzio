@@ -175,12 +175,13 @@ struct ExpenseSyncHistoryPage: Decodable {
 }
 
 enum ExpenseSyncError: LocalizedError, Equatable {
-    case invalidServer, unauthorized, response, wrongLedger, unsafeRemoval, conflict, storage, initialMismatch
+    case invalidServer, unauthorized, response, connectionsUnavailable, wrongLedger, unsafeRemoval, conflict, storage, initialMismatch
     var errorDescription: String? {
         switch self {
         case .invalidServer: return "Enter an HTTPS server address without a path, password or query."
         case .unauthorized: return "Sync access was revoked or expired. Reconnect with a dedicated sync credential."
         case .response: return "The sync response could not be validated. No remote changes were applied."
+        case .connectionsUnavailable: return "Account connections aren't available on the server yet. Please try again after the service is updated."
         case .wrongLedger: return "Ledger, currency or categories changed. Sync is paused to protect your expenses."
         case .unsafeRemoval: return "An expense disappeared outside Trash. Sync is paused; restore it locally or reconnect after reviewing both ledgers."
         case .conflict: return "An expense changed in two places. Sync is paused; review its history and keep the correct version."
@@ -245,6 +246,9 @@ enum ExpenseSyncAPI {
         let (data, response) = try await session.data(for: request)
         try Task.checkCancellation()
         guard let response = response as? HTTPURLResponse else { throw ExpenseSyncError.response }
+        if response.statusCode == 404, path == "v1/connectors/capabilities" {
+            throw ExpenseSyncError.connectionsUnavailable
+        }
         if response.statusCode == 401 || response.statusCode == 403 { throw ExpenseSyncError.unauthorized }
         guard (200...299).contains(response.statusCode), data.count <= 10 * 1_024 * 1_024 else { throw ExpenseSyncError.response }
         return data

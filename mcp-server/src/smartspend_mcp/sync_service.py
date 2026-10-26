@@ -136,7 +136,7 @@ def create_mcp(repository: SyncRepository, verifier: OAuthVerifier, public_url: 
 
 
 def create_app(repository: SyncRepository, *, public_url: str, oauth: OAuthVerifier | None = None, google_oauth=None,
-               notion_oauth=None, device_enrollment=None):
+               notion_oauth=None, device_enrollment=None, account_auth=None):
     public_url = https_url(public_url).rstrip("/")
     remote = create_mcp(repository, oauth, public_url).streamable_http_app() if oauth else None
     managers = {"google": google_oauth, "notion": notion_oauth}
@@ -426,6 +426,8 @@ def create_app(repository: SyncRepository, *, public_url: str, oauth: OAuthVerif
               Route("/oauth/{provider}/callback", provider_callback),
               Route("/v1/sync/history/{expense_id}",history),
               Route("/v1/sync/{action}",handle,methods=["GET","POST"])]
+    from .account_routes import account_routes
+    routes.extend(account_routes(account_auth))
     routes.append(Mount("/",app=remote) if remote else Route("/mcp",unavailable,methods=["GET","POST","DELETE"]))
     return Starlette(routes=routes,lifespan=lifespan,middleware=[Middleware(TrustedHostMiddleware,
         allowed_hosts=[urlsplit(public_url).hostname,"127.0.0.1","localhost"])])
