@@ -75,7 +75,7 @@ struct BudgetSettingsView: View {
 
         return NavigationStack {
             ZStack {
-                Color.white.ignoresSafeArea()
+                iOSDesignSystem.appBackground.ignoresSafeArea()
 
                 ScrollViewReader { proxy in
                     ScrollView {
@@ -145,7 +145,7 @@ struct BudgetSettingsView: View {
                 AddSpendingGoalView()
                     .presentationDetents([.medium, .large])
                     .presentationDragIndicator(.visible)
-                    .presentationBackground(Color.white)
+                    .presentationBackground(iOSDesignSystem.appBackground)
             }
             .alert("budget_reset_title".localized, isPresented: $showingResetConfirmation) {
                 Button("cancel".localized, role: .cancel) { }
@@ -160,7 +160,6 @@ struct BudgetSettingsView: View {
                 dataManager.saveBudgets()
             }
         }
-        .preferredColorScheme(.light)
     }
 
     private static let pageTopID = "page.top"
@@ -908,7 +907,7 @@ private extension View {
 
         return self
             .background(Color(.secondarySystemBackground), in: shape)
-            .overlay(shape.stroke(Color.black.opacity(0.055), lineWidth: 1))
+            .overlay(shape.stroke(iOSDesignSystem.layerStroke, lineWidth: 1))
             .shadow(color: Color.black.opacity(0.035), radius: 5, x: 0, y: 2)
     }
 }
@@ -933,7 +932,7 @@ struct AddSpendingGoalView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Color.white.ignoresSafeArea()
+                iOSDesignSystem.appBackground.ignoresSafeArea()
 
                 ScrollView {
                     VStack(spacing: 22) {
@@ -962,7 +961,7 @@ struct AddSpendingGoalView: View {
             }
             .navigationTitle("New spending goal")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(Color.white, for: .navigationBar)
+            .toolbarBackground(iOSDesignSystem.appBackground, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -978,7 +977,6 @@ struct AddSpendingGoalView: View {
                 }
             }
         }
-        .preferredColorScheme(.light)
     }
 
     private var goalIntro: some View {

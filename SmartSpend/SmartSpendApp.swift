@@ -20,7 +20,6 @@ struct SmartSpendApp: App {
                     print("✅ App window appeared")
                     SmartSpendAppShortcuts.updateAppShortcutParameters()
                 }
-                .preferredColorScheme(.light)
                 // No scroll bars anywhere; this environment value reaches every screen and sheet.
                 .scrollIndicators(.hidden)
         }
@@ -58,6 +57,7 @@ final class SmartSpendAppDelegate: NSObject, UIApplicationDelegate {
 /// account. Expenses stay on device either way; this only decides which screen is visible.
 private struct AppRootView: View {
     @StateObject private var account = AppleAccountStore.shared
+    @AppStorage(AppearanceMode.storageKey) private var appearance = AppearanceMode.system
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -81,6 +81,8 @@ private struct AppRootView: View {
             }
         }
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.35), value: account.showsWelcome)
+        .onAppear { appearance.apply() }
+        .onChange(of: appearance) { _, mode in mode.apply() }
         .task {
             guard !Self.skipsSignIn else { return }
             await account.refreshCredentialState()

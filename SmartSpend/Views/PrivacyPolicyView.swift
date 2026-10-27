@@ -101,7 +101,6 @@ struct PrivacyPolicyView: View {
                 }
             }
         }
-        .preferredColorScheme(.light)
     }
 
     private var privacyHero: some View {

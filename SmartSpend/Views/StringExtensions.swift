@@ -518,6 +518,10 @@ extension String {
 
             // Account (Apple only)
             "account_title": "Account",
+            "appearance": "Appearance",
+            "appearance_system": "System",
+            "appearance_light": "Light",
+            "appearance_dark": "Dark",
             "account_apple_id": "Apple ID",
             "account_signed_in_with_apple": "Signed in with Apple",
             "account_not_signed_in": "Not signed in",
