@@ -13,7 +13,7 @@ npx wrangler deploy
 npx wrangler secret put OPENROUTER_API_KEY
 ```
 
-`deploy` prints the URL (`https://cenzio-voice.<subdomain>.workers.dev`). Put it in `VoiceAPI.endpoint` in `SmartSpend/Integrations/VoiceConnection.swift`.
+Deployed at `https://cenzio-voice.cenzio.workers.dev`, set in `VoiceAPI.endpoint` in `SmartSpend/Integrations/VoiceConnection.swift`.
 
 ## Cost protection
 
