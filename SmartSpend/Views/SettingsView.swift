@@ -428,7 +428,6 @@ struct SettingsView: View {
 
     private func clearAllData() {
         cloudSync.localDataWasCleared()
-        Task { await VoiceConnectionStore.shared.disconnect() }
         dataManager.clearAllData()
     }
 }
