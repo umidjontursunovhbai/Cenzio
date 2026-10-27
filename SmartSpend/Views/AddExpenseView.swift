@@ -21,12 +21,11 @@ enum AddExpenseDraft {
     }
 
     static func canSave(title: String, amount: String, categoryID: UUID?, availableCategoryIDs: Set<UUID>,
-                        dateConfirmed: Bool, currencyMatches: Bool) -> Bool {
+                        currencyMatches: Bool) -> Bool {
         guard let categoryID else { return false }
         return !normalizedTitle(title).isEmpty
             && validAmount(amount) != nil
             && availableCategoryIDs.contains(categoryID)
-            && dateConfirmed
             && currencyMatches
     }
 
@@ -71,7 +70,6 @@ struct AddExpenseView: View {
     @State private var suggestedPrice: Double?
     @State private var showingCategoryManagement = false
     @State private var needsDateConfirmation = false
-    @State private var voiceDateConfirmed = false
     @State private var isSaving = false
     @State private var saveError: String?
     @FocusState private var focusedField: Field?
@@ -88,11 +86,10 @@ struct AddExpenseView: View {
         let initialCategoryID = prefill?.categoryID.flatMap { id in DataManager.shared.getCategory(id: id)?.id }
         _selectedCategoryID = State(initialValue: initialCategoryID)
         _categoryChosenByUser = State(initialValue: initialCategoryID != nil)
-        // A future voice date is clamped to today, so the owner must confirm it as well.
+        // A future voice date is clamped to today, so the owner is asked to check it as well.
         let dateWasClamped = prefill.map { $0.date > AddExpenseDraft.latestAllowedDate(now: now) } ?? false
         let needsConfirmation = prefill?.requiresDateConfirmation == true || dateWasClamped
         _needsDateConfirmation = State(initialValue: needsConfirmation)
-        _voiceDateConfirmed = State(initialValue: !needsConfirmation)
     }
 
     private var selectedCategory: UserCategory? {
@@ -107,7 +104,7 @@ struct AddExpenseView: View {
         !isSaving && AddExpenseDraft.canSave(
             title: title, amount: amount, categoryID: selectedCategoryID,
             availableCategoryIDs: Set(dataManager.userCategories.map(\.id)),
-            dateConfirmed: voiceDateConfirmed, currencyMatches: currencyMatches)
+            currencyMatches: currencyMatches)
     }
 
     private var hasUnsavedInput: Bool {
@@ -208,13 +205,11 @@ struct AddExpenseView: View {
                     DatePicker("column_date".localized, selection: $selectedDate,
                                in: ...AddExpenseDraft.latestAllowedDate(), displayedComponents: .date)
                         .accessibilityIdentifier("expense.date")
-                        .onChange(of: selectedDate) { _, _ in voiceDateConfirmed = true }
                     if needsDateConfirmation {
                         if let phrase = prefill?.dateExpression {
                             Text(voiceText("Check the date for: \(phrase)", "Проверьте дату: \(phrase)"))
                                 .font(.footnote).foregroundStyle(.orange)
                         }
-                        Toggle(voiceText("This date is correct", "Дата указана верно"), isOn: $voiceDateConfirmed)
                     }
                 } header: {
                     Text("expense_details".localized)

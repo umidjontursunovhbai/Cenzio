@@ -16,7 +16,6 @@ private struct VoiceBatchRow: Identifiable {
     var amount: String
     var categoryID: UUID?
     var date: Date
-    var dateConfirmed: Bool
 
     init(prefill: VoiceExpensePrefill, now: Date, categoryIDs: Set<UUID>) {
         id = prefill.id
@@ -27,12 +26,11 @@ private struct VoiceBatchRow: Identifiable {
         categoryID = prefill.categoryID.flatMap { categoryIDs.contains($0) ? $0 : nil }
         date = AddExpenseDraft.date(onDayOf: prefill.date, timeFrom: now)
         needsDateConfirmation = prefill.requiresDateConfirmation || prefill.date > AddExpenseDraft.latestAllowedDate(now: now)
-        dateConfirmed = !needsDateConfirmation
     }
 
     func canSave(categoryIDs: Set<UUID>, ledgerCurrency: String) -> Bool {
         AddExpenseDraft.canSave(title: title, amount: amount, categoryID: categoryID,
-                                availableCategoryIDs: categoryIDs, dateConfirmed: dateConfirmed,
+                                availableCategoryIDs: categoryIDs,
                                 currencyMatches: currency == ledgerCurrency)
     }
 }
@@ -210,13 +208,11 @@ private struct VoiceBatchRowFields: View {
 
         DatePicker("column_date".localized, selection: $row.date,
                    in: ...AddExpenseDraft.latestAllowedDate(), displayedComponents: .date)
-            .onChange(of: row.date) { _, _ in row.dateConfirmed = true }
         if row.needsDateConfirmation {
             if let phrase = row.dateExpression {
                 Text(voiceText("Check the date for: \(phrase)", "Проверьте дату: \(phrase)"))
                     .font(.footnote).foregroundStyle(.orange)
             }
-            Toggle(voiceText("This date is correct", "Дата указана верно"), isOn: $row.dateConfirmed)
         }
     }
 }
