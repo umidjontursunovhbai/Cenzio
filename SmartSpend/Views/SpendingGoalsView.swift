@@ -24,7 +24,7 @@ struct SpendingGoalsView: View {
                 .liquidGlassButtonStyle()
             }
             
-            LazyVStack(spacing: 12) {
+            VStack(spacing: 12) {
                 ForEach(goals.prefix(3)) { goal in
                     GoalProgressRow(goal: goal)
                 }

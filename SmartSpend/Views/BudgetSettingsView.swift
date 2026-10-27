@@ -79,7 +79,7 @@ struct BudgetSettingsView: View {
 
                 ScrollViewReader { proxy in
                     ScrollView {
-                        LazyVStack(spacing: 28) {
+                        VStack(spacing: 28) {
                             if showingInfo {
                                 inlineInfoCard
                                     .id(Self.infoCardID)
@@ -402,7 +402,7 @@ struct BudgetSettingsView: View {
                     message: "budget_no_categories_message".localized
                 )
             } else {
-                LazyVStack(spacing: 10) {
+                VStack(spacing: 10) {
                     ForEach(dataManager.userCategories) { category in
                         CategoryBudgetSettingRow(
                             category: category,
@@ -488,7 +488,7 @@ struct BudgetSettingsView: View {
                     action: { showingAddGoal = true }
                 )
             } else {
-                LazyVStack(spacing: 10) {
+                VStack(spacing: 10) {
                     ForEach(dataManager.spendingGoals) { goal in
                         SpendingGoalRow(goal: goal) {
                             dataManager.spendingGoals.removeAll { $0.id == goal.id }

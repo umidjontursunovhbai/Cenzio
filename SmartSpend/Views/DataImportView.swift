@@ -111,15 +111,12 @@ struct DataImportView: View {
             } message: {
                 Text(alertMessage)
             }
-            .confirmationDialog(
-                "confirm_import".localized,
-                isPresented: $showingConfirmation,
-                titleVisibility: .visible
-            ) {
+            // An alert always shows both buttons; a confirmation dialog shown as a popover hides Cancel.
+            .alert("confirm_import".localized, isPresented: $showingConfirmation) {
+                Button("cancel".localized, role: .cancel) { }
                 Button(String(format: "import_all_expenses_format".localized, previewData?.totalRows ?? 0)) {
                     performImport()
                 }
-                Button("cancel".localized, role: .cancel) { }
             } message: {
                 Text("confirm_import_message".localized)
             }

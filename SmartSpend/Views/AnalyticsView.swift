@@ -28,7 +28,7 @@ struct AnalyticsView: View {
     var body: some View {
         NavigationStack {
             ScrollView(showsIndicators: false) {
-                LazyVStack(spacing: 20) {
+                VStack(spacing: 20) {
                     header
                     periodControls
                     summaryCard

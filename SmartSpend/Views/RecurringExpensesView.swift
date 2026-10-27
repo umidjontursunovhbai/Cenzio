@@ -149,7 +149,7 @@ struct RecurringExpensesView: View {
 
     private var recurringContent: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 16) {
                 if !runningRecurringExpenses.isEmpty {
                     RecurringSummaryCard(
                         running: runningRecurringExpenses,
@@ -228,7 +228,7 @@ struct RecurringExpensesView: View {
     }
 
     private var recurringList: some View {
-        LazyVStack(spacing: 12) {
+        VStack(spacing: 12) {
             ForEach(sortedRecurringExpenses) { recurring in
                 Button {
                     if isSelectionMode {
