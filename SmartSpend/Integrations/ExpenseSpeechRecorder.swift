@@ -33,13 +33,13 @@ final class ExpenseSpeechRecorder: ObservableObject {
         }
         guard !Task.isCancelled, generation == identifier else { return }
         guard speech == .authorized else {
-            message = voiceText("Allow Speech Recognition for SmartSpend in iPhone Settings, then try recording again.", "Разрешите распознавание речи для SmartSpend в настройках iPhone, затем повторите запись.")
+            message = voiceText("Allow Speech Recognition for Cenzio in iPhone Settings, then try recording again.", "Разрешите распознавание речи для Cenzio в настройках iPhone, затем повторите запись.")
             return
         }
         let microphone = await AVAudioApplication.requestRecordPermission()
         guard !Task.isCancelled, generation == identifier else { return }
         guard microphone else {
-            message = voiceText("Allow Microphone access for SmartSpend in iPhone Settings, then try recording again.", "Разрешите доступ к микрофону для SmartSpend в настройках iPhone, затем повторите запись.")
+            message = voiceText("Allow Microphone access for Cenzio in iPhone Settings, then try recording again.", "Разрешите доступ к микрофону для Cenzio в настройках iPhone, затем повторите запись.")
             return
         }
         do {
@@ -153,7 +153,7 @@ enum SpeechRecognitionFeedback {
         case ("kLSRErrorDomain", 201):
             return voiceText("Dictation is disabled. Enable it in iPhone Settings → General → Keyboard, then retry.", "Диктовка отключена. Включите её: Настройки → Основные → Клавиатура, затем повторите.")
         case ("kAFAssistantErrorDomain", 1700):
-            return voiceText("Allow Speech Recognition for SmartSpend in iPhone Settings, then retry.", "Разрешите распознавание речи для SmartSpend в настройках iPhone и повторите.")
+            return voiceText("Allow Speech Recognition for Cenzio in iPhone Settings, then retry.", "Разрешите распознавание речи для Cenzio в настройках iPhone и повторите.")
         case ("kAFAssistantErrorDomain", 1110):
             return noSpeech
         case ("kAFAssistantErrorDomain", 1101), ("kAFAssistantErrorDomain", 1107):

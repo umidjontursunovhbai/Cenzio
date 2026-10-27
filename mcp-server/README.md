@@ -1,11 +1,28 @@
-# SmartSpend MCP — private, reviewable first version
+# SmartSpend server tools — optional integrations and MCP
+
+The normal mobile surface is **Settings → Integrations**, with Google Sheets and
+Notion account consent. MCP is an AI-client/server protocol, not a setting every
+iPhone user needs to configure. Its legacy manual snapshot/patch tooling remains
+available to operators; it is no longer a visible mobile settings entry.
+
+The `smartspend-sync` service has a separate [operator guide](../docs/CONNECTED_SYNC.md)
+for per-installation ownership, optional public-provider OAuth, incremental ledger
+sync, history and remote MCP. Public installation signup is **off by default**;
+`--allow-device-enrollment` enables a bounded preview, not production App Attest
+or cross-device accounts. Provider app credentials are configured once by the
+operator; every user separately authorizes their own Google/Notion account.
+
+New dedicated provider tables have a sync implementation. Existing Notion tables
+support **schema discovery and mapped read-only preview only**: no import, schema
+modification or bidirectional sync. Running the manual commands below does not
+enable either provider flow or deploy this branch.
 
 A real MCP server for reading expenses and staging reversible changes from an AI
 client. Built on the [official MCP Python SDK](https://py.sdk.modelcontextprotocol.io/v1/),
 pinned to its supported `1.x` API in `uv.lock`.
 
-**This is not live iPhone sync and not a public ChatGPT connector.** The current
-iOS app keeps its records locally. The owner explicitly exports a snapshot, runs
+**The manual workflow is not live iPhone sync or a public ChatGPT connector.** In
+this mode the iOS app keeps its records locally. The owner explicitly exports a snapshot, runs
 this server against a separate SQLite mirror, and reviews/imports a patch in the
 app. Until that last step, a tool saying "created" means **created in the server
 mirror, pending app review**, not saved on the iPhone.
@@ -131,10 +148,10 @@ On the private Ubuntu installation, replace `uv run smartspend-ai` with
 
 ## Private iPhone voice preview
 
-On Dashboard or Expenses, hold **+** briefly and pull it down to start listening.
-A normal tap opens only the manual form. Recording requires microphone/speech
-permission. The voice screen uses Apple's on-device recognizer for the
-selected `en-US`/`ru-RU` locale. Runtime language/model availability is checked;
+On Dashboard or Expenses, tap the microphone button at the bottom to start listening.
+The **+** button next to it opens only the manual form. Recording requires microphone/speech
+permission. The current inline voice flow uses Apple's on-device English recognizer.
+Runtime language/model availability is checked;
 unavailable local recognition does not silently fall back to uploading audio.
 The transcript remains editable; keyboard dictation follows iOS's own settings.
 

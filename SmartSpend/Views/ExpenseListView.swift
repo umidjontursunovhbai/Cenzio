@@ -2,319 +2,63 @@ import SwiftUI
 
 struct ExpenseListView: View {
     @ObservedObject private var dataManager = DataManager.shared
-    @State private var searchText = ""
-    @State private var selectedCategoryIds: Set<String> = []
-    @State private var selectedTimePeriod: TimePeriod = .all
-    @State private var selectedCustomMonth: Date = Date()
-    @State private var selectedStartDate: Date = Date()
-    @State private var selectedEndDate: Date = Date()
-    @State private var showingMonthPicker = false
-    @State private var showingAddExpense = false
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.floatingTabBarClearance) private var tabBarClearance
     @StateObject private var voice = InlineVoiceExpenseController()
+
+    // Filtering. Results are cached and recomputed only when an input changes,
+    // not on every view update (voice state, selection taps, etc.).
+    @State private var query = ExpenseListQuery()
+    @State private var results: [Expense] = []
+    @State private var groups: [ExpenseDayGroup] = []
+    @State private var visibleLimit = ExpenseListView.initialPageSize
+
+    // Presentation
+    @State private var showingAddExpense = false
     @State private var showingFilterSheet = false
-    @State private var isDateRangeMode = true
-    @State private var isSelectionMode = false
-    @State private var selectedExpenses: Set<UUID> = []
-    @State private var visibleExpenseLimit = 36
+    @State private var showingRangePicker = false
+    @State private var openRangeAfterFilter = false
+    @State private var showingDeleted = false
+    @State private var editingExpense: Expense?
 
-    private let expensePageSize = 60
-    private let initialExpensePageSize = 36
+    // Selection & undo
+    @State private var isSelecting = false
+    @State private var selection: Set<UUID> = []
+    @State private var undoBatch: UndoBatch?
 
-    enum TimePeriod: String, CaseIterable {
-        case all = "All"
-        case today = "Today"
-        case yesterday = "Yesterday"
-        case weekly = "This Week"
-        case monthly = "This Month"
-        case customMonth = "Custom Month"
+    private static let initialPageSize = 40
+    private static let pageSize = 60
 
-        var icon: String {
-            switch self {
-            case .all: return "calendar"
-            case .today: return "calendar.badge.exclamationmark"
-            case .yesterday: return "calendar.badge.minus"
-            case .weekly: return "calendar.badge.clock"
-            case .monthly: return "calendar.badge.plus"
-            case .customMonth: return "calendar.badge.clock"
-            }
-        }
-
-        var localizedName: String {
-            switch self {
-            case .all:
-                return "time_period_all".localized
-            case .today:
-                return "time_period_today".localized
-            case .yesterday:
-                return "yesterday".localized
-            case .weekly:
-                return "time_period_this_week".localized
-            case .monthly:
-                return "time_period_this_month".localized
-            case .customMonth:
-                return "time_period_custom".localized
-            }
-        }
-    }
-    
-    // Unified category model for filter
-    struct FilterCategory: Hashable {
-        let id: String
-        let name: String
-        let icon: String
-        let color: Color
-    }
-    
-    var availableFilterCategories: [FilterCategory] {
-        var filters: [FilterCategory] = []
-        
-        // Add User Categories that are used or exist
-        for category in dataManager.userCategories {
-            filters.append(FilterCategory(
-                id: category.id.uuidString,
-                name: category.name,
-                icon: category.iconSystemName,
-                color: category.color
-            ))
-        }
-        
-        return filters.sorted { $0.name < $1.name }
-    }
-    
-    var filteredExpenses: [Expense] {
-        var expenses = dataManager.expenses.sorted { $0.date > $1.date }
-        let referenceDate = Date()
-        
-        // Apply time period filter
-        expenses = expenses.filter { expense in
-            switch selectedTimePeriod {
-            case .all:
-                return true
-            case .today:
-                return Calendar.current.isDateInToday(expense.date)
-            case .yesterday:
-                return Calendar.current.isDateInYesterday(expense.date)
-            case .weekly:
-                return ExpenseDateFilter.contains(expense.date, in: .weekOfYear, relativeTo: referenceDate)
-            case .monthly:
-                return ExpenseDateFilter.contains(expense.date, in: .month, relativeTo: referenceDate)
-            case .customMonth:
-                let calendar = Calendar.current
-                if isDateRangeMode {
-                    return expense.date >= selectedStartDate && expense.date <= selectedEndDate
-                } else {
-                    return calendar.isDate(expense.date, inSameDayAs: selectedStartDate)
-                }
-            }
-        }
-
-        if !searchText.isEmpty {
-            expenses = expenses.filter { $0.title.localizedCaseInsensitiveContains(searchText) }
-        }
-
-        // Multi-category filter — empty set means "all categories"
-        if !selectedCategoryIds.isEmpty {
-            expenses = expenses.filter { selectedCategoryIds.contains($0.categoryId.uuidString) }
-        }
-
-        return expenses
-    }
-
-    private func groupedExpenses(from expenses: [Expense]) -> [(date: Date, expenses: [Expense], total: Double)] {
-        let calendar = Calendar.current
-        let dict = Dictionary(grouping: Array(expenses.prefix(visibleExpenseLimit))) { expense in
-            calendar.startOfDay(for: expense.date)
-        }
-        return dict.map { date, dayExpenses in
-            let sorted = dayExpenses.sorted { $0.date > $1.date }
-            return (date: date, expenses: sorted, total: sorted.reduce(0) { $0 + $1.amount })
-        }
-        .sorted { $0.date > $1.date }
-    }
-
-    private func canLoadMoreExpenses(from expenses: [Expense]) -> Bool {
-        expenses.count > visibleExpenseLimit
-    }
-
-    private func sectionDateLabel(_ date: Date) -> String {
-        let calendar = Calendar.current
-        if calendar.isDateInToday(date) { return "Today" }
-        if calendar.isDateInYesterday(date) { return "Yesterday" }
-        let formatter = DateFormatter()
-        let isCurrentYear = calendar.component(.year, from: date) == calendar.component(.year, from: Date())
-        formatter.dateFormat = isCurrentYear ? "EEEE, MMM d" : "EEEE, MMM d, yyyy"
-        return formatter.string(from: date)
-    }
-
-    private var isFilterActive: Bool {
-        selectedTimePeriod != .all || !selectedCategoryIds.isEmpty
-    }
-
-    private func customRangeText() -> String {
-        let f = DateFormatter()
-        f.dateFormat = "MMM d"
-        return "\(f.string(from: selectedStartDate)) – \(f.string(from: selectedEndDate))"
-    }
-
-    // Size the filter sheet to its content: short for a few categories, taller
-    // as more are added, but capped at ~90% so it never jumps to full unless the
-    // list genuinely needs it (then it scrolls and can be dragged up to .large).
-    private var filterSheetDetents: Set<PresentationDetent> {
-        let rows = max(availableFilterCategories.count, 1)
-        // nav bar + time section + category header/footer + rows
-        let estimated: CGFloat = 56 + 100 + 80 + CGFloat(rows) * 44 + 40
-        let cap = UIScreen.main.bounds.height * 0.9
-        return [.height(min(estimated, cap)), .large]
-    }
-
-    // The segmented control already exposes the quick time periods, so the
-    // active-filter bar only needs to surface categories and custom ranges.
-    private var showActiveFilterBar: Bool {
-        selectedTimePeriod == .customMonth || !selectedCategoryIds.isEmpty
-    }
-
-    private var activeFilterSummary: String {
-        var parts: [String] = []
-        if selectedTimePeriod == .customMonth {
-            parts.append(customRangeText())
-        }
-        let names = availableFilterCategories
-            .filter { selectedCategoryIds.contains($0.id) }
-            .map { $0.name }
-        if names.count == 1 {
-            parts.append(names[0])
-        } else if names.count == 2 {
-            parts.append("\(names[0]), \(names[1])")
-        } else if names.count > 2 {
-            parts.append("\(names[0]), \(names[1]) +\(names.count - 2)")
-        }
-        return parts.joined(separator: " · ")
+    private struct UndoBatch: Equatable {
+        let id = UUID()
+        let expenseIds: [UUID]
     }
 
     var body: some View {
-        let currentFilteredExpenses = filteredExpenses
-        let currentGroupedExpenses = groupedExpenses(from: currentFilteredExpenses)
-
         NavigationStack {
             VStack(spacing: 0) {
-                AppScreenHeader("expenses".localized) {
-                    if isSelectionMode {
-                        Button("cancel".localized) {
-                            isSelectionMode = false
-                            selectedExpenses.removeAll()
-                        }
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(Color(.systemBlue))
-                        .frame(minHeight: iOSDesignSystem.Size.minimumTapTarget)
+                header
+                    .opacity(voice.isVisible && voice.prefill == nil ? 0 : 1)
+                    .allowsHitTesting(!voice.isVisible || voice.prefill != nil)
+                    .accessibilityHidden(voice.isVisible && voice.prefill == nil)
 
-                        ActionIconButton(icon: "trash", style: .destructive(enabled: !selectedExpenses.isEmpty)) {
-                            deleteSelectedExpenses()
-                        }
-                    } else {
-                        filterButton
-                        if !dataManager.expenses.isEmpty {
-                            ActionIconButton(icon: "check-circle", style: .secondary) {
-                                isSelectionMode = true
-                            }
-                        }
-                        ExpenseEntryButton(accessibilityID: "expenses.add-expense", isRecording: voice.isRecording, isProcessing: voice.isProcessing, onTap: {
-                            showingAddExpense = true
-                        }, onVoice: {
-                            voice.start()
-                        }, onStop: { voice.stop() })
-                    }
-                }
-                .opacity(voice.isVisible && voice.prefill == nil ? 0 : 1)
-                .allowsHitTesting(!voice.isVisible || voice.prefill != nil)
-                .accessibilityHidden(voice.isVisible && voice.prefill == nil)
-
-                AppSearchField(text: $searchText, prompt: "search_expenses".localized)
-                    .padding(.bottom, iOSDesignSystem.Spacing.small)
-
-                // Pinned quick time-period segmented control
-                Picker("time_period".localized, selection: $selectedTimePeriod) {
-                    Text("all".localized).tag(TimePeriod.all)
-                    Text("time_period_today".localized).tag(TimePeriod.today)
-                    Text("yesterday".localized).tag(TimePeriod.yesterday)
-                    Text("timeframe_week".localized).tag(TimePeriod.weekly)
-                    Text("timeframe_month".localized).tag(TimePeriod.monthly)
-                }
-                .pickerStyle(.segmented)
-                .padding(.horizontal, iOSDesignSystem.Spacing.screenMargin)
-                .padding(.top, iOSDesignSystem.Spacing.small)
-                .padding(.bottom, iOSDesignSystem.Spacing.small)
-
-                // Small active-filter bar — only for "hidden" filters
-                // (selected categories or a custom date range). Tapping the
-                // summary reopens the filter sheet.
-                if showActiveFilterBar {
-                    Button {
-                        showingFilterSheet = true
-                    } label: {
-                        HStack(spacing: 6) {
-                            HeroIcon(systemName: "line.3.horizontal.decrease.circle.fill")
-                                .foregroundStyle(.tint)
-                            Text(activeFilterSummary)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                            Spacer()
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    .font(.caption)
-                    .frame(minHeight: iOSDesignSystem.Size.minimumTapTarget)
-                    .padding(.horizontal, iOSDesignSystem.Spacing.screenMargin)
-                    .padding(.bottom, iOSDesignSystem.Spacing.small)
+                if !dataManager.expenses.isEmpty {
+                    AppSearchField(text: $query.searchText, prompt: "search_expenses".localized)
+                        .padding(.bottom, iOSDesignSystem.Spacing.small)
+                    filterChips
                 }
 
-                // List / empty state
-                if currentFilteredExpenses.isEmpty {
-                    emptyState
-                } else {
-                    List {
-                        ForEach(currentGroupedExpenses, id: \.date) { group in
-                            Section {
-                                ForEach(group.expenses) { expense in
-                                    let category = dataManager.resolveCategory(id: expense.categoryId)
-                                    ExpenseRowView(
-                                        expense: expense,
-                                        categoryDisplayInfo: (category.name, category.iconSystemName, category.color),
-                                        currency: dataManager.user.currency,
-                                        isSelectionMode: isSelectionMode,
-                                        isSelected: selectedExpenses.contains(expense.id),
-                                        onToggleSelection: {
-                                            toggleExpenseSelection(expense.id)
-                                        },
-                                        onDelete: {
-                                            dataManager.moveToDeletedExpenses(expense)
-                                        }
-                                    )
-                                }
-                            } header: {
-                                HStack {
-                                    Text(sectionDateLabel(group.date))
-                                        .font(.subheadline.weight(.semibold))
-                                        .foregroundStyle(.secondary)
-                                        .textCase(nil)
-                                    Spacer()
-                                    Text(CurrencyFormatter.format(group.total, currency: dataManager.user.currency))
-                                        .font(.subheadline.weight(.medium))
-                                        .foregroundStyle(.secondary)
-                                        .textCase(nil)
-                                }
-                                .padding(.vertical, 2)
-                            }
-                        }
-
-                        if canLoadMoreExpenses(from: currentFilteredExpenses) {
-                            loadMoreRow
-                        }
-                    }
-                    .listStyle(.insetGrouped)
-                }
+                content
             }
-            .navigationTitle("")
+            .background(iOSDesignSystem.appBackground)
+            .expenseEntryBar(ExpenseEntryBar(accessibilityPrefix: "expenses", isRecording: voice.isRecording, isProcessing: voice.isProcessing, onAdd: {
+                showingAddExpense = true
+            }, onVoice: {
+                voice.start()
+            }, onStop: { voice.stop() }), hidden: isSelecting)
+            .overlay(alignment: .bottom) { bottomBars }
             .voiceExpenseOverlay(controller: voice)
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .navigationBarBackButtonHidden(true)
             .toolbar(.hidden, for: .navigationBar)
@@ -324,154 +68,550 @@ struct ExpenseListView: View {
             .sheet(item: $voice.prefill, onDismiss: { voice.reviewDidDismiss() }) { item in
                 AddExpenseView(prefill: item) { voice.didSave() }
             }
-            .sheet(isPresented: $showingFilterSheet) {
+            .sheet(item: $editingExpense) { expense in
+                EditExpenseView(expense: expense) { archive([expense]) }
+            }
+            .sheet(isPresented: $showingFilterSheet, onDismiss: {
+                // Present the range picker only once the filter sheet is gone;
+                // presenting both at once drops the second sheet.
+                if openRangeAfterFilter {
+                    openRangeAfterFilter = false
+                    showingRangePicker = true
+                }
+            }) {
                 ExpenseFilterSheet(
-                    categories: availableFilterCategories,
-                    selectedCategoryIds: selectedCategoryIds,
-                    selectedTimePeriod: $selectedTimePeriod,
-                    onApply: { categoryIds in
-                        selectedCategoryIds = categoryIds
+                    categories: sortedCategories,
+                    query: query,
+                    onApply: { period, categoryIds in
+                        query.period = period
+                        query.categoryIds = categoryIds
                     },
-                    onPickCustomRange: {
-                        showingFilterSheet = false
-                        showingMonthPicker = true
-                    },
-                    onClear: { clearFilters() }
+                    onPickCustomRange: { categoryIds in
+                        query.categoryIds = categoryIds
+                        openRangeAfterFilter = true
+                    }
                 )
-                .presentationDetents(filterSheetDetents)
+                .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
             }
-            .sheet(isPresented: $showingMonthPicker) {
+            .sheet(isPresented: $showingRangePicker) {
                 CalendarPickerView(
-                    selectedStartDate: $selectedStartDate,
-                    selectedEndDate: $selectedEndDate,
-                    isDateRangeMode: $isDateRangeMode,
-                    selectedTimePeriod: $selectedTimePeriod
+                    selectedStartDate: $query.customStart,
+                    selectedEndDate: $query.customEnd,
+                    selectedPeriod: $query.period
                 )
                 .presentationDetents([.fraction(0.85)])
                 .presentationDragIndicator(.visible)
                 .presentationCornerRadius(32)
             }
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                selectionInfoBar
+            .sheet(isPresented: $showingDeleted) {
+                DeletedExpensesView()
             }
-            .onChange(of: searchText) { _, _ in resetVisibleExpenses() }
+            .onAppear(perform: refresh)
             .onDisappear { voice.cancel() }
-            .onChange(of: selectedTimePeriod) { _, _ in resetVisibleExpenses() }
-            .onChange(of: selectedCategoryIds) { _, _ in resetVisibleExpenses() }
-        }
-    }
-
-    // MARK: - Empty state
-
-    @ViewBuilder
-    private var emptyState: some View {
-        if !searchText.isEmpty {
-            ContentUnavailableView.search(text: searchText)
-        } else if isFilterActive {
-            ContentUnavailableView {
-                HeroIconLabel(title: "no_expenses_found".localized, systemName: "line.3.horizontal.decrease.circle")
-            } description: {
-                Text("try_adjusting_filters".localized)
-            } actions: {
-                Button("clear".localized) { clearFilters() }
+            .onChange(of: query) { _, _ in
+                visibleLimit = Self.initialPageSize
+                refresh()
             }
-        } else {
-            ContentUnavailableView {
-                HeroIconLabel(title: "no_expenses_found".localized, systemName: "tray")
-            } description: {
-                Text("try_adjusting_filters".localized)
-            } actions: {
-                Button("add_expense".localized) { showingAddExpense = true }
-                    .buttonStyle(.borderedProminent)
+            .onChange(of: dataManager.expenses) { _, _ in refresh() }
+            .onChange(of: dataManager.userCategories) { _, categories in
+                // A deleted category must not leave an invisible, un-clearable filter behind.
+                let existing = Set(categories.map(\.id))
+                if !query.categoryIds.isSubset(of: existing) {
+                    query.categoryIds.formIntersection(existing)
+                } else {
+                    refresh()
+                }
+            }
+            .onChange(of: visibleLimit) { _, limit in
+                groups = ExpenseDayGroup.make(from: results, limit: limit)
+            }
+            .onChange(of: scenePhase) { _, phase in
+                // "Today" / "This week" move on after midnight.
+                if phase == .active { refresh() }
+            }
+            .task(id: undoBatch?.id) {
+                guard undoBatch != nil else { return }
+                try? await Task.sleep(for: .seconds(5))
+                guard !Task.isCancelled else { return }
+                withAnimation(.snappy) { undoBatch = nil }
             }
         }
     }
 
-    private func clearFilters() {
-        withAnimation {
-            selectedTimePeriod = .all
-            selectedCategoryIds.removeAll()
-        }
-        resetVisibleExpenses()
+    // MARK: - Derived data
+
+    private var currency: Currency { dataManager.user.currency }
+
+    private var sortedCategories: [UserCategory] {
+        dataManager.userCategories.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
-    private var loadMoreRow: some View {
-        HStack {
-            Spacer()
-            ProgressView()
-                .controlSize(.small)
-            Text("Loading more")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-            Spacer()
-        }
-        .padding(.vertical, 12)
-        .onAppear {
-            visibleExpenseLimit += expensePageSize
+    private var categoryLookup: [UUID: UserCategory] {
+        Dictionary(dataManager.userCategories.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+    }
+
+    private func refresh() {
+        let names = categoryLookup.mapValues(\.name)
+        results = query.apply(to: dataManager.expenses, categoryNames: names)
+        groups = ExpenseDayGroup.make(from: results, limit: visibleLimit)
+        // Selections hidden by a filter or removed elsewhere must not be deleted unseen.
+        let visible = Set(results.map(\.id))
+        if !selection.isSubset(of: visible) {
+            selection.formIntersection(visible)
         }
     }
 
-    private func resetVisibleExpenses() {
-        visibleExpenseLimit = initialExpensePageSize
+    private var periodTitle: String {
+        switch query.period {
+        case .all: return "time_period_all".localized
+        case .custom: return ExpenseRangeText.text(from: query.customStart, through: query.customEnd)
+        default: return query.period.localizedName
+        }
     }
 
-    // MARK: - Toolbar Content
+    private var allResultsSelected: Bool {
+        !results.isEmpty && results.count == selection.count
+    }
+
+    // MARK: - Header
+
+    private var header: some View {
+        AppScreenHeader("expenses".localized, subtitle: headerSubtitle) {
+            if isSelecting {
+                Button(allResultsSelected ? "exp_deselect_all".localized : "exp_select_all".localized) {
+                    withAnimation(.snappy) {
+                        selection = ExpenseSelection.toggleAll(selected: selection, visible: results.map(\.id))
+                    }
+                }
+                .font(.body.weight(.medium))
+                .frame(minHeight: iOSDesignSystem.Size.minimumTapTarget)
+                .disabled(results.isEmpty)
+
+                Button("done".localized, action: endSelection)
+                    .font(.body.weight(.semibold))
+                    .frame(minHeight: iOSDesignSystem.Size.minimumTapTarget)
+            } else {
+                if !dataManager.expenses.isEmpty {
+                    filterButton
+                }
+                moreMenu
+            }
+        }
+    }
+
+    private var headerSubtitle: String? {
+        if isSelecting {
+            return String(format: "selected_count".localized, selection.count)
+        }
+        // "All Time" adds nothing above an unfiltered list.
+        return dataManager.expenses.isEmpty || query.period == .all ? nil : periodTitle
+    }
 
     private var filterButton: some View {
         ActionIconButton(icon: "funnel", style: .secondary) {
             showingFilterSheet = true
         }
+        .overlay(alignment: .topTrailing) {
+            if query.hasFilters {
+                Circle()
+                    .fill(Color.accentColor)
+                    .frame(width: 10, height: 10)
+                    .overlay(Circle().stroke(iOSDesignSystem.appBackground, lineWidth: 2))
+                    .offset(x: 1, y: -1)
+                    .accessibilityHidden(true)
+            }
+        }
+        .accessibilityLabel("filter".localized)
+        .accessibilityValue(query.hasFilters ? "exp_filters_on".localized : "")
+        .accessibilityIdentifier("expenses.filter")
+    }
+
+    private var moreMenu: some View {
+        Menu {
+            if !results.isEmpty {
+                Button {
+                    withAnimation(.snappy) { isSelecting = true }
+                } label: {
+                    Label("exp_select".localized, systemImage: "checkmark.circle")
+                }
+            }
+            Button {
+                showingDeleted = true
+            } label: {
+                Label("deleted_expenses".localized, systemImage: "trash")
+                if !dataManager.deletedExpenses.isEmpty {
+                    Text(String(format: "exp_items_count_format".localized, dataManager.deletedExpenses.count))
+                }
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(Color.accentColor)
+                .frame(width: iOSDesignSystem.Size.minimumTapTarget, height: iOSDesignSystem.Size.minimumTapTarget)
+                .liquidGlassSurface(Circle())
+                .contentShape(Circle())
+        }
+        .accessibilityLabel("exp_more_actions".localized)
+        .accessibilityIdentifier("expenses.more")
+    }
+
+    // MARK: - Filter chips
+
+    private var filterChips: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: iOSDesignSystem.Spacing.small) {
+                ForEach(ExpensePeriod.quickPeriods, id: \.self) { period in
+                    chip(period.localizedName, isOn: query.period == period) {
+                        query.period = period
+                    }
+                }
+
+                chip(query.period == .custom ? ExpenseRangeText.text(from: query.customStart, through: query.customEnd) : "exp_custom_range".localized,
+                     systemImage: "calendar",
+                     isOn: query.period == .custom) {
+                    showingRangePicker = true
+                }
+
+                if !query.categoryIds.isEmpty {
+                    chip(categoryChipTitle, systemImage: "xmark", isOn: true) {
+                        withAnimation(.snappy) { query.categoryIds.removeAll() }
+                    }
+                    .accessibilityHint("exp_remove_category_filter".localized)
+                }
+            }
+            .padding(.horizontal, 24)
+        }
+        .scrollIndicators(.hidden)
+        .padding(.bottom, iOSDesignSystem.Spacing.small)
+        .disabled(isSelecting)
+        .opacity(isSelecting ? 0.5 : 1)
+    }
+
+    private var categoryChipTitle: String {
+        let names = sortedCategories.filter { query.categoryIds.contains($0.id) }.map(\.name)
+        if names.count == 1 { return names[0] }
+        return String(format: "exp_categories_count_format".localized, names.count)
+    }
+
+    private func chip(_ title: String, systemImage: String? = nil, isOn: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                if let systemImage, systemImage != "xmark" {
+                    Image(systemName: systemImage).font(.caption.weight(.semibold))
+                }
+                Text(title)
+                    .font(.subheadline.weight(isOn ? .semibold : .medium))
+                    .lineLimit(1)
+                if systemImage == "xmark" {
+                    Image(systemName: "xmark").font(.caption2.weight(.bold))
+                }
+            }
+            .foregroundStyle(isOn ? Color.white : Color.primary)
+            .padding(.horizontal, 14)
+            .frame(height: 34)
+            .background(isOn ? Color.accentColor : Color(.tertiarySystemFill), in: Capsule())
+            .frame(minHeight: iOSDesignSystem.Size.minimumTapTarget)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isOn ? .isSelected : [])
+    }
+
+    // MARK: - Content
+
+    @ViewBuilder
+    private var content: some View {
+        if dataManager.expenses.isEmpty {
+            ContentUnavailableView {
+                HeroIconLabel(title: "exp_empty_title".localized, systemName: "tray")
+            } description: {
+                Text("exp_empty_body".localized)
+            } actions: {
+                Button("add_expense".localized) { showingAddExpense = true }
+                    .buttonStyle(.borderedProminent)
+            }
+            .frame(maxHeight: .infinity)
+        } else if results.isEmpty {
+            noResults
+                .frame(maxHeight: .infinity)
+        } else {
+            expenseList
+        }
     }
 
     @ViewBuilder
-    private var selectionInfoBar: some View {
-        if isSelectionMode && !selectedExpenses.isEmpty {
-            HStack {
-                Text("\(selectedExpenses.count) selected")
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, iOSDesignSystem.Spacing.large)
-            .padding(.vertical, iOSDesignSystem.Spacing.medium)
-            .liquidGlassSurface(RoundedRectangle(cornerRadius: iOSDesignSystem.Radius.large, style: .continuous))
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: -2)
-            .padding(.horizontal, iOSDesignSystem.Spacing.screenMargin)
-            .padding(.bottom, iOSDesignSystem.Spacing.screenMargin)
-            .transition(.move(edge: .bottom).combined(with: .opacity))
-        }
-    }
-
-
-    private func toggleExpenseSelection(_ id: UUID) {
-        if selectedExpenses.contains(id) {
-            selectedExpenses.remove(id)
+    private var noResults: some View {
+        if query.isSearching && !query.hasFilters {
+            ContentUnavailableView.search(text: query.trimmedSearch)
         } else {
-            selectedExpenses.insert(id)
+            ContentUnavailableView {
+                HeroIconLabel(title: "no_expenses_found".localized, systemName: "line.3.horizontal.decrease.circle")
+            } description: {
+                Text(query.isSearching
+                     ? String(format: "exp_no_matches_in_period_format".localized, query.trimmedSearch, periodTitle)
+                     : String(format: "exp_nothing_in_period_format".localized, periodTitle))
+            } actions: {
+                Button("exp_clear_filters".localized, action: clearFilters)
+                    .buttonStyle(.bordered)
+            }
         }
     }
-    
-    private func deleteSelectedExpenses() {
-        withAnimation {
-            for expenseId in selectedExpenses {
-                if let expense = dataManager.expenses.first(where: { $0.id == expenseId }) {
-                    dataManager.moveToDeletedExpenses(expense)
+
+    private var expenseList: some View {
+        let lookup = categoryLookup
+        let fallback = UserCategory.createDefault()
+        return List {
+            ForEach(groups) { group in
+                Section {
+                    ForEach(group.expenses) { expense in
+                        row(expense, category: lookup[expense.categoryId] ?? fallback)
+                    }
+                } header: {
+                    dayHeader(group)
                 }
             }
-            selectedExpenses.removeAll()
-            isSelectionMode = false
+
+            if results.count > visibleLimit {
+                loadMoreRow
+            }
+        }
+        .listStyle(.insetGrouped)
+        .listSectionSpacing(.compact)
+        .scrollContentBackground(.hidden)
+        .scrollDismissesKeyboard(.immediately)
+        // Keeps the last rows scrollable above the entry bar and floating tab bar.
+        .contentMargins(.bottom, 88 + tabBarClearance, for: .scrollContent)
+        .animation(.snappy(duration: 0.25), value: isSelecting)
+    }
+
+    private func dayHeader(_ group: ExpenseDayGroup) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(ExpenseDayGroup.title(for: group.day))
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.primary)
+            Spacer()
+            Text(CurrencyFormatter.format(group.total, currency: currency))
+                .font(.subheadline.weight(.semibold))
+                .fontDesign(.rounded)
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+        }
+        .textCase(nil)
+        .padding(.top, 4)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isHeader)
+    }
+
+    private func row(_ expense: Expense, category: UserCategory) -> some View {
+        let isSelected = selection.contains(expense.id)
+        return Button {
+            if isSelecting {
+                toggleSelection(expense.id)
+            } else {
+                editingExpense = expense
+            }
+        } label: {
+            ExpenseRowView(
+                expense: expense,
+                category: category,
+                currency: currency,
+                selection: isSelecting ? isSelected : nil
+            )
+        }
+        .buttonStyle(.plain)
+        .listRowBackground(isSelecting && isSelected ? Color.accentColor.opacity(0.12) : Self.rowBackground)
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            if !isSelecting {
+                Button(role: .destructive) {
+                    archive([expense])
+                } label: {
+                    Label("delete".localized, systemImage: "trash")
+                }
+            }
+        }
+        .swipeActions(edge: .leading) {
+            if !isSelecting {
+                Button {
+                    editingExpense = expense
+                } label: {
+                    Label("exp_edit".localized, systemImage: "pencil")
+                }
+                .tint(.accentColor)
+            }
+        }
+        .contextMenu {
+            if !isSelecting {
+                Button {
+                    editingExpense = expense
+                } label: {
+                    Label("exp_edit".localized, systemImage: "pencil")
+                }
+                Button {
+                    duplicate(expense)
+                } label: {
+                    Label("exp_add_again".localized, systemImage: "plus.square.on.square")
+                }
+                Divider()
+                Button(role: .destructive) {
+                    archive([expense])
+                } label: {
+                    Label("delete".localized, systemImage: "trash")
+                }
+            }
         }
     }
+
+    private static let rowBackground = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.13, green: 0.135, blue: 0.15, alpha: 1)
+            : UIColor.secondarySystemBackground
+    })
+
+    private var loadMoreRow: some View {
+        HStack(spacing: iOSDesignSystem.Spacing.small) {
+            Spacer()
+            ProgressView().controlSize(.small)
+            Text("exp_loading_more".localized)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            Spacer()
+        }
+        .padding(.vertical, 8)
+        .listRowBackground(Color.clear)
+        .onAppear { visibleLimit += Self.pageSize }
+    }
+
+    // MARK: - Bottom bars
+
+    @ViewBuilder
+    private var bottomBars: some View {
+        if isSelecting {
+            selectionBar
+                .padding(.horizontal, iOSDesignSystem.Spacing.screenMargin)
+                .padding(.bottom, 12 + tabBarClearance)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+        } else if let undoBatch {
+            undoToast(undoBatch)
+                // Sits above the entry bar's 56pt buttons.
+                .padding(.horizontal, iOSDesignSystem.Spacing.screenMargin)
+                .padding(.bottom, 12 + 56 + 12 + tabBarClearance)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+    }
+
+    private var selectionBar: some View {
+        let selected = ExpenseSelection.deletable(from: results, selected: selection)
+        let total = selected.reduce(0) { $0 + $1.amount }
+        return HStack(spacing: iOSDesignSystem.Spacing.medium) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(String(format: "selected_count".localized, selected.count))
+                    .font(.subheadline.weight(.semibold))
+                if !selected.isEmpty {
+                    Text(CurrencyFormatter.format(total, currency: currency))
+                        .font(.caption)
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer(minLength: 0)
+            Button(role: .destructive) {
+                deleteSelected()
+            } label: {
+                Label("delete".localized, systemImage: "trash")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 16)
+                    .frame(height: 40)
+                    .background(Color(.systemRed).opacity(selected.isEmpty ? 0.35 : 1), in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .disabled(selected.isEmpty)
+            .accessibilityIdentifier("expenses.delete-selected")
+        }
+        .padding(.leading, iOSDesignSystem.Spacing.large)
+        .padding(.trailing, iOSDesignSystem.Spacing.small)
+        .padding(.vertical, iOSDesignSystem.Spacing.small)
+        .liquidGlassSurface(Capsule())
+    }
+
+    private func undoToast(_ batch: UndoBatch) -> some View {
+        HStack(spacing: iOSDesignSystem.Spacing.medium) {
+            HeroIcon("trash", size: 18)
+                .foregroundStyle(.secondary)
+            Text(String(format: "exp_moved_to_deleted_format".localized, batch.expenseIds.count))
+                .font(.subheadline.weight(.medium))
+                .lineLimit(1)
+            Spacer(minLength: 0)
+            Button("exp_undo".localized) { undo(batch) }
+                .font(.subheadline.weight(.semibold))
+                .frame(minHeight: iOSDesignSystem.Size.minimumTapTarget)
+                .accessibilityIdentifier("expenses.undo-delete")
+        }
+        .padding(.horizontal, iOSDesignSystem.Spacing.large)
+        .liquidGlassSurface(Capsule())
+    }
+
+    // MARK: - Actions
+
+    private func clearFilters() {
+        withAnimation(.snappy) {
+            query.period = .all
+            query.categoryIds.removeAll()
+            query.searchText = ""
+        }
+    }
+
+    private func toggleSelection(_ id: UUID) {
+        if selection.contains(id) {
+            selection.remove(id)
+        } else {
+            selection.insert(id)
+        }
+    }
+
+    private func endSelection() {
+        withAnimation(.snappy) {
+            isSelecting = false
+            selection.removeAll()
+        }
+    }
+
+    private func deleteSelected() {
+        let toDelete = ExpenseSelection.deletable(from: results, selected: selection)
+        archive(toDelete)
+        endSelection()
+    }
+
+    /// Moves expenses to Deleted (recoverable for 30 days) and offers an undo.
+    private func archive(_ expenses: [Expense]) {
+        guard !expenses.isEmpty else { return }
+        withAnimation(.snappy) {
+            dataManager.moveToDeletedExpenses(expenses)
+            undoBatch = UndoBatch(expenseIds: expenses.map(\.id))
+        }
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+    }
+
+    private func undo(_ batch: UndoBatch) {
+        withAnimation(.snappy) {
+            dataManager.restoreExpenses(ids: Set(batch.expenseIds))
+            undoBatch = nil
+        }
+    }
+
+    private func duplicate(_ expense: Expense) {
+        dataManager.addExpense(Expense(title: expense.title, amount: expense.amount,
+                                       categoryId: expense.categoryId, date: Date()))
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    }
 }
+
 
 struct CalendarPickerView: View {
     @Binding var selectedStartDate: Date
     @Binding var selectedEndDate: Date
-    @Binding var isDateRangeMode: Bool
-    @Binding var selectedTimePeriod: ExpenseListView.TimePeriod
+    @Binding var selectedPeriod: ExpensePeriod
     @Environment(\.dismiss) private var dismiss
     
     @State private var currentMonth: Date = Date()
@@ -524,7 +664,6 @@ struct CalendarPickerView: View {
             tempStartDate = selectedStartDate
             tempEndDate = selectedEndDate
             selectionStep = .startDate
-            isDateRangeMode = true
         }
     }
     
@@ -532,7 +671,7 @@ struct CalendarPickerView: View {
         VStack(alignment: .leading, spacing: iOSDesignSystem.Spacing.medium) {
             HStack(spacing: iOSDesignSystem.Spacing.small) {
                 HeroIcon("calendar-days", size: 18)
-                    .foregroundStyle(Color(.systemBlue))
+                    .foregroundStyle(Color.accentColor)
 
                 Text(instructionText)
                     .font(.subheadline.weight(.medium))
@@ -578,12 +717,12 @@ struct CalendarPickerView: View {
             VStack(alignment: .leading, spacing: iOSDesignSystem.Spacing.small) {
                 HStack(spacing: 6) {
                     Circle()
-                        .fill(isActive ? Color(.systemBlue) : Color(.tertiaryLabel))
+                        .fill(isActive ? Color.accentColor : Color(.tertiaryLabel))
                         .frame(width: 6, height: 6)
 
                     Text(title)
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(isActive ? Color(.systemBlue) : .secondary)
+                        .foregroundStyle(isActive ? Color.accentColor : .secondary)
                 }
 
                 Text(localizedDateString(from: date))
@@ -595,12 +734,12 @@ struct CalendarPickerView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(iOSDesignSystem.Spacing.medium)
             .frame(minHeight: 72)
-            .background(isActive ? Color(.systemBlue).opacity(0.07) : Color.clear,
+            .background(isActive ? Color.accentColor.opacity(0.07) : Color.clear,
                         in: RoundedRectangle(cornerRadius: iOSDesignSystem.Radius.large, style: .continuous))
             .liquidGlassCard(cornerRadius: iOSDesignSystem.Radius.large)
             .overlay(
                 RoundedRectangle(cornerRadius: iOSDesignSystem.Radius.large, style: .continuous)
-                    .stroke(isActive ? Color(.systemBlue).opacity(0.55) : Color.clear, lineWidth: 1.25)
+                    .stroke(isActive ? Color.accentColor.opacity(0.55) : Color.clear, lineWidth: 1.25)
             )
         }
         .buttonStyle(.plain)
@@ -624,7 +763,7 @@ struct CalendarPickerView: View {
                     Text("reset".localized)
                 }
                     .font(.footnote.weight(.semibold))
-                    .foregroundStyle(Color(.systemBlue))
+                    .foregroundStyle(Color.accentColor)
                     .padding(.horizontal, 10)
                     .frame(minHeight: iOSDesignSystem.Size.minimumTapTarget)
             }
@@ -692,7 +831,7 @@ struct CalendarPickerView: View {
             Button(action: previousMonth) {
                 HeroIcon(systemName: "chevron.left")
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(Color(.systemBlue))
+                    .foregroundStyle(Color.accentColor)
                     .iOSMinimumTapTarget()
                     .liquidGlassSurface(Circle())
             }
@@ -708,7 +847,7 @@ struct CalendarPickerView: View {
             Button(action: nextMonth) {
                 HeroIcon(systemName: "chevron.right")
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(Color(.systemBlue))
+                    .foregroundStyle(Color.accentColor)
                     .iOSMinimumTapTarget()
                     .liquidGlassSurface(Circle())
             }
@@ -785,7 +924,7 @@ struct CalendarPickerView: View {
     private func applySelection() {
         selectedStartDate = tempStartDate
         selectedEndDate = tempEndDate
-        selectedTimePeriod = .customMonth
+        selectedPeriod = .custom
         dismiss()
     }
     
@@ -800,7 +939,7 @@ struct CalendarPickerView: View {
             return .start
         } else if isEnd {
             return .end
-        } else if date > tempStartDate && date < tempEndDate {
+        } else if date > Calendar.current.startOfDay(for: tempStartDate) && date < tempEndDate {
             return .inRange
         } else {
             return .none
@@ -821,25 +960,16 @@ struct CalendarPickerView: View {
     }
     
     private func monthYearString(from date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale.current
-        formatter.dateFormat = "LLLL yyyy"
-        return formatter.string(from: date)
+        date.formatted(.dateTime.month(.wide).year())
     }
-    
+
     private func localizedDateString(from date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale.current
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .none
-        return formatter.string(from: date)
+        date.formatted(date: .abbreviated, time: .omitted)
     }
-    
+
     private var weekdaySymbols: [String] {
-        let formatter = DateFormatter()
-        formatter.locale = Locale.current
-        let symbols = formatter.shortWeekdaySymbols ?? ["S","M","T","W","T","F","S"]
         let calendar = Calendar.current
+        let symbols = calendar.shortWeekdaySymbols
         let firstIndex = max(min(calendar.firstWeekday - 1, symbols.count - 1), 0)
         if firstIndex == 0 { return symbols }
         return Array(symbols[firstIndex...]) + Array(symbols[..<firstIndex])
@@ -867,15 +997,15 @@ struct CalendarDayView: View {
 
                 if Calendar.current.isDateInToday(date) && !showsSelection {
                     Circle()
-                        .stroke(Color(.systemBlue).opacity(0.45), lineWidth: 1)
+                        .stroke(Color.accentColor.opacity(0.45), lineWidth: 1)
                         .frame(width: 34, height: 34)
                 }
                 
                 if showsSelection {
                     Circle()
-                        .fill(Color(.systemBlue))
+                        .fill(Color.accentColor)
                         .frame(width: 36, height: 36)
-                        .shadow(color: Color(.systemBlue).opacity(0.22), radius: 5, x: 0, y: 2)
+                        .shadow(color: Color.accentColor.opacity(0.22), radius: 5, x: 0, y: 2)
                 }
                 
                 Text("\(Calendar.current.component(.day, from: date))")
@@ -912,7 +1042,7 @@ struct CalendarDayView: View {
         Group {
             if state == .inRange {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color(.systemBlue).opacity(0.12))
+                    .fill(Color.accentColor.opacity(0.12))
                     .frame(maxWidth: .infinity)
                     .frame(height: 34)
             } else {
@@ -924,230 +1054,153 @@ struct CalendarDayView: View {
 
 // MARK: - Filter Sheet
 
+/// Period and category filters. Changes are drafted and applied on Done,
+/// so swiping the sheet away leaves the list untouched.
 struct ExpenseFilterSheet: View {
-    let categories: [ExpenseListView.FilterCategory]
-    @State private var draftCategoryIds: Set<String>
-    @Binding var selectedTimePeriod: ExpenseListView.TimePeriod
-    var onApply: (Set<String>) -> Void
-    var onPickCustomRange: () -> Void
-    var onClear: () -> Void
+    let categories: [UserCategory]
+    let customRangeText: String
+    var onApply: (ExpensePeriod, Set<UUID>) -> Void
+    var onPickCustomRange: (Set<UUID>) -> Void
 
+    @State private var draftPeriod: ExpensePeriod
+    @State private var draftCategoryIds: Set<UUID>
     @Environment(\.dismiss) private var dismiss
 
     init(
-        categories: [ExpenseListView.FilterCategory],
-        selectedCategoryIds: Set<String>,
-        selectedTimePeriod: Binding<ExpenseListView.TimePeriod>,
-        onApply: @escaping (Set<String>) -> Void,
-        onPickCustomRange: @escaping () -> Void,
-        onClear: @escaping () -> Void
+        categories: [UserCategory],
+        query: ExpenseListQuery,
+        onApply: @escaping (ExpensePeriod, Set<UUID>) -> Void,
+        onPickCustomRange: @escaping (Set<UUID>) -> Void
     ) {
         self.categories = categories
-        self._draftCategoryIds = State(initialValue: selectedCategoryIds)
-        self._selectedTimePeriod = selectedTimePeriod
+        self.customRangeText = ExpenseRangeText.text(from: query.customStart, through: query.customEnd)
         self.onApply = onApply
         self.onPickCustomRange = onPickCustomRange
-        self.onClear = onClear
+        self._draftPeriod = State(initialValue: query.period)
+        self._draftCategoryIds = State(initialValue: query.categoryIds)
     }
 
-    private var hasActiveFilter: Bool {
-        selectedTimePeriod != .all || !draftCategoryIds.isEmpty
+    private var hasDraftFilters: Bool {
+        draftPeriod != .all || !draftCategoryIds.isEmpty
     }
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                iOSDesignSystem.appBackground
-                    .ignoresSafeArea()
-
-                ScrollView {
-                    VStack(alignment: .leading, spacing: iOSDesignSystem.Spacing.large) {
-                        dateFilterCard
-                        categoryFilterSection
+            List {
+                Section("time_period".localized) {
+                    ForEach(ExpensePeriod.quickPeriods, id: \.self) { period in
+                        checkRow(isOn: draftPeriod == period) {
+                            Text(period.localizedName)
+                        } action: {
+                            draftPeriod = period
+                        }
                     }
-                    .padding(.horizontal, iOSDesignSystem.Spacing.screenMargin)
-                    .padding(.top, iOSDesignSystem.Spacing.screenMargin)
-                    .padding(.bottom, 96)
+
+                    Button {
+                        onPickCustomRange(draftCategoryIds)
+                        dismiss()
+                    } label: {
+                        HStack {
+                            Label {
+                                Text("custom_date_range".localized)
+                            } icon: {
+                                HeroIcon("calendar-days", size: 20)
+                                    .foregroundStyle(Color.accentColor)
+                            }
+                            .foregroundStyle(.primary)
+                            Spacer()
+                            if draftPeriod == .custom {
+                                Text(customRangeText)
+                                    .foregroundStyle(Color.accentColor)
+                            }
+                            Image(systemName: "chevron.right")
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                    .accessibilityAddTraits(draftPeriod == .custom ? .isSelected : [])
+                }
+
+                Section {
+                    if categories.isEmpty {
+                        Text("exp_no_categories".localized)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        checkRow(isOn: draftCategoryIds.isEmpty) {
+                            Text("exp_all_categories".localized)
+                        } action: {
+                            draftCategoryIds.removeAll()
+                        }
+
+                        ForEach(categories) { category in
+                            checkRow(isOn: draftCategoryIds.contains(category.id)) {
+                                Label {
+                                    Text(category.name)
+                                } icon: {
+                                    HeroIcon(systemName: category.iconSystemName, size: 20)
+                                        .foregroundStyle(category.color)
+                                }
+                            } action: {
+                                toggle(category.id)
+                            }
+                        }
+                    }
+                } header: {
+                    Text("category".localized)
+                } footer: {
+                    Text("filter_category_hint".localized)
                 }
             }
+            .listStyle(.insetGrouped)
             .navigationTitle("filter".localized)
             .navigationBarTitleDisplayMode(.inline)
-            .safeAreaInset(edge: .bottom) {
-                filterActionBar
-            }
-        }
-    }
-
-    private var dateFilterCard: some View {
-        VStack(alignment: .leading, spacing: iOSDesignSystem.Spacing.medium) {
-            sectionLabel("time_period".localized, value: selectedTimePeriod == .customMonth ? "custom".localized : "all".localized)
-
-            Button {
-                onApply(draftCategoryIds)
-                onPickCustomRange()
-            } label: {
-                HStack(spacing: 14) {
-                    HeroIcon(selectedTimePeriod == .customMonth ? "calendar-days" : "calendar", size: 21)
-                        .foregroundStyle(Color(.systemBlue))
-                        .frame(width: iOSDesignSystem.Size.minimumTapTarget, height: iOSDesignSystem.Size.minimumTapTarget)
-                        .liquidGlassSurface(Circle())
-
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("custom_date_range".localized)
-                            .font(.body.weight(.semibold))
-                            .foregroundStyle(.primary)
-                        Text(selectedTimePeriod == .customMonth ? "Custom date range is active" : "Use this only when quick dates are not enough")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("reset".localized) {
+                        withAnimation(.snappy) {
+                            draftPeriod = .all
+                            draftCategoryIds.removeAll()
+                        }
                     }
-
-                    Spacer(minLength: 8)
-
-                    HeroIcon("chevron-right", size: 16)
-                        .foregroundStyle(.tertiary)
+                    .disabled(!hasDraftFilters)
                 }
-                .padding(iOSDesignSystem.Spacing.medium)
-                .frame(maxWidth: .infinity, minHeight: 68, alignment: .leading)
-                .contentShape(RoundedRectangle(cornerRadius: iOSDesignSystem.Radius.large, style: .continuous))
-            }
-            .liquidGlassButtonStyle()
-            .liquidGlassCard(cornerRadius: iOSDesignSystem.Radius.large)
-            .overlay(
-                RoundedRectangle(cornerRadius: iOSDesignSystem.Radius.large, style: .continuous)
-                    .stroke(selectedTimePeriod == .customMonth ? Color(.systemBlue).opacity(0.45) : Color.clear, lineWidth: 1)
-            )
-        }
-    }
-
-    private var categoryFilterSection: some View {
-        VStack(alignment: .leading, spacing: iOSDesignSystem.Spacing.medium) {
-            sectionLabel("category".localized, value: draftCategoryIds.isEmpty ? "all".localized : "\(draftCategoryIds.count)")
-
-            if categories.isEmpty {
-                VStack(spacing: iOSDesignSystem.Spacing.small) {
-                    HeroIcon("tag", size: 24)
-                        .foregroundStyle(.secondary)
-                    Text("No categories yet")
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 28)
-                .liquidGlassCard()
-            } else {
-                LazyVStack(spacing: iOSDesignSystem.Spacing.small) {
-                    ForEach(categories, id: \.id) { category in
-                        categoryFilterRow(category)
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("done".localized) {
+                        onApply(draftPeriod, draftCategoryIds)
+                        dismiss()
                     }
+                    .fontWeight(.semibold)
                 }
             }
-
-            Text("filter_category_hint".localized)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 2)
         }
     }
 
-    private func categoryFilterRow(_ category: ExpenseListView.FilterCategory) -> some View {
-        let selected = draftCategoryIds.contains(category.id)
-
-        return Button {
-            toggle(category.id)
-        } label: {
-            HStack(spacing: iOSDesignSystem.Spacing.medium) {
-                HeroIcon(systemName: category.icon, size: 21)
-                    .foregroundStyle(category.color)
-                    .frame(width: iOSDesignSystem.Size.minimumTapTarget, height: iOSDesignSystem.Size.minimumTapTarget)
-                    .background(category.color.opacity(selected ? 0.18 : 0.10), in: RoundedRectangle(cornerRadius: iOSDesignSystem.Radius.medium, style: .continuous))
-
-                Text(category.name)
-                    .font(.body.weight(selected ? .semibold : .regular))
+    private func checkRow<Content: View>(
+        isOn: Bool,
+        @ViewBuilder content: () -> Content,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack {
+                content()
                     .foregroundStyle(.primary)
-                    .lineLimit(1)
-
-                Spacer(minLength: 8)
-
-                if selected {
-                    HeroIcon("check-circle", size: 22)
-                        .foregroundStyle(Color(.systemBlue))
-                } else {
-                    Circle()
-                        .stroke(Color(.tertiaryLabel), lineWidth: 1.5)
-                        .frame(width: 20, height: 20)
+                Spacer()
+                if isOn {
+                    Image(systemName: "checkmark")
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(Color.accentColor)
                 }
             }
-            .padding(.horizontal, iOSDesignSystem.Spacing.medium)
-            .frame(minHeight: 58)
-            .contentShape(RoundedRectangle(cornerRadius: iOSDesignSystem.Radius.large, style: .continuous))
+            .contentShape(Rectangle())
         }
-        .liquidGlassButtonStyle()
-        .liquidGlassCard(cornerRadius: iOSDesignSystem.Radius.large)
-        .overlay(
-            RoundedRectangle(cornerRadius: iOSDesignSystem.Radius.large, style: .continuous)
-                .stroke(selected ? Color(.systemBlue).opacity(0.35) : Color.clear, lineWidth: 1)
-        )
+        .accessibilityAddTraits(isOn ? .isSelected : [])
     }
 
-    private func sectionLabel(_ title: String, value: String) -> some View {
-        HStack {
-            Text(title)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.secondary)
-            Spacer()
-            Text(value)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(Color(.tertiarySystemFill), in: Capsule())
-        }
-    }
-
-    private var filterActionBar: some View {
-        HStack(spacing: iOSDesignSystem.Spacing.medium) {
-            Button {
-                withAnimation(.snappy) {
-                    draftCategoryIds.removeAll()
-                }
-                onClear()
-            } label: {
-                Text("clear".localized)
-                    .font(.body.weight(.semibold))
-                    .frame(maxWidth: .infinity)
-                    .frame(height: iOSDesignSystem.Size.minimumTapTarget)
-            }
-            .disabled(!hasActiveFilter)
-            .foregroundStyle(hasActiveFilter ? Color(.systemBlue) : Color.secondary)
-            .liquidGlassButtonStyle()
-            .liquidGlassSurface(Capsule())
-
-            Button {
-                onApply(draftCategoryIds)
-                dismiss()
-            } label: {
-                Text("done".localized)
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: iOSDesignSystem.Size.minimumTapTarget)
-                    .background(Color(.systemBlue), in: Capsule())
-            }
-            .liquidGlassButtonStyle()
-        }
-        .padding(.horizontal, iOSDesignSystem.Spacing.screenMargin)
-        .padding(.vertical, iOSDesignSystem.Spacing.medium)
-        .background(.bar)
-    }
-
-    private func toggle(_ id: String) {
-        withAnimation(.snappy) {
-            if draftCategoryIds.contains(id) {
-                draftCategoryIds.remove(id)
-            } else {
-                draftCategoryIds.insert(id)
-            }
+    private func toggle(_ id: UUID) {
+        if draftCategoryIds.contains(id) {
+            draftCategoryIds.remove(id)
+        } else {
+            draftCategoryIds.insert(id)
         }
     }
 }

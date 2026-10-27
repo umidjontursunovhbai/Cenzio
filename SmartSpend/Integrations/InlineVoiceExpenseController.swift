@@ -368,15 +368,21 @@ private struct VoiceExpenseOverlayModifier: ViewModifier {
     @ObservedObject var controller: InlineVoiceExpenseController
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    // Recording and processing already show on the entry bar; the card only appears when it needs an answer.
+    private var needsAttention: Bool {
+        guard !controller.isRecording, !controller.isProcessing else { return false }
+        return controller.message != nil || controller.needsAIConsent || controller.canRetry
+    }
+
     func body(content: Content) -> some View {
         content.overlay(alignment: .top) {
-            if controller.isVisible && controller.prefill == nil {
+            if controller.isVisible && controller.prefill == nil && needsAttention {
                 InlineVoiceExpenseStatus(controller: controller)
                     .padding(.horizontal, 16).padding(.top, 8)
                     .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
             }
         }
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: controller.isVisible)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: controller.isVisible && needsAttention)
     }
 }
 

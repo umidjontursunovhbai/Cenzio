@@ -17,17 +17,6 @@ struct VoiceExpenseTests {
         #expect(!safe.contains("PRIVATE_TRANSCRIPT"))
     }
 
-    @Test("Voice pull rejects short, upward and sideways drags")
-    func voicePullDirection() {
-        #expect(ExpenseVoiceGesture.shouldStart(x: 0, y: 28))
-        #expect(ExpenseVoiceGesture.shouldStart(x: 12, y: 40))
-        #expect(!ExpenseVoiceGesture.shouldStart(x: 0, y: 27))
-        #expect(!ExpenseVoiceGesture.shouldStart(x: 0, y: -40))
-        #expect(!ExpenseVoiceGesture.shouldStart(x: 60, y: 40))
-        #expect(!ExpenseVoiceGesture.shouldStart(x: 40, y: 30))
-        #expect(!ExpenseVoiceGesture.shouldStart(x: .nan, y: 40))
-    }
-
     private func draft(_ changes: [String: Any] = [:]) throws -> VoiceTransactionDraft {
         var object: [String: Any] = [
             "kind": "expense", "amount_decimal": "15800", "currency": "UZS", "title": "Taxi",

@@ -35,7 +35,7 @@ struct DataImportView: View {
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
 
-                    Text("CSV import adds expenses. Budgets, goals, and app settings need to be set up separately.")
+                    Text("import_scope_note".localized)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
@@ -63,19 +63,21 @@ struct DataImportView: View {
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("cancel".localized) {
-                        dismiss()
-                    }
-                }
-                
-                ToolbarItem(placement: .navigationBarTrailing) {
+                ToolbarItem(placement: .topBarLeading) {
                     Button {
                         showingFormatInfo = true
                     } label: {
                         HeroIcon(systemName: "info.circle")
-                            .foregroundStyle(.blue)
                     }
+                    .accessibilityLabel("csv_format_guide".localized)
+                    .accessibilityIdentifier("import.infoButton")
+                }
+
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("cancel".localized) {
+                        dismiss()
+                    }
+                    .accessibilityIdentifier("import.cancel")
                 }
             }
             .sheet(isPresented: $showingFilePicker) {
@@ -103,9 +105,14 @@ struct DataImportView: View {
             } message: {
                 Text("confirm_import_message".localized)
             }
-            .sheet(isPresented: $showingFormatInfo) {
-                CSVFormatInfoView()
-            }
+        }
+        .infoPopup(
+            isPresented: $showingFormatInfo,
+            title: "csv_format_guide".localized,
+            icon: "document-text",
+            accessibilityPrefix: "import.info"
+        ) {
+            CSVFormatInfoView()
         }
     }
     
@@ -133,7 +140,7 @@ struct DataImportView: View {
                 .padding(.vertical, 40)
                 .background(
                     RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.blue.opacity(0.3), style: StrokeStyle(lineWidth: 2, dash: [5]))
+                        .stroke(Color.accentColor.opacity(0.3), style: StrokeStyle(lineWidth: 2, dash: [5]))
                 )
             }
             .buttonStyle(.plain)
@@ -145,46 +152,15 @@ struct DataImportView: View {
                     .fontWeight(.medium)
                 
                 VStack(alignment: .leading, spacing: 8) {
-                    HStack(alignment: .top, spacing: 12) {
-                        Text("1")
-                            .font(.caption2)
-                            .fontWeight(.bold)
-                            .foregroundStyle(.white)
-                            .frame(width: 20, height: 20)
-                            .background(.blue, in: Circle())
-                        
-                        Text("import_step_1".localized)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    
-                    HStack(alignment: .top, spacing: 12) {
-                        Text("2")
-                            .font(.caption2)
-                            .fontWeight(.bold)
-                            .foregroundStyle(.white)
-                            .frame(width: 20, height: 20)
-                            .background(.blue, in: Circle())
-                        
-                        Text("import_step_2".localized)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    
-                    HStack(alignment: .top, spacing: 12) {
-                        Text("3")
-                            .font(.caption2)
-                            .fontWeight(.bold)
-                            .foregroundStyle(.white)
-                            .frame(width: 20, height: 20)
-                            .background(.blue, in: Circle())
-                        
-                        Text("import_step_3".localized)
+                    // The step strings already carry their "1." / "2." / "3." numbering.
+                    ForEach(["import_step_1", "import_step_2", "import_step_3"], id: \.self) { key in
+                        Text(key.localized)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding()
             .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 8))
         }
@@ -249,7 +225,7 @@ struct DataImportView: View {
                             .font(.caption)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
-                            .background(Color.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 4))
+                            .background(Color.accentColor.opacity(0.1), in: RoundedRectangle(cornerRadius: 4))
                     }
                 }
             }
@@ -301,7 +277,7 @@ struct DataImportView: View {
             .frame(maxWidth: .infinity)
             .padding()
             .background(
-                isImporting ? Color.gray : Color.blue,
+                isImporting ? Color.gray : Color.accentColor,
                 in: RoundedRectangle(cornerRadius: 12)
             )
             .foregroundStyle(.white)
@@ -313,23 +289,14 @@ struct DataImportView: View {
     
     private func handleFileSelection(_ url: URL) {
         selectedFileURL = url
-        previewData = nil
-        
-        // Start security-scoped resource access
-        let accessedResource = url.startAccessingSecurityScopedResource()
-        
-        defer {
-            if accessedResource { url.stopAccessingSecurityScopedResource() }
-        }
-        
-        // Preview the file
-        previewFile(url: url)
-    }
-    
-    private func previewFile(url: URL) {
+        importResult = nil
+        // DataImporter opens/closes the security-scoped resource itself.
         if let preview = importer.previewCSVImport(fileURL: url) {
             previewData = preview
         } else {
+            // Don't leave an unreadable file "selected" with no way to import it.
+            selectedFileURL = nil
+            previewData = nil
             alertMessage = "cannot_read_file_debug".localized
             showingAlert = true
         }
@@ -339,44 +306,28 @@ struct DataImportView: View {
     
     private func performImport() {
         guard let fileURL = selectedFileURL else { return }
-        
-        print("Starting import process for file: \(fileURL.lastPathComponent)")
         isImporting = true
-        
+
         DispatchQueue.global(qos: .userInitiated).async {
-            print("Running import in background thread...")
             let result = importer.importFromCSV(fileURL: fileURL, dataManager: dataManager)
-            print("Import finished with result: \(result)")
-            
+
             DispatchQueue.main.async {
-                print("Updating UI on main thread...")
                 isImporting = false
                 importResult = result
-                
+
                 switch result {
                 case .success(let importedCount, let skippedCount, let errors):
-                    print("Import success! Imported: \(importedCount), Skipped: \(skippedCount), Errors: \(errors.count)")
-                    
-                    if errors.isEmpty {
-                        alertMessage = String(format: "import_success_count".localized, importedCount)
-                    } else {
-                        alertMessage = String(format: "import_partial_with_errors".localized, importedCount, skippedCount)
-                        print("Import errors (showing first 5):")
-                        for error in errors.prefix(5) {
-                            print("  - \(error)")
-                        }
-                    }
-                    
+                    alertMessage = errors.isEmpty
+                        ? String(format: "import_success_count".localized, importedCount)
+                        : String(format: "import_partial_with_errors".localized, importedCount, skippedCount)
                 case .failure(let error):
-                    print("Import failure: \(error)")
-                    alertMessage = String(format: "import_failed_error".localized, String(describing: error))
+                    alertMessage = String(format: "import_failed_error".localized, error)
                 }
-                
+
                 showingAlert = true
             }
         }
     }
-    
 }
 
 // MARK: - Document Picker
@@ -415,228 +366,140 @@ struct DocumentPicker: UIViewControllerRepresentable {
     }
 }
 
-// MARK: - CSV Format Info View
+// MARK: - CSV Format Info (popup body)
 
+/// Body of the CSV format guide shown in `infoPopup` on the import screen.
 struct CSVFormatInfoView: View {
-    @Environment(\.dismiss) private var dismiss
-    @State private var animateHeader = false
-    @State private var animateCards = false
-    
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 24) {
-                    // Animated Header
-                    VStack(spacing: 12) {
-                        HeroIcon(systemName: "doc.text.magnifyingglass")
-                            .font(.system(size: 60))
-                            .foregroundStyle(
-                                LinearGradient(
-                                    colors: [.blue, .purple],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                            .scaleEffect(animateHeader ? 1.0 : 0.8)
-                            .rotationEffect(.degrees(animateHeader ? 0 : -10))
-                            .animation(.spring(response: 0.6, dampingFraction: 0.7).delay(0.1), value: animateHeader)
-                        
-                        Text("csv_format_guide".localized)
-                            .font(.title)
-                            .fontWeight(.bold)
-                            .opacity(animateHeader ? 1 : 0)
-                            .offset(y: animateHeader ? 0 : -20)
-                            .animation(.spring(response: 0.6, dampingFraction: 0.7).delay(0.2), value: animateHeader)
-                        
-                        Text("csv_format_subtitle".localized)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                            .opacity(animateHeader ? 1 : 0)
-                            .offset(y: animateHeader ? 0 : -20)
-                            .animation(.spring(response: 0.6, dampingFraction: 0.7).delay(0.3), value: animateHeader)
-                    }
-                    .padding(.top, 20)
-                    
-                    // Format Cards
-                    VStack(spacing: 20) {
-                        formatCard(
-                            title: "smartspend_format".localized,
-                            icon: "square.and.arrow.down",
-                            color: .green,
-                            description: "smartspend_format_desc".localized,
-                            requiredColumns: [
-                                ("column_date".localized, "required".localized),
-                                ("column_title".localized, "required".localized),
-                                ("column_amount".localized, "required".localized),
-                                ("column_category".localized, "required".localized)
-                            ],
-                            example: "Date,Title,Amount,Category",
-                            delay: 0.4
-                        )
-                        
-                        formatCard(
-                            title: "custom_format".localized,
-                            icon: "wand.and.stars",
-                            color: .purple,
-                            description: "custom_format_desc".localized,
-                            requiredColumns: [
-                                ("column_title_name_description".localized, "any_of_these".localized),
-                                ("column_amount_price_cost".localized, "any_of_these".localized),
-                                ("column_date".localized, "required".localized),
-                                ("column_category_type".localized, "any_of_these".localized)
-                            ],
-                            example: "Description,Price,Date,Type",
-                            delay: 0.5
-                        )
-                    }
-                    .opacity(animateCards ? 1 : 0)
-                    .offset(y: animateCards ? 0 : 30)
-                    .animation(.spring(response: 0.6, dampingFraction: 0.7), value: animateCards)
-                    
-                    // Tips Section
-                    VStack(alignment: .leading, spacing: 16) {
-                        HStack {
-                            HeroIcon(systemName: "lightbulb.fill")
-                                .foregroundStyle(.yellow)
-                                .font(.title3)
-                            
-                            Text("tips_title".localized)
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                        }
-                        
-                        VStack(alignment: .leading, spacing: 12) {
-                            tipRow(icon: "checkmark.circle.fill", text: "tip_case_insensitive".localized)
-                            tipRow(icon: "checkmark.circle.fill", text: "tip_date_formats".localized)
-                            tipRow(icon: "checkmark.circle.fill", text: "tip_categories_auto".localized)
-                            tipRow(icon: "checkmark.circle.fill", text: "tip_currency_symbols".localized)
-                        }
-                    }
-                    .padding()
-                    .background(
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(Color(.systemGray6))
-                    )
-                    .opacity(animateCards ? 1 : 0)
-                    .offset(y: animateCards ? 0 : 30)
-                    .animation(.spring(response: 0.6, dampingFraction: 0.7).delay(0.7), value: animateCards)
-                }
-                .padding()
-            }
-            .background(Color(.systemGroupedBackground))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("done".localized) {
-                        dismiss()
-                    }
-                    .fontWeight(.semibold)
-                }
-            }
-            .onAppear {
-                animateHeader = true
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                    animateCards = true
+        VStack(alignment: .leading, spacing: 18) {
+            Text("csv_format_subtitle".localized)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .infoPopupStaggered(0)
+
+            formatCard(
+                title: "smartspend_format".localized,
+                icon: "check-badge",
+                color: .green,
+                description: "smartspend_format_desc".localized,
+                columns: [
+                    ("column_date".localized, "required".localized),
+                    ("column_title".localized, "required".localized),
+                    ("column_amount".localized, "required".localized),
+                    ("column_category".localized, "required".localized)
+                ],
+                example: "Date,Title,Amount,Category"
+            )
+            .infoPopupStaggered(1)
+
+            formatCard(
+                title: "custom_format".localized,
+                icon: "adjustments-horizontal",
+                color: .purple,
+                description: "custom_format_desc".localized,
+                columns: [
+                    ("column_title_name_description".localized, "any_of_these".localized),
+                    ("column_amount_price_cost".localized, "any_of_these".localized),
+                    ("column_date".localized, "required".localized),
+                    ("column_category_type".localized, "any_of_these".localized)
+                ],
+                example: "Description,Price,Date,Type"
+            )
+            .infoPopupStaggered(2)
+
+            InfoPopupSection("tips_title".localized, index: 3) {
+                VStack(alignment: .leading, spacing: 8) {
+                    tipRow("tip_case_insensitive".localized)
+                    tipRow("tip_date_formats".localized)
+                    tipRow("tip_categories_auto".localized)
+                    tipRow("tip_currency_symbols".localized)
                 }
             }
         }
     }
-    
+
     private func formatCard(
         title: String,
         icon: String,
         color: Color,
         description: String,
-        requiredColumns: [(String, String)],
-        example: String,
-        delay: Double
+        columns: [(name: String, note: String)],
+        example: String
     ) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            // Header
-            HStack {
-                HeroIcon(systemName: icon)
-                    .font(.title2)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 10) {
+                HeroIcon(icon, size: 18)
                     .foregroundStyle(color)
-                    .frame(width: 40, height: 40)
-                    .background(color.opacity(0.15), in: Circle())
-                
+                    .frame(width: 32, height: 32)
+                    .background(color.opacity(0.15), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                    .accessibilityHidden(true)
+
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .font(.headline)
-                        .fontWeight(.semibold)
-                    
+                        .font(.subheadline.weight(.semibold))
                     Text(description)
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                
-                Spacer()
             }
-            
-            Divider()
-            
-            // Required Columns
-            VStack(alignment: .leading, spacing: 10) {
+
+            VStack(alignment: .leading, spacing: 6) {
                 Text("required_columns".localized)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
-                
-                ForEach(requiredColumns, id: \.0) { column in
-                    HStack(spacing: 8) {
-                        HeroIcon(systemName: "checkmark.circle.fill")
+
+                ForEach(columns, id: \.name) { column in
+                    HStack(alignment: .center, spacing: 6) {
+                        HeroIcon("check-circle", size: 14)
                             .foregroundStyle(color)
-                            .font(.caption)
-                        
-                        Text(column.0)
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                        
-                        Text("• \(column.1)")
-                            .font(.caption)
+                            .accessibilityHidden(true)
+                        Text(column.name)
+                            .font(.footnote.weight(.medium))
+                        Spacer(minLength: 8)
+                        Text(column.note)
+                            .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
+                    .accessibilityElement(children: .combine)
                 }
             }
-            
-            // Example
-            VStack(alignment: .leading, spacing: 8) {
+
+            VStack(alignment: .leading, spacing: 4) {
                 Text("example_header".localized)
-                    .font(.caption)
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
-                
                 Text(example)
                     .font(.system(.caption, design: .monospaced))
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color(.systemGray5))
-                    )
+                    .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
         }
-        .padding()
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(.regularMaterial)
-                .shadow(color: color.opacity(0.2), radius: 8, x: 0, y: 4)
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.tertiarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(color.opacity(0.25), lineWidth: 1)
         )
-        .opacity(animateCards ? 1 : 0)
-        .offset(x: animateCards ? 0 : -50)
-        .animation(.spring(response: 0.6, dampingFraction: 0.7).delay(delay), value: animateCards)
     }
-    
-    private func tipRow(icon: String, text: String) -> some View {
-        HStack(spacing: 12) {
-            HeroIcon(systemName: icon)
-                .foregroundStyle(.yellow)
-                .font(.caption)
-            
+
+    private func tipRow(_ text: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            HeroIcon("sparkles", size: 14)
+                .foregroundStyle(.orange)
+                .padding(.top, 2)
+                .accessibilityHidden(true)
             Text(text)
-                .font(.subheadline)
+                .font(.footnote)
                 .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }

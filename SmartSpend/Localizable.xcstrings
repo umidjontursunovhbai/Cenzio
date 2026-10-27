@@ -656,7 +656,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Flexible column names that SmartSpend will detect:"
+            "value": "Flexible column names that Cenzio will detect:"
           }
         }
       }
@@ -2185,7 +2185,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "SmartSpend learns from your spending patterns to provide smart suggestions"
+            "value": "Cenzio learns from your spending patterns to provide smart suggestions"
           }
         }
       }
@@ -2196,7 +2196,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "SmartSpend"
+            "value": "Cenzio"
           }
         }
       }
@@ -2207,7 +2207,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "SmartSpend Format"
+            "value": "Cenzio Format"
           }
         }
       }
@@ -2317,7 +2317,7 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "SmartSpend AI"
+            "value": "Cenzio AI"
           }
         }
       }

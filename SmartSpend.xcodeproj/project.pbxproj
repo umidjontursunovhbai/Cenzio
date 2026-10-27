@@ -61,6 +61,11 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		A381C3B123456789ABCDEF01 /* Exceptions for SmartSpend Info.plist */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (Info.plist,);
+			target = 9E6DB8612E59C60700476BE0 /* SmartSpend */;
+		};
 		C66B613D2FAC6F6700C81E92 /* Exceptions for "Widget" folder in "WidgetExtension" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -73,6 +78,7 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		9E6DB8642E59C60700476BE0 /* SmartSpend */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (A381C3B123456789ABCDEF01,);
 			path = SmartSpend;
 			sourceTree = "<group>";
 		};
@@ -444,7 +450,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = 4R72PTT5ZJ;
+				DEVELOPMENT_TEAM = 94MJH9FHS9;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -509,7 +515,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = 4R72PTT5ZJ;
+				DEVELOPMENT_TEAM = 94MJH9FHS9;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -540,10 +546,12 @@
 				CODE_SIGN_ENTITLEMENTS = SmartSpend/SmartSpend.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 4R72PTT5ZJ;
+				DEVELOPMENT_TEAM = 94MJH9FHS9;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_FILE = SmartSpend/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Cenzio;
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Record expenses when you tap the microphone. Audio is recognized on this iPhone.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Turn your spoken expenses into editable text on this iPhone before you choose to send it to AI.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -556,7 +564,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 2.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.tursunov.SmartSpend;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.humblebee.smartspend;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -572,10 +580,12 @@
 				CODE_SIGN_ENTITLEMENTS = SmartSpend/SmartSpend.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 4R72PTT5ZJ;
+				DEVELOPMENT_TEAM = 94MJH9FHS9;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_FILE = SmartSpend/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Cenzio;
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Record expenses when you tap the microphone. Audio is recognized on this iPhone.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Turn your spoken expenses into editable text on this iPhone before you choose to send it to AI.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -588,7 +598,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 2.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.tursunov.SmartSpend;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.humblebee.smartspend;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -602,7 +612,7 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 4R72PTT5ZJ;
+				DEVELOPMENT_TEAM = 94MJH9FHS9;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
 				MARKETING_VERSION = 2.0;
@@ -621,7 +631,7 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 4R72PTT5ZJ;
+				DEVELOPMENT_TEAM = 94MJH9FHS9;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
 				MARKETING_VERSION = 2.0;
@@ -639,7 +649,7 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 4R72PTT5ZJ;
+				DEVELOPMENT_TEAM = 94MJH9FHS9;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.tursunov.SmartSpendUITests;
@@ -656,7 +666,7 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 4R72PTT5ZJ;
+				DEVELOPMENT_TEAM = 94MJH9FHS9;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.tursunov.SmartSpendUITests;
@@ -676,10 +686,10 @@
 				CODE_SIGN_ENTITLEMENTS = WidgetExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 4R72PTT5ZJ;
+				DEVELOPMENT_TEAM = 94MJH9FHS9;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Widget/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = Widget;
+				INFOPLIST_KEY_CFBundleDisplayName = Cenzio;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -688,7 +698,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 2.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.tursunov.SmartSpend.Widget;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.humblebee.smartspend.widget;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -708,10 +718,10 @@
 				CODE_SIGN_ENTITLEMENTS = WidgetExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 4R72PTT5ZJ;
+				DEVELOPMENT_TEAM = 94MJH9FHS9;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Widget/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = Widget;
+				INFOPLIST_KEY_CFBundleDisplayName = Cenzio;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -720,7 +730,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 2.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.tursunov.SmartSpend.Widget;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.humblebee.smartspend.widget;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;

@@ -140,9 +140,9 @@ struct ActionIconButton: View {
     private var iconColor: Color {
         switch style {
         case .primary:
-            return Color(.systemBlue)
+            return Color.accentColor
         case .secondary:
-            return Color(.systemBlue)
+            return Color.accentColor
         case .destructive(let enabled):
             return enabled ? Color(.systemRed) : Color(.systemGray2)
         }
