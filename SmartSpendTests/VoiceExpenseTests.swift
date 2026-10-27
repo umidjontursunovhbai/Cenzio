@@ -77,14 +77,6 @@ struct VoiceExpenseTests {
         }
     }
 
-    @Test("Server addresses cannot redirect device credentials to HTTP or extra paths")
-    func servers() throws {
-        #expect(try VoiceAPI.validatedServer("https://ubuntu.onca-albacore.ts.net:9443").scheme == "https")
-        for text in ["http://ubuntu.onca-albacore.ts.net", "https://evil.invalid", "https://x.ts.net/path", "https://u:pass@x.ts.net", "https://x.ts.net?token=secret"] {
-            #expect(throws: VoiceServiceError.self) { try VoiceAPI.validatedServer(text) }
-        }
-    }
-
     @Test("A reviewed draft is durable and repeated Save does not duplicate it")
     @MainActor
     func persistence() throws {

@@ -1,0 +1,16 @@
+name = "cenzio-voice"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+# Per-client burst limit (Cloudflare Rate Limiting binding; period must be 10 or 60).
+[[ratelimits]]
+name = "BURST"
+namespace_id = "1001"
+simple = { limit = 10, period = 60 }
+
+[vars]
+MODEL = "openai/gpt-6-luna"
+
+# Secret, set once with: npx wrangler secret put OPENROUTER_API_KEY
+# Never commit it, put it in this file, or paste it in chat.

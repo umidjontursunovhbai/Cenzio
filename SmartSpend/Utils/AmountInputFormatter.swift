@@ -10,7 +10,9 @@ enum AmountInputFormatter {
     /// keyboard (ru, uz, de, ...) becomes the decimal point instead of being dropped, and a
     /// pasted "1.234,56" / "12,50" / "1 500 000" is read as the number it shows.
     static func formatEditingText(_ text: String, previous: String, maxFractionDigits: Int = 2) -> String {
-        formatEditingText(interpretingInsertion(in: text, previous: previous), maxFractionDigits: maxFractionDigits)
+        // Our own regrouping ("2500" → "2,500") comes back as an edit; its "," is grouping, not a decimal key.
+        if text == formatEditingText(previous, maxFractionDigits: maxFractionDigits) { return text }
+        return formatEditingText(interpretingInsertion(in: text, previous: previous), maxFractionDigits: maxFractionDigits)
     }
 
     static func formatEditingText(_ text: String, maxFractionDigits: Int = 2) -> String {

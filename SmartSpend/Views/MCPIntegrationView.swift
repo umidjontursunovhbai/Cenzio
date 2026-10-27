@@ -16,11 +16,6 @@ struct MCPIntegrationView: View {
         NavigationStack {
             Form {
                 Section {
-                    NavigationLink(voiceText("Voice connection", "Подключение голоса")) {
-                        VoiceConnectionView()
-                    }
-                }
-                Section {
                     Label("Manual file exchange", systemImage: "doc.badge.arrow.up")
                     Text("Share an expense snapshot with your private Cenzio MCP server. Review its changes here before applying them.")
                         .font(.subheadline)

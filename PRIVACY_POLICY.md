@@ -18,7 +18,7 @@ Your records are synced automatically to the private iCloud database of the iClo
 
 ## Voice and AI expense drafts
 
-Voice recording starts only when you tap the microphone and grant permission. Audio is transcribed on your device and deleted afterwards; it is never uploaded. The first time you use AI expense preparation, Cenzio asks for permission to send the recognized text, your category names and identifiers, currency, reference date and time zone to an AI provider (OpenRouter/OpenAI) through Cenzio's server. Past expenses, income, budgets and audio are not sent. The AI provider's own retention policies apply. Nothing is saved until you review the draft and tap Save.
+Voice recording starts only when you tap the microphone and grant permission. Audio is transcribed on your device and deleted afterwards; it is never uploaded. The first time you use AI expense preparation, Cenzio asks for permission to send the recognized text, your category names and identifiers, currency, reference date and time zone to an AI provider (OpenRouter/OpenAI) through Cenzio's server. Past expenses, income, budgets and audio are not sent. Cenzio's server does not store or log this text. The AI provider's own retention policies apply. Nothing is saved until you review the draft and tap Save.
 
 ## Imports and exports
 

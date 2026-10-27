@@ -2,7 +2,7 @@ import SwiftUI
 import Combine
 import AVFoundation
 
-/// Local audio/STT, then one explicit server-side GPT-6 Luna request. No local semantic fallback.
+/// Local audio/STT, then one explicit GPT-6 Luna request through the Cenzio Worker. No local semantic fallback.
 @MainActor
 final class InlineVoiceExpenseController: ObservableObject {
     static let recognitionLocale = "en-US"
@@ -29,7 +29,7 @@ final class InlineVoiceExpenseController: ObservableObject {
     private var advanceAfterReview = false
 
     init(defaults: UserDefaults = .standard, prepare: @escaping Prepare = { text, categories, currency, reference, id in
-        try await VoiceConnectionStore.shared.drafts(text: text, categories: categories, currency: currency, reference: reference, requestID: id)
+        try await VoiceAPI.drafts(text: text, categories: categories, currency: currency, reference: reference, requestID: id)
     }) {
         self.defaults = defaults
         self.prepare = prepare

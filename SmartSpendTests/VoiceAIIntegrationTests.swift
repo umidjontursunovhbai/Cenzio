@@ -96,14 +96,4 @@ struct VoiceAIIntegrationTests {
         #expect(try VoiceAIReviewBatch.prefills(response: response(kind: "income"), categories: [], currency: "UZS", reference: Date()).isEmpty)
     }
 
-    @Test("Development credential import is bound to the configured server")
-    func provisioning() throws {
-        #if DEBUG
-        let token = String(repeating: "a", count: 43)
-        let valid = try JSONSerialization.data(withJSONObject: ["server": VoiceConnectionStore.defaultServer, "token": token])
-        #expect(try VoiceDevelopmentProvisioning.decode(valid).token == token)
-        let evil = try JSONSerialization.data(withJSONObject: ["server": "https://another.ts.net", "token": token])
-        #expect(throws: VoiceServiceError.self) { try VoiceDevelopmentProvisioning.decode(evil) }
-        #endif
-    }
 }
