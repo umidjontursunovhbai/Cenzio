@@ -17,6 +17,8 @@ final class InlineVoiceExpenseController: ObservableObject {
     @Published private(set) var canRetry = false
     @Published private(set) var remainingCount = 0
     @Published var prefill: VoiceExpensePrefill?
+    /// Two or more drafts from one input are reviewed together instead of one sheet each.
+    @Published var batch: VoiceExpenseBatch?
     private let speech = ExpenseSpeechRecorder()
     private let defaults: UserDefaults
     private let prepare: Prepare
@@ -51,6 +53,7 @@ final class InlineVoiceExpenseController: ObservableObject {
         requestID = UUID()
         reference = Date()
         prefill = nil
+        batch = nil
         pending = []
         advanceAfterReview = false
         remainingCount = 0
@@ -153,9 +156,13 @@ final class InlineVoiceExpenseController: ObservableObject {
     }
 
     func reviewNext() {
-        guard prefill == nil, let next = pending.first else { return }
+        guard prefill == nil, batch == nil, let next = pending.first else { return }
         isVisible = false
-        prefill = next
+        if pending.count > 1 {
+            batch = VoiceExpenseBatch(items: pending)
+        } else {
+            prefill = next
+        }
     }
 
     #if DEBUG
@@ -179,6 +186,14 @@ final class InlineVoiceExpenseController: ObservableObject {
         remainingCount = pending.count
         isVisible = false
         advanceAfterReview = !pending.isEmpty
+    }
+
+    /// Saved or cancelled, the batch review ends this voice input.
+    func batchDidDismiss() {
+        batch = nil
+        pending = []
+        remainingCount = 0
+        cancel()
     }
 
     func reviewDidDismiss() {

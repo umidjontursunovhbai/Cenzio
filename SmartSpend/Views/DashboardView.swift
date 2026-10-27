@@ -93,6 +93,9 @@ struct DashboardView: View {
             .sheet(item: $voice.prefill, onDismiss: { voice.reviewDidDismiss() }) { item in
                 AddExpenseView(prefill: item) { voice.didSave() }
             }
+            .sheet(item: $voice.batch, onDismiss: { voice.batchDidDismiss() }) { batch in
+                VoiceExpenseBatchView(batch: batch)
+            }
             .sheet(isPresented: $showingMonthlySalary) {
                 MonthlySalaryView()
             }
