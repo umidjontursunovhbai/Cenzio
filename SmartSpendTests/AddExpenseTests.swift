@@ -76,13 +76,13 @@ struct AddExpenseTests {
         #expect(AddExpenseDraft.normalizedTitle(" \n ").isEmpty)
     }
 
-    @Test("Save is enabled only for a complete, positive, confirmed expense")
+    @Test("Save is enabled only for a complete, positive expense")
     func saveEnabled() {
         let id = UUID()
         func can(_ title: String = "Bus", amount: String = "2,500", category: UUID? = nil,
-                 available: Set<UUID>? = nil, confirmed: Bool = true, currency: Bool = true) -> Bool {
+                 available: Set<UUID>? = nil, currency: Bool = true) -> Bool {
             AddExpenseDraft.canSave(title: title, amount: amount, categoryID: category ?? id,
-                                    availableCategoryIDs: available ?? [id], dateConfirmed: confirmed, currencyMatches: currency)
+                                    availableCategoryIDs: available ?? [id], currencyMatches: currency)
         }
         #expect(can())
         #expect(!can(" \n"))
@@ -91,10 +91,9 @@ struct AddExpenseTests {
         #expect(!can(amount: "0."))
         #expect(!can(amount: "."))
         #expect(!can(available: [])) // category deleted while the form was open
-        #expect(!can(confirmed: false))
         #expect(!can(currency: false))
         #expect(!AddExpenseDraft.canSave(title: "Bus", amount: "5", categoryID: nil, availableCategoryIDs: [id],
-                                         dateConfirmed: true, currencyMatches: true))
+                                         currencyMatches: true))
     }
 
     @Test("The chosen day keeps the current time of day and never lies in the future")
