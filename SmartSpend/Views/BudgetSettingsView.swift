@@ -80,6 +80,8 @@ struct BudgetSettingsView: View {
                 ScrollViewReader { proxy in
                     ScrollView {
                         VStack(spacing: 28) {
+                            // Fixed scroll target above the animated info, so opening it never overshoots under the bar.
+                            Color.clear.frame(height: 0).id(Self.pageTopID)
                             if showingInfo {
                                 inlineInfoCard
                                     .id(Self.infoCardID)
@@ -108,7 +110,7 @@ struct BudgetSettingsView: View {
                     .onChange(of: showingInfo) { _, isShowing in
                         guard isShowing else { return }
                         withAnimation(.snappy(duration: 0.35)) {
-                            proxy.scrollTo(Self.infoCardID, anchor: .top)
+                            proxy.scrollTo(Self.pageTopID, anchor: .top)
                         }
                     }
                 }
@@ -161,6 +163,7 @@ struct BudgetSettingsView: View {
         .preferredColorScheme(.light)
     }
 
+    private static let pageTopID = "page.top"
     private static let infoCardID = "budgetGoals.inlineInfo"
 
     /// Opens or closes the info card inside the page instead of a separate popup.

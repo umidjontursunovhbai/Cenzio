@@ -17,6 +17,7 @@ struct DataImportView: View {
     @State private var showingFormatInfo = false
     /// Drives the staggered reveal of the inline guide after it is inserted.
     @State private var formatInfoVisible = false
+    private static let pageTopID = "page.top"
     private static let formatInfoID = "import.inlineInfo"
     
     var body: some View {
@@ -24,6 +25,8 @@ struct DataImportView: View {
             ScrollViewReader { proxy in
             ScrollView {
             VStack(spacing: 20) {
+                // Fixed scroll target above the animated info, so opening it never overshoots under the bar.
+                Color.clear.frame(height: 0).id(Self.pageTopID)
                 if showingFormatInfo {
                     inlineFormatInfo
                         .id(Self.formatInfoID)
@@ -77,7 +80,7 @@ struct DataImportView: View {
             .onChange(of: showingFormatInfo) { _, isShowing in
                 guard isShowing else { return }
                 withAnimation(.snappy(duration: 0.35)) {
-                    proxy.scrollTo(Self.formatInfoID, anchor: .top)
+                    proxy.scrollTo(Self.pageTopID, anchor: .top)
                 }
             }
             }
