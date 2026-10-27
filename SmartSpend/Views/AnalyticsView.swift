@@ -48,7 +48,7 @@ struct AnalyticsView: View {
                 .padding(.top, 8)
                 .padding(.bottom, 24)
             }
-            .background(Color.white)
+            .background(iOSDesignSystem.appBackground)
             .navigationBarHidden(true)
             .sheet(isPresented: $showingAddExpense) {
                 AddExpenseView()
@@ -940,12 +940,12 @@ private struct ChartReadoutSlot: View {
 private extension View {
     func analyticsCardSurface() -> some View {
         background(
-            Color.white,
+            iOSDesignSystem.elevatedBackground,
             in: RoundedRectangle(cornerRadius: 20, style: .continuous)
         )
         .overlay {
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .stroke(Color.black.opacity(0.055), lineWidth: 1)
+                .stroke(iOSDesignSystem.layerStroke, lineWidth: 1)
         }
         .shadow(color: Color.black.opacity(0.035), radius: 12, x: 0, y: 6)
     }

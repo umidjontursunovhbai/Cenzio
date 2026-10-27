@@ -15,6 +15,7 @@ struct SettingsView: View {
     @State private var showingAccount = false
     @State private var showingPrivacyPolicy = false
     @State private var showingAlert = false
+    @AppStorage(AppearanceMode.storageKey) private var appearance = AppearanceMode.system
 
     private enum Metrics {
         static let horizontalMargin: CGFloat = 24
@@ -114,6 +115,23 @@ struct SettingsView: View {
                         )
                     }
                     .buttonStyle(SettingsPressStyle())
+                    sectionDivider
+                    Menu {
+                        Picker("appearance".localized, selection: $appearance) {
+                            ForEach(AppearanceMode.allCases) { mode in
+                                Text(mode.title).tag(mode)
+                            }
+                        }
+                    } label: {
+                        rowLabel(
+                            icon: "paint-brush",
+                            title: "appearance".localized,
+                            tint: Color(.systemIndigo),
+                            trailing: appearance.title
+                        )
+                    }
+                    .buttonStyle(SettingsPressStyle())
+                    .accessibilityIdentifier("settings.appearance")
                 }
 
                 settingsSection("planning".localized) {

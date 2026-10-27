@@ -45,7 +45,7 @@ Patterns rebuild from the last 3 months of expenses every 10 additions or on app
 
 ## Build
 - Scheme `SmartSpend`, simulator iPhone 17 (`xcodebuild ... -destination 'platform=iOS Simulator,id=...'`).
-- One harmless warning: Widget extension `CFBundleShortVersionString` (1.0) ≠ app (2.0). Bump Widget's version to clear it.
+- App and Widget share `MARKETING_VERSION` (2.0), so the version-mismatch warning is gone.
 
 ## Localization
 Keys are in `SmartSpend.xcodeproj/Localizable.strings`. `.localized` is a `String` extension.

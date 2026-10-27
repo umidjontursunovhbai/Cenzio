@@ -17,8 +17,12 @@ enum iOSDesignSystem {
         }
     })
 
-    static let layerStroke = Color.black.opacity(0.055)
-    static let layerHighlight = Color.white.opacity(0.82)
+    static let layerStroke = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark ? UIColor.white.withAlphaComponent(0.08) : UIColor.black.withAlphaComponent(0.055)
+    })
+    static let layerHighlight = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark ? UIColor.white.withAlphaComponent(0.06) : UIColor.white.withAlphaComponent(0.82)
+    })
     static let cardShadow = Color.black.opacity(0.055)
     static let controlShadow = Color.black.opacity(0.08)
 
