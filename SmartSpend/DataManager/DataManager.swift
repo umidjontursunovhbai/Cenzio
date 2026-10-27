@@ -70,7 +70,8 @@ class DataManager: ObservableObject {
          mcpStorageSync: (() -> Bool)? = nil) {
         self.sharedDefaults = defaults
         self.activityManager = activityManager
-        self.flushMCPStorage = mcpStorageSync ?? { defaults.synchronize() }
+        // synchronize() is deprecated and often returns false even after a successful write.
+        self.flushMCPStorage = mcpStorageSync ?? { _ = defaults.synchronize(); return true }
         self.user = User(currency: .usd, language: .english)
         loadData()
         if startBackgroundTasks { startTimer() }
@@ -389,7 +390,7 @@ class DataManager: ObservableObject {
         let encoded = try JSONEncoder().encode(next)
         let previous = sharedDefaults.data(forKey: "expenses")
         sharedDefaults.set(encoded, forKey: "expenses")
-        guard flushMCPStorage() else {
+        guard flushMCPStorage(), sharedDefaults.data(forKey: "expenses") == encoded else {
             if let previous { sharedDefaults.set(previous, forKey: "expenses") }
             else { sharedDefaults.removeObject(forKey: "expenses") }
             _ = flushMCPStorage()
