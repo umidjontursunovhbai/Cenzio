@@ -115,6 +115,24 @@ final class CloudSyncController: ObservableObject {
         saveMetadata()
     }
 
+    /// Account deletion: removes this app's whole zone from the user's iCloud, so every
+    /// device sees it as deleted (see `.fetchedDatabaseChanges`). Throws when iCloud is
+    /// reachable but the delete could not be sent, so nothing is half deleted.
+    func deleteAllCloudData() async throws {
+        debounce?.cancel()
+        if engine == nil { await startEngineIfPossible() }
+        guard let engine else { return } // No iCloud account: nothing is stored there.
+        engine.state.remove(pendingRecordZoneChanges: engine.state.pendingRecordZoneChanges)
+        engine.state.add(pendingDatabaseChanges: [.deleteZone(CloudSyncRecordMapper.zoneID)])
+        try await engine.sendChanges()
+        guard !engine.state.pendingDatabaseChanges.contains(.deleteZone(CloudSyncRecordMapper.zoneID)) else {
+            throw CKError(.networkFailure)
+        }
+        defaults.set(false, forKey: Keys.zoneCreated)
+        metadata = CloudSyncMetadata()
+        saveMetadata()
+    }
+
     // MARK: - Engine
 
     private func startEngineIfPossible() async {
@@ -234,10 +252,17 @@ final class CloudSyncController: ObservableObject {
             }
 
         case .fetchedDatabaseChanges(let changes):
-            // Zone deleted or purged in iCloud settings: this device still has the data,
-            // and sync is always on, so upload it again.
-            if changes.deletions.contains(where: { $0.zoneID == CloudSyncRecordMapper.zoneID }) {
-                queueAllForUpload(engine)
+            if let deletion = changes.deletions.first(where: { $0.zoneID == CloudSyncRecordMapper.zoneID }) {
+                if deletion.reason == .deleted {
+                    // Only account deletion on another device deletes the zone from code.
+                    localDataWasCleared()
+                    dataManager.clearAllData()
+                    AppleAccountStore.shared.forgetAccount()
+                } else {
+                    // Purged in iCloud settings or reset: this device still has the data,
+                    // and sync is always on, so upload it again.
+                    queueAllForUpload(engine)
+                }
             }
 
         case .fetchedRecordZoneChanges(let changes):

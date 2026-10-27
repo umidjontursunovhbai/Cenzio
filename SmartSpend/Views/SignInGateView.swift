@@ -2,7 +2,7 @@ import AuthenticationServices
 import SwiftUI
 import UIKit
 
-/// Launch-time welcome screen. Sign in with Apple is the only way in.
+/// Launch-time welcome screen. Sign in with Apple is optional; the app works fully without it.
 struct SignInGateView: View {
     @ObservedObject var store: AppleAccountStore = .shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -102,6 +102,16 @@ struct SignInGateView: View {
             .frame(height: 52)
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .accessibilityIdentifier("signin.apple")
+
+            Button {
+                store.continueWithoutSignIn()
+            } label: {
+                Text("apple_signin_skip".localized)
+                    .font(.body.weight(.semibold))
+                    .frame(maxWidth: .infinity, minHeight: 44)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityIdentifier("signin.skip")
 
             Text("apple_signin_privacy_note".localized)
                 .font(.footnote)

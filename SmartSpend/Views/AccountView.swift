@@ -1,3 +1,5 @@
+import AuthenticationServices
+import LocalAuthentication
 import SwiftUI
 
 /// Display rules for the signed-in Apple ID, shared by Settings and the Account screen.
@@ -20,10 +22,13 @@ enum AppleAccountDisplay {
     }
 }
 
-/// The signed-in Apple account. Expenses stay on this iPhone; signing out only returns to the sign-in screen.
+/// The optional Apple account: sign in, sign out, or delete the account with all data.
 struct AccountView: View {
     @ObservedObject private var store = AppleAccountStore.shared
     @State private var confirmingSignOut = false
+    @State private var confirmingDelete = false
+    @State private var isDeleting = false
+    @State private var deleteError: String?
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -66,6 +71,40 @@ struct AccountView: View {
                 } footer: {
                     Text("account_manage_apple_id_footer".localized)
                 }
+
+                Section {
+                    Button(role: .destructive) { confirmingDelete = true } label: {
+                        HStack {
+                            Text("account_delete".localized)
+                            if isDeleting {
+                                Spacer()
+                                ProgressView()
+                            }
+                        }
+                    }
+                    .disabled(isDeleting)
+                    .accessibilityIdentifier("account.delete")
+                } footer: {
+                    Text("account_delete_footer".localized)
+                }
+            } else {
+                Section {
+                    SignInWithAppleButton(.signIn) { request in
+                        request.requestedScopes = [.fullName, .email]
+                    } onCompletion: { result in
+                        store.handle(result)
+                    }
+                    .signInWithAppleButtonStyle(.black)
+                    .frame(height: 48)
+                    .listRowInsets(EdgeInsets())
+                    .accessibilityIdentifier("account.signIn")
+                } footer: {
+                    if let message = store.errorMessage {
+                        Text(message).foregroundStyle(.red)
+                    } else {
+                        Text("account_sign_in_footer".localized)
+                    }
+                }
             }
         }
         .listStyle(.insetGrouped)
@@ -85,6 +124,37 @@ struct AccountView: View {
             Button("cancel".localized, role: .cancel) { }
         } message: {
             Text("account_sign_out_confirm_message".localized)
+        }
+        .alert("account_delete_confirm_title".localized, isPresented: $confirmingDelete) {
+            Button("cancel".localized, role: .cancel) { }
+            Button("delete".localized, role: .destructive) { authenticateAndDelete() }
+        } message: {
+            Text("account_delete_confirm_message".localized)
+        }
+        .alert("account_delete".localized, isPresented: Binding(get: { deleteError != nil }, set: { if !$0 { deleteError = nil } })) {
+            Button("ok".localized) { deleteError = nil }
+        } message: { Text(deleteError ?? "") }
+    }
+
+    private func authenticateAndDelete() {
+        isDeleting = true
+        Task {
+            defer { isDeleting = false }
+            // deviceOwnerAuthentication falls back to the passcode when Face ID is unavailable or fails.
+            let approved = (try? await LAContext().evaluatePolicy(.deviceOwnerAuthentication,
+                                                                  localizedReason: "account_delete_auth_reason".localized)) ?? false
+            guard approved else { return }
+            // iCloud first: if it fails, nothing is deleted and the owner can retry.
+            do {
+                try await CloudSyncController.shared.deleteAllCloudData()
+            } catch {
+                deleteError = "account_delete_failed".localized
+                return
+            }
+            CloudSyncController.shared.localDataWasCleared()
+            DataManager.shared.clearAllData()
+            dismiss()
+            store.forgetAccount()
         }
     }
 }

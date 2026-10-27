@@ -10,8 +10,8 @@ struct AppleAccount: Codable, Equatable {
     var email: String?
 }
 
-/// Owns the Sign in with Apple session. Expenses never depend on this state;
-/// it only gates the UI.
+/// Owns the optional Sign in with Apple session. Expenses never depend on this state;
+/// it only decides whether the welcome screen is shown.
 @MainActor
 final class AppleAccountStore: ObservableObject {
     static let shared = AppleAccountStore()
@@ -25,6 +25,14 @@ final class AppleAccountStore: ObservableObject {
     @Published private(set) var state: State = .checking
     /// Localized message for the last non-cancellation sign-in failure.
     @Published private(set) var errorMessage: String?
+    /// The owner chose "Continue without account" on the welcome screen, or signed out later.
+    @Published private(set) var hasSkippedSignIn: Bool
+
+    /// The welcome screen shows only until the owner signs in or skips it.
+    var showsWelcome: Bool {
+        if case .signedOut = state { return !hasSkippedSignIn }
+        return false
+    }
 
     var account: AppleAccount? {
         if case .signedIn(let account) = state { return account }
@@ -33,8 +41,10 @@ final class AppleAccountStore: ObservableObject {
 
     private let keychain = AppleAccountKeychain(service: "ai.humblebee.smartspend.apple-account")
     private var revocationObserver: NSObjectProtocol?
+    private static let skippedSignInKey = "account.skippedSignIn"
 
     private init() {
+        hasSkippedSignIn = UserDefaults.standard.bool(forKey: Self.skippedSignInKey)
         if let stored = keychain.load() {
             state = .signedIn(stored)
         } else {
@@ -79,10 +89,30 @@ final class AppleAccountStore: ObservableObject {
         }
     }
 
+    func continueWithoutSignIn() {
+        setSkippedSignIn(true)
+        errorMessage = nil
+    }
+
+    /// Signing in is optional, so signing out keeps the app open.
     func signOut() {
         keychain.delete()
         errorMessage = nil
+        setSkippedSignIn(true)
         state = .signedOut
+    }
+
+    /// After account deletion: forget the Apple ID and show the welcome screen again.
+    func forgetAccount() {
+        keychain.delete()
+        errorMessage = nil
+        setSkippedSignIn(false)
+        state = .signedOut
+    }
+
+    private func setSkippedSignIn(_ skipped: Bool) {
+        hasSkippedSignIn = skipped
+        UserDefaults.standard.set(skipped, forKey: Self.skippedSignInKey)
     }
 
     /// Re-validates the stored Apple ID with Apple. Call on launch and when the app becomes active.

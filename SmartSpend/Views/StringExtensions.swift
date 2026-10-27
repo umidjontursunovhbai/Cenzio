@@ -509,7 +509,8 @@ extension String {
             "apple_signin_point_private": "Your expenses never leave this device",
             "apple_signin_point_smart": "Smart categories that learn your habits",
             "apple_signin_point_insights": "Clear budgets and spending insights",
-            "apple_signin_privacy_note": "Sign in with Apple only identifies you. Cenzio doesn't upload or sync your expenses.",
+            "apple_signin_privacy_note": "Signing in is optional. Your expenses stay on your devices and sync only through your own iCloud.",
+            "apple_signin_skip": "Continue without account",
             "apple_signin_error_generic": "Sign in with Apple didn't complete. Please try again.",
 
             // Info popup
@@ -524,8 +525,15 @@ extension String {
             "account_email": "Email",
             "account_sign_out": "Sign Out",
             "account_sign_out_confirm_title": "Sign out of Cenzio?",
-            "account_sign_out_confirm_message": "Your expenses stay on this iPhone. You'll need to sign in with Apple again to open Cenzio.",
-            "account_local_data_footer": "Your expenses are stored only on this iPhone. Signing out doesn't delete them.",
+            "account_sign_out_confirm_message": "Your expenses stay on this iPhone, and you can keep using Cenzio without an account.",
+            "account_local_data_footer": "Your expenses are stored on this iPhone and in your own iCloud. Signing out doesn't delete them.",
+            "account_sign_in_footer": "Signing in is optional. Cenzio works the same without an account.",
+            "account_delete": "Delete Account",
+            "account_delete_footer": "Deletes your Cenzio account and all your data on this iPhone and in iCloud, on every device. This can't be undone.",
+            "account_delete_confirm_title": "Delete your account?",
+            "account_delete_confirm_message": "All expenses, categories, budgets and settings will be deleted from this iPhone and from iCloud on all your devices. This can't be undone.",
+            "account_delete_auth_reason": "Confirm deleting your Cenzio account",
+            "account_delete_failed": "Your account couldn't be deleted because iCloud is unreachable. Nothing was deleted. Check your connection and try again.",
             "account_manage_apple_id_footer": "To stop using your Apple ID with Cenzio, open the Settings app, tap your name, then Sign-In & Security > Sign in with Apple.",
 
             // iCloud sync
