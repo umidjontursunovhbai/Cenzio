@@ -9,6 +9,8 @@ struct BudgetSettingsView: View {
     @State private var showingAddGoal = false
     @State private var showingResetConfirmation = false
     @State private var showingInfo = false
+    /// Drives the staggered reveal of the inline info sections after the card is inserted.
+    @State private var infoContentVisible = false
 
     init(focusCategoryID: UUID? = nil) {
         self.focusCategoryID = focusCategoryID
@@ -78,6 +80,14 @@ struct BudgetSettingsView: View {
                 ScrollViewReader { proxy in
                     ScrollView {
                         LazyVStack(spacing: 28) {
+                            if showingInfo {
+                                inlineInfoCard
+                                    .id(Self.infoCardID)
+                                    .transition(.asymmetric(
+                                        insertion: .move(edge: .top).combined(with: .opacity),
+                                        removal: .opacity.combined(with: .scale(scale: 0.96, anchor: .top))
+                                    ))
+                            }
                             monthlyOverview(
                                 currentMonthSpent: spentThisMonth,
                                 counts: statusCounts(using: spendingByCategory)
@@ -87,7 +97,7 @@ struct BudgetSettingsView: View {
                             budgetToolsSection
                         }
                         .padding(.horizontal, iOSDesignSystem.Spacing.screenMargin)
-                        .padding(.top, 12)
+                        .padding(.top, 8)
                         .padding(.bottom, 36)
                     }
                     .scrollIndicators(.hidden)
@@ -95,23 +105,28 @@ struct BudgetSettingsView: View {
                     .onAppear {
                         scrollToFocusedCategory(using: proxy)
                     }
+                    .onChange(of: showingInfo) { _, isShowing in
+                        guard isShowing else { return }
+                        withAnimation(.snappy(duration: 0.35)) {
+                            proxy.scrollTo(Self.infoCardID, anchor: .top)
+                        }
+                    }
                 }
             }
             .navigationTitle("budget_goals".localized)
-            .navigationBarTitleDisplayMode(.large)
-            .toolbarBackground(Color.white, for: .navigationBar)
-            .toolbarBackground(.visible, for: .navigationBar)
+            .navigationBarTitleDisplayMode(.inline)
+            // Default bar: on iOS 26 content scrolls under a soft, see-through top edge.
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button(action: presentInfo) {
-                        HeroIcon("information-circle", size: 23)
+                        HeroIcon(showingInfo ? "x-mark" : "information-circle", size: 23)
                             .foregroundStyle(Color.accentColor)
                             .frame(minWidth: iOSDesignSystem.Size.minimumTapTarget,
                                    minHeight: iOSDesignSystem.Size.minimumTapTarget)
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("budget_info_title".localized)
+                    .accessibilityLabel(showingInfo ? "close".localized : "budget_info_title".localized)
                     .accessibilityIdentifier("budgetGoals.infoButton")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
@@ -143,22 +158,52 @@ struct BudgetSettingsView: View {
                 dataManager.saveBudgets()
             }
         }
-        .infoPopup(
-            isPresented: $showingInfo,
-            title: "budget_info_title".localized,
-            icon: "chart-pie",
-            accessibilityPrefix: "budgetGoals.info"
-        ) {
+        .preferredColorScheme(.light)
+    }
+
+    private static let infoCardID = "budgetGoals.inlineInfo"
+
+    /// Opens or closes the info card inside the page instead of a separate popup.
+    private func presentInfo() {
+        if showingInfo {
+            infoContentVisible = false
+            withAnimation(.snappy(duration: 0.3)) { showingInfo = false }
+        } else {
+            withAnimation(.spring(response: 0.45, dampingFraction: 0.86)) { showingInfo = true }
+        }
+    }
+
+    private var inlineInfoCard: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(spacing: 10) {
+                HeroIcon("chart-pie", size: 18)
+                    .foregroundStyle(Color.accentColor)
+                    .frame(width: 34, height: 34)
+                    .background(Color.accentColor.opacity(0.1), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .accessibilityHidden(true)
+                Text("budget_info_title".localized)
+                    .font(.headline)
+                Spacer()
+                Button(action: presentInfo) {
+                    HeroIcon("x-mark", size: 16)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 30, height: 30)
+                        .background(Color(.systemGray6), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("close".localized)
+            }
+
             BudgetGoalsInfoContent(
                 example: infoExample,
                 currency: dataManager.user.currency
             )
+            .environment(\.infoPopupIsVisible, infoContentVisible)
         }
-        .preferredColorScheme(.light)
-    }
-
-    private func presentInfo() {
-        showingInfo = true
+        // No card behind it: the glass background showed as a box while the sections animated in.
+        .padding(.horizontal, 4)
+        .padding(.top, 4)
+        .onAppear { infoContentVisible = true }
     }
 
     // MARK: - Overview
