@@ -34,7 +34,8 @@ struct DashboardView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                LazyVStack(spacing: 18) {
+                // Plain VStack: a LazyVStack re-measured cards near the bottom, so the content jumped.
+                VStack(spacing: 18) {
                     AppScreenHeader(
                         "dashboard".localized,
                         subtitle: Date().formatted(.dateTime.month(.wide).year())
@@ -1521,7 +1522,7 @@ struct BudgetDetailsView: View {
                 Spacer()
             }
             
-            LazyVStack(spacing: 12) {
+            VStack(spacing: 12) {
                 ForEach(dataManager.getCategoryBreakdownForPeriod().prefix(5), id: \.name) { item in
                     CategoryBreakdownRow(
                         name: item.name,

@@ -29,6 +29,8 @@ struct SmartSpendApp: App {
 final class SmartSpendAppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        // No rubber-band overscroll: lists stop at their ends instead of springing past and back.
+        UIScrollView.appearance().bounces = false
         CloudSyncController.shared.start()
         application.registerForRemoteNotifications()
         return true
