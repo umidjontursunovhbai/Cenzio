@@ -15,11 +15,24 @@ struct DataImportView: View {
     @State private var alertMessage = ""
     @State private var showingConfirmation = false
     @State private var showingFormatInfo = false
+    /// Drives the staggered reveal of the inline guide after it is inserted.
+    @State private var formatInfoVisible = false
+    private static let formatInfoID = "import.inlineInfo"
     
     var body: some View {
         NavigationStack {
+            ScrollViewReader { proxy in
             ScrollView {
             VStack(spacing: 20) {
+                if showingFormatInfo {
+                    inlineFormatInfo
+                        .id(Self.formatInfoID)
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .top).combined(with: .opacity),
+                            removal: .opacity.combined(with: .scale(scale: 0.96, anchor: .top))
+                        ))
+                }
+
                 // Header
                 VStack(spacing: 12) {
                     HeroIcon(systemName: "square.and.arrow.down")
@@ -61,15 +74,20 @@ struct DataImportView: View {
             }
             .padding()
             }
+            .onChange(of: showingFormatInfo) { _, isShowing in
+                guard isShowing else { return }
+                withAnimation(.snappy(duration: 0.35)) {
+                    proxy.scrollTo(Self.formatInfoID, anchor: .top)
+                }
+            }
+            }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        showingFormatInfo = true
-                    } label: {
-                        HeroIcon(systemName: "info.circle")
+                    Button(action: toggleFormatInfo) {
+                        HeroIcon(showingFormatInfo ? "x-mark" : "information-circle")
                     }
-                    .accessibilityLabel("csv_format_guide".localized)
+                    .accessibilityLabel(showingFormatInfo ? "close".localized : "csv_format_guide".localized)
                     .accessibilityIdentifier("import.infoButton")
                 }
 
@@ -106,14 +124,46 @@ struct DataImportView: View {
                 Text("confirm_import_message".localized)
             }
         }
-        .infoPopup(
-            isPresented: $showingFormatInfo,
-            title: "csv_format_guide".localized,
-            icon: "document-text",
-            accessibilityPrefix: "import.info"
-        ) {
-            CSVFormatInfoView()
+    }
+
+    /// Opens or closes the CSV guide inside the page instead of a separate popup.
+    private func toggleFormatInfo() {
+        if showingFormatInfo {
+            formatInfoVisible = false
+            withAnimation(.snappy(duration: 0.3)) { showingFormatInfo = false }
+        } else {
+            withAnimation(.spring(response: 0.45, dampingFraction: 0.86)) { showingFormatInfo = true }
         }
+    }
+
+    private var inlineFormatInfo: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(spacing: 10) {
+                HeroIcon("document-text", size: 18)
+                    .foregroundStyle(Color.accentColor)
+                    .frame(width: 34, height: 34)
+                    .background(Color.accentColor.opacity(0.1), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .accessibilityHidden(true)
+                Text("csv_format_guide".localized)
+                    .font(.headline)
+                Spacer()
+                Button(action: toggleFormatInfo) {
+                    HeroIcon("x-mark", size: 16)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 30, height: 30)
+                        .background(Color(.systemGray6), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("close".localized)
+            }
+
+            CSVFormatInfoView()
+                .environment(\.infoPopupIsVisible, formatInfoVisible)
+        }
+        .padding(.horizontal, 4)
+        .padding(.top, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .onAppear { formatInfoVisible = true }
     }
     
     // MARK: - View Components
