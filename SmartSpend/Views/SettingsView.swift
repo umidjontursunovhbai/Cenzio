@@ -77,13 +77,8 @@ struct SettingsView: View {
                 .sheet(isPresented: $showingBudgetGoals) {
                     BudgetSettingsView()
                 }
-                .alert("clear_all_data".localized, isPresented: $showingAlert) {
-                    Button("cancel".localized, role: .cancel) { }
-                    Button("delete".localized, role: .destructive) {
-                        clearAllData()
-                    }
-                } message: {
-                    Text("\("clear_all_data_message".localized) \("icloud_sync_clear_note".localized)")
+                .sheet(isPresented: $showingAlert) {
+                    ClearDataView()
                 }
         }
     }
@@ -404,7 +399,7 @@ struct SettingsView: View {
             } label: {
                 HStack(spacing: Metrics.rowSpacing) {
                     iconTile("trash", tint: Color(.systemRed))
-                    Text("clear_all_data".localized)
+                    Text("clear_data_title".localized)
                         .font(.body.weight(.medium))
                         .foregroundStyle(Color(.systemRed))
                     Spacer(minLength: 12)
@@ -418,17 +413,12 @@ struct SettingsView: View {
             .clipShape(cardShape)
             .liquidGlassCard(cornerRadius: Metrics.cardRadius)
 
-            Text("clear_all_data_message".localized)
+            Text("clear_data_footer".localized)
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, Metrics.rowPadding)
         }
-    }
-
-    private func clearAllData() {
-        cloudSync.localDataWasCleared()
-        dataManager.clearAllData()
     }
 }
 

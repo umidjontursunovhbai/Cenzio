@@ -925,6 +925,37 @@ class DataManager: ObservableObject {
         }
     }
     
+    /// Parts of local data the owner can clear on their own (Settings → Clear data).
+    enum ClearablePart: String, CaseIterable, Identifiable {
+        case expenses, deletedExpenses, categories, budgetsAndGoals, salaries, recurring, suggestions, settings
+        var id: String { rawValue }
+    }
+
+    /// Clears only the chosen parts; choosing every part is the same as `clearAllData()`.
+    func clearData(_ parts: Set<ClearablePart>) {
+        guard parts != Set(ClearablePart.allCases) else { return clearAllData() }
+        if parts.contains(.expenses) { expenses.removeAll() }
+        if parts.contains(.deletedExpenses) { deletedExpenses.removeAll() }
+        if parts.contains(.categories) { userCategories.removeAll() }
+        if parts.contains(.budgetsAndGoals) {
+            categoryBudgets.removeAll()
+            spendingGoals.removeAll()
+        }
+        if parts.contains(.salaries) { monthlySalaries.removeAll() }
+        if parts.contains(.recurring) { recurringExpenses.removeAll() }
+        if parts.contains(.suggestions) {
+            learnedPatterns.removeAll()
+            activityManager.reset()
+        }
+        if parts.contains(.settings) {
+            user = User(currency: .usd)
+            selectedTimePeriod = .currentMonth
+            customStartDate = Date()
+            customEndDate = customStartDate
+        }
+        saveData()
+    }
+
     func clearAllData() {
         expenses.removeAll()
         user = User(currency: .usd)
