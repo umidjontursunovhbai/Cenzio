@@ -11,7 +11,6 @@ struct DashboardView: View {
     @State private var selectedBudgetCategory: UserCategory?
     @State private var showingBudgetSettings = false
     @State private var selectedPaceDay: Int?
-    @State private var selectedCalendarDay: Int?
     @State private var spotlight: Spotlight = .places
     @State private var overview = DashboardOverview(
         expenses: DataManager.shared.expenses,
@@ -531,119 +530,86 @@ struct DashboardView: View {
         }
     }
 
-    // MARK: - Calendar heatmap
+    // MARK: - Daily spending
 
+    /// This week so far against the same days of last week, so the comparison is fair mid-week.
     private var calendarHeatmapCard: some View {
-        let days = overview.calendarDays
-        let maxAmount = days.map(\.amount).max() ?? 0
-        let todayNumber = overview.daysElapsed
-        let selected = days.first { $0.day == (selectedCalendarDay ?? todayNumber) }
-        let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: 7)
+        let now = Date()
+        let weekStart = calendar.dateInterval(of: .weekOfYear, for: now)?.start ?? calendar.startOfDay(for: now)
+        let lastWeekStart = calendar.date(byAdding: .day, value: -7, to: weekStart) ?? weekStart
+        let lastWeekSameTime = calendar.date(byAdding: .day, value: -7, to: now) ?? now
+        let thisWeek = dataManager.expenses
+            .filter { $0.date >= weekStart && $0.date <= now }
+            .reduce(0) { $0 + $1.amount }
+        let lastWeek = dataManager.expenses
+            .filter { $0.date >= lastWeekStart && $0.date <= lastWeekSameTime }
+            .reduce(0) { $0 + $1.amount }
+        let scale = max(thisWeek, lastWeek, 1)
 
-        return VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("dash_daily_spending".localized).font(.headline)
-                Spacer()
-                heatLegend
-            }
-
-            LazyVGrid(columns: columns, spacing: 6) {
-                ForEach(Array(orderedWeekdaySymbols.enumerated()), id: \.offset) { _, symbol in
-                    Text(symbol)
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                        .frame(maxWidth: .infinity)
-                }
-                ForEach(0..<overview.leadingBlankDays, id: \.self) { index in
-                    Color.clear.frame(height: 1)
-                }
-                ForEach(days) { day in
-                    heatCell(day, maxAmount: maxAmount, isToday: day.day == todayNumber,
-                             isSelected: day.day == selected?.day)
+        return VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("dash_this_week".localized).font(.headline)
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(money(thisWeek))
+                        .font(.title2.weight(.semibold))
+                        .fontDesign(.rounded)
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                    weekChangeLabel(thisWeek: thisWeek, lastWeek: lastWeek)
                 }
             }
 
-            if let selected {
-                HStack(spacing: 8) {
-                    Text(selected.date.formatted(.dateTime.weekday(.wide).month(.abbreviated).day()))
-                        .font(.subheadline.weight(.medium))
-                    Spacer()
-                    if selected.amount > 0 {
-                        Text(String(format: "dashboard_expense_count_format".localized, selected.count))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Text(money(selected.amount))
-                            .font(.subheadline.weight(.semibold))
-                            .fontDesign(.rounded)
-                            .monospacedDigit()
-                    } else {
-                        Text((selected.isFuture ? "dash_upcoming_day" : "dash_no_spending_day").localized)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: iOSDesignSystem.Radius.medium, style: .continuous))
-                .accessibilityElement(children: .combine)
+            VStack(alignment: .leading, spacing: 10) {
+                weekBar(title: "dash_this_week".localized, amount: thisWeek, scale: scale, color: Color.accentColor)
+                weekBar(title: "dash_last_week_same_days".localized, amount: lastWeek, scale: scale, color: Color(.systemGray3))
             }
         }
         .dashboardCard()
+        .accessibilityElement(children: .combine)
     }
 
-    private var orderedWeekdaySymbols: [String] {
-        let symbols = calendar.veryShortWeekdaySymbols
-        let start = calendar.firstWeekday - 1
-        return Array(symbols[start...] + symbols[..<start])
-    }
-
-    private func heatLevel(_ amount: Double, maxAmount: Double) -> Double {
-        guard amount > 0, maxAmount > 0 else { return 0 }
-        return 0.16 + 0.74 * (amount / maxAmount).squareRoot()
-    }
-
-    private func heatCell(_ day: DashboardOverview.CalendarDay, maxAmount: Double, isToday: Bool, isSelected: Bool) -> some View {
-        let level = heatLevel(day.amount, maxAmount: maxAmount)
-        let fill: Color = level > 0 ? Color.accentColor.opacity(level) : Color(.systemGray6)
-
-        return Button {
-            selectedCalendarDay = day.day
-        } label: {
-            Text("\(day.day)")
-                .font(.caption.weight(isToday ? .bold : .medium))
-                .monospacedDigit()
-                .foregroundStyle(day.isFuture ? Color(.tertiaryLabel) : (level > 0.55 ? Color.white : Color.primary))
-                .frame(maxWidth: .infinity)
-                .aspectRatio(1, contentMode: .fit)
-                .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(day.isFuture ? Color(.systemGray6).opacity(0.5) : fill)
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .stroke(isSelected ? Color.primary : (isToday ? Color.accentColor.opacity(0.6) : .clear),
-                                lineWidth: isSelected ? 1.8 : 1)
-                )
-                .contentShape(Rectangle())
+    @ViewBuilder
+    private func weekChangeLabel(thisWeek: Double, lastWeek: Double) -> some View {
+        if lastWeek > 0 {
+            let change = (thisWeek - lastWeek) / lastWeek
+            let percent = Int((abs(change) * 100).rounded())
+            Text(String(format: (change > 0 ? "dash_week_more_format" : "dash_week_less_format").localized, percent))
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(change > 0 ? Color(.systemRed) : Color(.systemGreen))
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        } else {
+            Text("dash_no_last_week".localized)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(day.date.formatted(.dateTime.month(.wide).day()))
-        .accessibilityValue(day.amount > 0 ? CurrencyFormatter.formatFull(day.amount, currency: currency) : "dash_no_spending_day".localized)
     }
 
-    private var heatLegend: some View {
-        HStack(spacing: 4) {
-            Text("dash_less".localized)
-            ForEach([0.0, 0.3, 0.6, 0.9], id: \.self) { level in
-                RoundedRectangle(cornerRadius: 3, style: .continuous)
-                    .fill(level == 0 ? Color(.systemGray6) : Color.accentColor.opacity(level))
-                    .frame(width: 10, height: 10)
+    private func weekBar(title: String, amount: Double, scale: Double, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack {
+                Text(title)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text(money(amount))
+                    .font(.caption.weight(.semibold))
+                    .fontDesign(.rounded)
+                    .monospacedDigit()
             }
-            Text("dash_more".localized)
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color(.systemGray6))
+                    Capsule()
+                        .fill(color)
+                        .frame(width: amount > 0 ? max(8, proxy.size.width * amount / scale) : 0)
+                }
+            }
+            .frame(height: 10)
         }
-        .font(.caption2)
-        .foregroundStyle(.secondary)
-        .accessibilityHidden(true)
     }
 
     // MARK: - Categories
