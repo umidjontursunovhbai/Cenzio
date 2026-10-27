@@ -77,11 +77,11 @@ struct IntegrationConnectionTests {
     @Test("Notion consent opens only the provider authorization endpoint")
     func notionAuthorization() throws {
         let valid = "https://api.notion.com/v1/oauth/authorize?client_id=test&state=test"
-        #expect(try ExpenseSyncAPI.authorizationURL(valid, provider: .notion).host == "api.notion.com")
+        #expect(try ExpenseSyncAPI.notionAuthorizationURL(valid).host == "api.notion.com")
         for text in ["http://api.notion.com/v1/oauth/authorize", "https://api.notion.com.evil.example/v1/oauth/authorize",
                      "https://user@api.notion.com/v1/oauth/authorize", "https://api.notion.com/v1/search",
                      "https://api.notion.com:444/v1/oauth/authorize"] {
-            #expect(throws: ExpenseSyncError.self) { try ExpenseSyncAPI.authorizationURL(text, provider: .notion) }
+            #expect(throws: ExpenseSyncError.self) { try ExpenseSyncAPI.notionAuthorizationURL(text) }
         }
     }
 
@@ -90,17 +90,29 @@ struct IntegrationConnectionTests {
         let values = try JSONDecoder().decode(ExpenseSyncCapabilities.self,
             from: Data(#"{"deviceEnrollment":false,"google":true,"notion":false}"#.utf8))
         #expect(!values.deviceEnrollment)
-        #expect(values.supports(.google))
-        #expect(!values.supports(.notion))
+        #expect(!values.notion)
     }
 
-    @Test("Provider status supports Notion page selection without claiming connection")
+    @Test("Notion status supports page selection without claiming connection")
     func pageSelectionStatus() throws {
-        let status = try JSONDecoder().decode(ExpenseSyncProviderStatus.self,
+        let status = try JSONDecoder().decode(ExpenseSyncNotionStatus.self,
             from: Data(#"{"connected":false,"pending":false,"needsSelection":true,"configured":true}"#.utf8))
         #expect(!status.connected)
         #expect(status.needsSelection == true)
-        #expect(status.spreadsheetURL == nil)
+        #expect(status.databaseURL == nil)
+        #expect(status.lastChecked == nil)
+    }
+
+    @Test("Connected Notion status links only to a notion.so database page")
+    func connectedNotionStatus() throws {
+        let id = "0123456789abcdef0123456789abcdef"
+        let status = try JSONDecoder().decode(ExpenseSyncNotionStatus.self, from: Data(
+            #"{"connected":true,"pending":false,"needsSelection":false,"configured":true,"needsAttention":false,"databaseId":"x","databaseUrl":"https://www.notion.so/\#(id)","lastSuccessAt":1761550000.5,"conflictCount":0,"pendingCount":0}"#.utf8))
+        #expect(status.databaseURL?.absoluteString == "https://www.notion.so/\(id)")
+        #expect(status.lastChecked == Date(timeIntervalSince1970: 1761550000.5))
+        let unsafe = try JSONDecoder().decode(ExpenseSyncNotionStatus.self, from: Data(
+            #"{"connected":true,"pending":false,"databaseUrl":"https://www.notion.so.evil.example/\#(id)"}"#.utf8))
+        #expect(unsafe.databaseURL == nil)
     }
 }
 

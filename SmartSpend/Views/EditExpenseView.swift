@@ -3,115 +3,95 @@ import SwiftUI
 struct EditExpenseView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var dataManager = DataManager.shared
-    
+
     let expense: Expense
-    
+    /// Moves the expense to Deleted; the caller handles undo. Hidden when nil.
+    var onDelete: (() -> Void)?
+
     @State private var title: String
     @State private var amount: String
+    /// nil when the expense's category no longer exists; saving then keeps the original id.
     @State private var selectedCategory: UserCategory?
     @State private var selectedDate: Date
     @State private var showingCategoryManagement = false
-    
-    
-    init(expense: Expense) {
+    @State private var confirmingDelete = false
+
+    init(expense: Expense, onDelete: (() -> Void)? = nil) {
         self.expense = expense
+        self.onDelete = onDelete
         self._title = State(initialValue: expense.title)
         self._amount = State(initialValue: AmountInputFormatter.formatValue(expense.amount))
-        self._selectedCategory = State(initialValue: DataManager.shared.resolveCategory(id: expense.categoryId))
+        // getCategory, not resolveCategory: the fallback "Other" has a fresh random id,
+        // and saving it would silently re-point the expense at a category that doesn't exist.
+        self._selectedCategory = State(initialValue: DataManager.shared.getCategory(id: expense.categoryId))
         self._selectedDate = State(initialValue: expense.date)
     }
-    
+
+    private var validTitle: String? { ExpenseEditValidator.title(title) }
+    private var validAmount: Double? { ExpenseEditValidator.amount(amount) }
+    private var canSave: Bool { validTitle != nil && validAmount != nil }
+
     var body: some View {
         NavigationStack {
             Form {
                 Section {
-                    // Title Field
-                    VStack(alignment: .leading, spacing: 12) {
-                        TextField("Expense title", text: $title, axis: .vertical)
-                            .textFieldStyle(.plain)
-                    }
-                    
-                    // Amount Field
+                    TextField("exp_title_placeholder".localized, text: $title, axis: .vertical)
+                        .lineLimit(1...3)
+                        .accessibilityIdentifier("edit-expense.title")
+
                     HStack {
                         Text(dataManager.user.currency.symbol)
                             .foregroundStyle(.secondary)
-                            .font(.body)
                         TextField("0", text: $amount)
                             .keyboardType(.decimalPad)
-                            .textFieldStyle(.plain)
-                            .onChange(of: amount) { _, _ in
-                                formatAmountInput()
+                            .accessibilityIdentifier("edit-expense.amount")
+                            .onChange(of: amount) { old, _ in
+                                formatAmountInput(previous: old)
                             }
                     }
-                    
-                    // Category Selection - Focus on User Categories
-                    HStack {
-                        Text("Category")
-                        Spacer()
-                        Menu {
-                            // User Custom Categories
-                            ForEach(dataManager.userCategories) { userCategory in
-                                Button(action: {
-                                    selectedCategory = userCategory
-                                }) {
-                                    Label {
-                                        Text(userCategory.name)
-                                    } icon: {
-                                        HeroIcon(systemName: userCategory.iconSystemName)
-                                    }
-                                }
-                            }
-                            
-                            Divider()
-                            
-                            // Create New Category
-                            Button(action: { showingCategoryManagement = true }) {
-                                HeroIconLabel(title: "Create New Category", systemName: "plus.circle")
-                            }
-                        } label: {
-                            HStack(spacing: 4) {
-                                if let userCat = selectedCategory {
-                                    HeroIcon(systemName: userCat.iconSystemName)
-                                        .foregroundStyle(userCat.color)
-                                    Text(userCat.name)
-                                        .foregroundStyle(.primary)
-                                } else {
-                                    Text("Select Category")
-                                        .foregroundStyle(.secondary)
-                                }
-                                HeroIcon(systemName: "chevron.up.chevron.down")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                    
-                    // Date Picker
-                    DatePicker("Date", selection: $selectedDate, displayedComponents: .date)
+
+                    categoryPicker
+
+                    DatePicker("column_date".localized, selection: $selectedDate, displayedComponents: [.date, .hourAndMinute])
                 } header: {
-                    Text("Expense Details")
+                    Text("expense_details".localized)
                 } footer: {
-                    Text("Update your expense details.")
-                        .font(.caption)
+                    if !amount.isEmpty && validAmount == nil {
+                        Text("exp_amount_must_be_positive".localized)
+                            .foregroundStyle(Color(.systemRed))
+                    }
+                }
+
+                if onDelete != nil {
+                    Section {
+                        Button(role: .destructive) {
+                            confirmingDelete = true
+                        } label: {
+                            Label("exp_delete_expense".localized, systemImage: "trash")
+                                .frame(maxWidth: .infinity)
+                        }
+                    } footer: {
+                        Text("exp_delete_footer".localized)
+                    }
                 }
             }
-            .navigationTitle("Edit Expense")
+            .navigationTitle("exp_edit_title".localized)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                    .foregroundStyle(.tint)
+                    Button("cancel".localized) { dismiss() }
                 }
-                
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Save") {
-                        updateExpense()
-                    }
-                    .disabled(title.isEmpty || amount.isEmpty || AmountInputFormatter.parse(amount) == nil)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(title.isEmpty || amount.isEmpty || AmountInputFormatter.parse(amount) == nil ? Color.secondary : Color.accentColor)
+                    Button("save".localized, action: updateExpense)
+                        .fontWeight(.semibold)
+                        .disabled(!canSave)
+                        .accessibilityIdentifier("edit-expense.save")
+                }
+            }
+            .confirmationDialog("exp_delete_expense".localized, isPresented: $confirmingDelete, titleVisibility: .hidden) {
+                Button("exp_delete_expense".localized, role: .destructive) {
+                    dismiss()
+                    onDelete?()
                 }
             }
             .sheet(isPresented: $showingCategoryManagement) {
@@ -119,26 +99,67 @@ struct EditExpenseView: View {
             }
         }
     }
-    
+
+    private var categoryPicker: some View {
+        HStack {
+            Text("category".localized)
+            Spacer()
+            Menu {
+                ForEach(dataManager.userCategories) { userCategory in
+                    Button {
+                        selectedCategory = userCategory
+                    } label: {
+                        Label {
+                            Text(userCategory.name)
+                        } icon: {
+                            HeroIcon(systemName: userCategory.iconSystemName)
+                        }
+                    }
+                }
+
+                Divider()
+
+                Button {
+                    showingCategoryManagement = true
+                } label: {
+                    HeroIconLabel(title: "create_new_category".localized, systemName: "plus.circle")
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    if let category = selectedCategory {
+                        HeroIcon(systemName: category.iconSystemName, size: 18)
+                            .foregroundStyle(category.color)
+                        Text(category.name)
+                            .foregroundStyle(.primary)
+                    } else {
+                        Text("select_category".localized)
+                            .foregroundStyle(.secondary)
+                    }
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
     private func updateExpense() {
-        guard let amountValue = AmountInputFormatter.parse(amount), !title.isEmpty else { return }
-        
-        // Find and update the expense - PRESERVE THE ORIGINAL ID
-        if let index = dataManager.expenses.firstIndex(where: { $0.id == expense.id }) {
-            var updatedExpense = dataManager.expenses[index]
-            updatedExpense.title = title
+        guard let amountValue = validAmount, let titleValue = validTitle else { return }
+
+        // Start from the stored copy so fields this form doesn't edit (e.g. notionId) survive.
+        if var updatedExpense = dataManager.expenses.first(where: { $0.id == expense.id }) {
+            updatedExpense.title = titleValue
             updatedExpense.amount = amountValue
             updatedExpense.categoryId = selectedCategory?.id ?? expense.categoryId
             updatedExpense.date = selectedDate
-            
-            dataManager.expenses[index] = updatedExpense
+            dataManager.updateExpense(updatedExpense)
         }
-        
+
         dismiss()
     }
 
-    private func formatAmountInput() {
-        let formatted = AmountInputFormatter.formatEditingText(amount)
+    private func formatAmountInput(previous: String) {
+        let formatted = AmountInputFormatter.formatEditingText(amount, previous: previous)
         if formatted != amount {
             amount = formatted
         }

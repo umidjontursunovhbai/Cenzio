@@ -20,6 +20,7 @@ final class SmartSpendUITestsLaunchTests: XCTestCase {
     @MainActor
     func testLaunch() throws {
         let app = XCUIApplication()
+        app.launchEnvironment["SMARTSPEND_UI_TEST_SKIP_SIGNIN"] = "1"
         app.launch()
 
         // Insert steps here to perform after app launch but before taking a screenshot,

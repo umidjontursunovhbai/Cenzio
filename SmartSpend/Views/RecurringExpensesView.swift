@@ -8,6 +8,7 @@ struct RecurringExpensesView: View {
     @State private var isSelectionMode = false
     @State private var selectedRecurringExpenses: Set<UUID> = []
     @State private var filter: RecurringFilter = .all
+    @State private var pendingDeletion: Set<UUID> = []
 
     private enum RecurringFilter: CaseIterable, Identifiable {
         case all
@@ -44,8 +45,17 @@ struct RecurringExpensesView: View {
                 if lhsIsActive != rhsIsActive {
                     return lhsIsActive
                 }
-                return lhs.nextDueDate < rhs.nextDueDate
+                // Active: soonest charge first. Paused/ended: their due date is meaningless, so by name.
+                if lhsIsActive, lhs.nextDueDate != rhs.nextDueDate {
+                    return lhs.nextDueDate < rhs.nextDueDate
+                }
+                return lhs.title.localizedStandardCompare(rhs.title) == .orderedAscending
             }
+    }
+
+    /// Bills that will still charge: active and not past their end date.
+    private var runningRecurringExpenses: [RecurringExpense] {
+        dataManager.recurringExpenses.filter { $0.isActive && !$0.isExpired }
     }
 
     private var notifications: [RecurringExpenseNotification] {
@@ -75,6 +85,27 @@ struct RecurringExpensesView: View {
             .sheet(item: $selectedRecurring) { recurring in
                 EditRecurringExpenseView(recurringExpense: recurring)
             }
+            .confirmationDialog(
+                pendingDeletion.count > 1
+                    ? String(format: "recurring_delete_selected_format".localized, pendingDeletion.count)
+                    : "recurring_delete_title".localized,
+                isPresented: Binding(
+                    get: { !pendingDeletion.isEmpty },
+                    set: { if !$0 { pendingDeletion.removeAll() } }
+                ),
+                titleVisibility: .visible
+            ) {
+                Button("delete".localized, role: .destructive) {
+                    confirmDeletion()
+                }
+            } message: {
+                Text("recurring_delete_message".localized)
+            }
+            .onChange(of: filter) { _, _ in
+                // Never delete selected rows the new filter hides.
+                let visible = Set(sortedRecurringExpenses.map(\.id))
+                selectedRecurringExpenses.formIntersection(visible)
+            }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if isSelectionMode {
                     selectionBar
@@ -93,15 +124,9 @@ struct RecurringExpensesView: View {
                     endSelectionMode()
                 }
                 .font(.body.weight(.semibold))
-                .foregroundStyle(Color(.systemBlue))
+                .foregroundStyle(Color.accentColor)
                 .frame(minHeight: iOSDesignSystem.Size.minimumTapTarget)
-
-                ActionIconButton(
-                    icon: "trash",
-                    style: .destructive(enabled: !selectedRecurringExpenses.isEmpty)
-                ) {
-                    deleteSelectedRecurring()
-                }
+                .accessibilityIdentifier("recurringCancelSelectionButton")
             } else {
                 if !dataManager.recurringExpenses.isEmpty {
                     ActionIconButton(icon: "check-circle", style: .secondary) {
@@ -109,11 +134,15 @@ struct RecurringExpensesView: View {
                             isSelectionMode = true
                         }
                     }
+                    .accessibilityLabel("recurring_select".localized)
+                    .accessibilityIdentifier("recurringSelectButton")
                 }
 
                 ActionIconButton(icon: "plus", style: .primary) {
                     showingAddRecurring = true
                 }
+                .accessibilityLabel("add_recurring_expense".localized)
+                .accessibilityIdentifier("addRecurringButton")
             }
         }
     }
@@ -121,6 +150,13 @@ struct RecurringExpensesView: View {
     private var recurringContent: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 16) {
+                if !runningRecurringExpenses.isEmpty {
+                    RecurringSummaryCard(
+                        running: runningRecurringExpenses,
+                        currency: dataManager.user.currency
+                    )
+                }
+
                 if !notifications.isEmpty {
                     RecurringAttentionCard(notifications: notifications) {
                         dataManager.processRecurringExpenses()
@@ -158,27 +194,27 @@ struct RecurringExpensesView: View {
 
                         Text("\(recurringCount(for: item))")
                             .font(.caption2.weight(.bold).monospacedDigit())
-                            .foregroundStyle(filter == item ? Color(.systemBlue) : Color.secondary)
+                            .foregroundStyle(filter == item ? Color.accentColor : Color.secondary)
                             .padding(.horizontal, 6)
                             .frame(minHeight: 20)
                             .background(
                                 filter == item
-                                    ? Color(.systemBlue).opacity(0.09)
+                                    ? Color.accentColor.opacity(0.09)
                                     : Color(.tertiarySystemFill),
                                 in: Capsule()
                             )
                     }
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(filter == item ? Color(.systemBlue) : Color.secondary)
+                    .foregroundStyle(filter == item ? Color.accentColor : Color.secondary)
                     .frame(maxWidth: .infinity)
                     .frame(minHeight: iOSDesignSystem.Size.minimumTapTarget)
                     .background {
                         if filter == item {
                             Capsule()
-                                .fill(Color(.systemBlue).opacity(0.075))
+                                .fill(Color.accentColor.opacity(0.075))
                                 .overlay(
                                     Capsule()
-                                        .stroke(Color(.systemBlue).opacity(0.13), lineWidth: 1)
+                                        .stroke(Color.accentColor.opacity(0.13), lineWidth: 1)
                                 )
                         }
                     }
@@ -194,21 +230,25 @@ struct RecurringExpensesView: View {
     private var recurringList: some View {
         LazyVStack(spacing: 12) {
             ForEach(sortedRecurringExpenses) { recurring in
-                RecurringExpenseCard(
-                    recurringExpense: recurring,
-                    categoryInfo: categoryDisplayInfo(for: recurring),
-                    currency: dataManager.user.currency,
-                    isSelectionMode: isSelectionMode,
-                    isSelected: selectedRecurringExpenses.contains(recurring.id)
-                )
-                .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-                .onTapGesture {
+                Button {
                     if isSelectionMode {
                         toggleSelection(recurring)
                     } else {
                         selectedRecurring = recurring
                     }
+                } label: {
+                    RecurringExpenseCard(
+                        recurringExpense: recurring,
+                        categoryInfo: categoryDisplayInfo(for: recurring),
+                        currency: dataManager.user.currency,
+                        isSelectionMode: isSelectionMode,
+                        isSelected: selectedRecurringExpenses.contains(recurring.id)
+                    )
+                    .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                 }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("recurringExpenseCard")
+                .accessibilityAddTraits(isSelectionMode && selectedRecurringExpenses.contains(recurring.id) ? .isSelected : [])
                 .contextMenu {
                     if !isSelectionMode {
                         Button {
@@ -217,16 +257,25 @@ struct RecurringExpensesView: View {
                             Label("edit".localized, systemImage: "pencil")
                         }
 
-                        Button(role: .destructive) {
-                            withAnimation(.snappy(duration: 0.25)) {
-                                dataManager.deleteRecurringExpense(recurring)
+                        if !recurring.isExpired {
+                            Button {
+                                toggleActive(recurring)
+                            } label: {
+                                if recurring.isActive {
+                                    Label("recurring_pause".localized, systemImage: "pause.circle")
+                                } else {
+                                    Label("recurring_resume".localized, systemImage: "play.circle")
+                                }
                             }
+                        }
+
+                        Button(role: .destructive) {
+                            pendingDeletion = [recurring.id]
                         } label: {
                             Label("delete".localized, systemImage: "trash")
                         }
                     }
                 }
-                .accessibilityAddTraits(.isButton)
             }
         }
         .animation(.snappy(duration: 0.28), value: sortedRecurringExpenses.map(\.id))
@@ -235,14 +284,14 @@ struct RecurringExpensesView: View {
     private var filteredEmptyState: some View {
         VStack(spacing: 12) {
             HeroIcon(filter == .inactive ? "pause-circle" : "arrow-path", size: 27)
-                .foregroundStyle(Color(.systemBlue))
+                .foregroundStyle(Color.accentColor)
                 .frame(width: 54, height: 54)
-                .background(Color(.systemBlue).opacity(0.08), in: Circle())
+                .background(Color.accentColor.opacity(0.08), in: Circle())
 
-            Text("no_recurring_expenses".localized)
+            Text((filter == .inactive ? "recurring_empty_inactive_title" : "recurring_empty_active_title").localized)
                 .font(.headline)
 
-            Text("set_up_recurring_expenses".localized)
+            Text((filter == .inactive ? "recurring_empty_inactive_message" : "recurring_empty_active_message").localized)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -278,6 +327,8 @@ struct RecurringExpensesView: View {
             }
             .buttonStyle(.plain)
             .disabled(selectedRecurringExpenses.isEmpty)
+            .accessibilityLabel("delete".localized)
+            .accessibilityIdentifier("recurringDeleteSelectedButton")
         }
         .padding(.leading, 18)
         .padding(.trailing, 10)
@@ -333,13 +384,28 @@ struct RecurringExpensesView: View {
 
     private func deleteSelectedRecurring() {
         guard !selectedRecurringExpenses.isEmpty else { return }
+        pendingDeletion = selectedRecurringExpenses
+    }
 
+    private func confirmDeletion() {
+        let ids = pendingDeletion
         withAnimation(.snappy(duration: 0.28)) {
-            for recurring in dataManager.recurringExpenses where selectedRecurringExpenses.contains(recurring.id) {
-                dataManager.deleteRecurringExpense(recurring)
+            dataManager.deleteRecurringExpenses(ids: ids)
+            selectedRecurringExpenses.subtract(ids)
+            if isSelectionMode {
+                isSelectionMode = false
+                selectedRecurringExpenses.removeAll()
             }
-            selectedRecurringExpenses.removeAll()
-            isSelectionMode = false
+        }
+        pendingDeletion.removeAll()
+    }
+
+    /// Pause/resume goes through `updateRecurringExpense`, so resuming skips the paused period.
+    private func toggleActive(_ recurring: RecurringExpense) {
+        var updated = recurring
+        updated.isActive.toggle()
+        withAnimation(.snappy(duration: 0.25)) {
+            dataManager.updateRecurringExpense(updated)
         }
     }
 }
@@ -348,6 +414,73 @@ private struct RecurringCategoryInfo {
     let name: String
     let icon: String
     let color: Color
+}
+
+/// Monthly cost of everything still charging, with each frequency averaged to a month,
+/// plus the next upcoming charge.
+private struct RecurringSummaryCard: View {
+    let running: [RecurringExpense]
+    let currency: Currency
+
+    private var monthlyTotal: Double {
+        running.reduce(0) { $0 + $1.monthlyEquivalentAmount }
+    }
+
+    private var nextCharge: RecurringExpense? {
+        running.min { $0.nextDueDate < $1.nextDueDate }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("recurring_per_month".localized)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 8)
+                Text(String(format: "recurring_active_count_format".localized, running.count))
+                    .font(.caption.weight(.semibold).monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 9)
+                    .frame(minHeight: 24)
+                    .background(Color(.tertiarySystemFill), in: Capsule())
+            }
+
+            Text(CurrencyFormatter.format(monthlyTotal, currency: currency))
+                .font(.system(size: 34, weight: .bold, design: .rounded))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
+                .contentTransition(.numericText())
+                .accessibilityIdentifier("recurringMonthlyTotal")
+
+            if let nextCharge {
+                Rectangle()
+                    .fill(Color(.separator).opacity(0.5))
+                    .frame(height: 1)
+
+                HStack(spacing: 8) {
+                    HeroIcon("calendar", size: 16)
+                        .foregroundStyle(dueColor(for: nextCharge))
+                    Text(String(
+                        format: "recurring_next_charge_format".localized,
+                        nextCharge.title,
+                        relativeDueText(for: nextCharge.nextDueDate)
+                    ))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    Spacer(minLength: 8)
+                    Text(CurrencyFormatter.format(nextCharge.amount, currency: currency))
+                        .font(.footnote.weight(.semibold).monospacedDigit())
+                        .lineLimit(1)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(iOSDesignSystem.Spacing.screenMargin)
+        .liquidGlassCard()
+        .accessibilityElement(children: .combine)
+    }
 }
 
 private struct RecurringAttentionCard: View {
@@ -407,7 +540,7 @@ private struct RecurringAttentionCard: View {
                 .buttonStyle(.plain)
         }
         .padding(12)
-        .background(Color.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .background(iOSDesignSystem.elevatedBackground, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .stroke(tint.opacity(0.16), lineWidth: 1)
@@ -475,26 +608,28 @@ private struct RecurringExpenseCard: View {
                         .fill(statusColor)
                         .frame(width: 3, height: 34)
 
-                    HeroIcon("calendar", size: 18)
+                    HeroIcon(recurringExpense.isActive ? "calendar" : "pause-circle", size: 18)
                         .foregroundStyle(statusColor)
 
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(relativeDueText(for: recurringExpense.nextDueDate))
+                        Text(scheduleHeadline)
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(statusColor)
                             .lineLimit(1)
 
-                        Text(exactDueDateText(for: recurringExpense.nextDueDate))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
+                        if let scheduleDetail {
+                            Text(scheduleDetail)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
                     }
 
                     Spacer(minLength: 8)
 
                     HStack(spacing: 6) {
                         HeroIcon(systemName: recurringExpense.recurrenceType.icon, size: 13)
-                        Text(recurringExpense.recurrenceType.rawValue)
+                        Text(recurringExpense.recurrenceType.localizedName)
                             .lineLimit(1)
                     }
                     .font(.caption.weight(.semibold))
@@ -513,11 +648,11 @@ private struct RecurringExpenseCard: View {
             }
         }
         .padding(16)
-        .background(Color.white, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .background(iOSDesignSystem.elevatedBackground, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .stroke(
-                    isSelected ? Color(.systemBlue).opacity(0.48) : Color(.separator).opacity(0.14),
+                    isSelected ? Color.accentColor.opacity(0.48) : Color(.separator).opacity(0.14),
                     lineWidth: isSelected ? 1.5 : 1
                 )
         )
@@ -531,12 +666,12 @@ private struct RecurringExpenseCard: View {
     private var selectionMark: some View {
         ZStack {
             Circle()
-                .stroke(isSelected ? Color(.systemBlue) : Color(.systemGray3), lineWidth: 2)
+                .stroke(isSelected ? Color.accentColor : Color(.systemGray3), lineWidth: 2)
                 .frame(width: 24, height: 24)
 
             if isSelected {
                 Circle()
-                    .fill(Color(.systemBlue))
+                    .fill(Color.accentColor)
                     .frame(width: 24, height: 24)
 
                 HeroIcon("check", size: 12)
@@ -549,9 +684,26 @@ private struct RecurringExpenseCard: View {
         dueColor(for: recurringExpense)
     }
 
+    /// Paused and ended bills have no real "next due", so say what state they are in instead.
+    private var scheduleHeadline: String {
+        if recurringExpense.isExpired, let endDate = recurringExpense.endDate {
+            return String(format: "recurring_ended_on_format".localized, exactDueDateText(for: endDate))
+        } else if !recurringExpense.isActive {
+            return "recurring_paused".localized
+        }
+        return relativeDueText(for: recurringExpense.nextDueDate)
+    }
+
+    private var scheduleDetail: String? {
+        guard recurringExpense.isActive, !recurringExpense.isExpired else { return nil }
+        let due = exactDueDateText(for: recurringExpense.nextDueDate)
+        guard let endDate = recurringExpense.endDate else { return due }
+        return "\(due) · " + String(format: "recurring_ends_on_format".localized, exactDueDateText(for: endDate))
+    }
+
     private var statusText: String {
         if !recurringExpense.isActive {
-            return "inactive".localized
+            return "recurring_paused".localized
         } else if recurringExpense.isExpired {
             return "expired".localized
         } else if recurringExpense.isOverdue {
@@ -573,15 +725,15 @@ struct EmptyRecurringExpensesView: View {
 
             ZStack {
                 RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(Color(.systemBlue).opacity(0.08))
+                    .fill(Color.accentColor.opacity(0.08))
                     .frame(width: 84, height: 84)
 
                 RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .stroke(Color(.systemBlue).opacity(0.12), lineWidth: 1)
+                    .stroke(Color.accentColor.opacity(0.12), lineWidth: 1)
                     .frame(width: 84, height: 84)
 
                 HeroIcon("arrow-path", size: 34)
-                    .foregroundStyle(Color(.systemBlue))
+                    .foregroundStyle(Color.accentColor)
             }
 
             VStack(spacing: 9) {
@@ -601,7 +753,7 @@ struct EmptyRecurringExpensesView: View {
                     Text("add_recurring_expense".localized)
                 }
                 .font(.body.weight(.semibold))
-                .foregroundStyle(Color(.systemBlue))
+                .foregroundStyle(Color.accentColor)
                 .frame(maxWidth: .infinity)
                 .frame(minHeight: 50)
                 .liquidGlassSurface(RoundedRectangle(cornerRadius: 16, style: .continuous))
@@ -625,7 +777,9 @@ private func relativeDueText(for date: Date) -> String {
     let days = calendar.dateComponents([.day], from: today, to: due).day ?? 0
 
     if days < 0 {
-        return "\("overdue".localized) \(abs(days))d"
+        return days == -1
+            ? "recurring_overdue_one_day".localized
+            : String(format: "recurring_overdue_days_format".localized, -days)
     } else if days == 0 {
         return "due_today".localized
     } else if days == 1 {

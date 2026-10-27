@@ -16,13 +16,13 @@ struct ExpenseSyncDeviceIdentity: Codable {
 
     static func remove() {
         SecItemDelete([kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: "com.tursunov.SmartSpend.expense-sync-device",
+            kSecAttrService as String: "ai.humblebee.smartspend.expense-sync-device",
             kSecAttrAccount as String: "installation"] as CFDictionary)
     }
 
     static func loadOrCreate(ledgerId: String) throws -> Self {
         let key: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: "com.tursunov.SmartSpend.expense-sync-device",
+            kSecAttrService as String: "ai.humblebee.smartspend.expense-sync-device",
             kSecAttrAccount as String: "installation"]
         var query = key
         query[kSecReturnData as String] = true
@@ -112,36 +112,26 @@ private struct ExpenseSyncContext: Decodable {
     let categories: [MCPExchangeCategory]
 }
 
-struct ExpenseSyncGoogleStatus: Decodable {
-    let connected: Bool
-    let pending: Bool
-    let spreadsheetId: String?
-
-    var spreadsheetURL: URL? {
-        guard connected, let spreadsheetId,
-              spreadsheetId.range(of: #"^[A-Za-z0-9_-]{10,150}$"#, options: .regularExpression) != nil else { return nil }
-        return URL(string: "https://docs.google.com/spreadsheets/d/\(spreadsheetId)")
-    }
-}
-
-enum ExpenseSyncProvider: String, CaseIterable, Identifiable {
-    case google, notion
-    var id: String { rawValue }
-    var name: String { self == .google ? "Google Sheets" : "Notion" }
-}
-
-struct ExpenseSyncProviderStatus: Decodable {
+/// Notion connection status from `v1/connectors/notion/status`.
+struct ExpenseSyncNotionStatus: Decodable {
     let connected: Bool
     let pending: Bool
     let needsAttention: Bool?
-    let spreadsheetId: String?
     let needsSelection: Bool?
     let configured: Bool?
-    var spreadsheetURL: URL? {
-        guard connected, let spreadsheetId,
-              spreadsheetId.range(of: #"^[A-Za-z0-9_-]{10,150}$"#, options: .regularExpression) != nil else { return nil }
-        return URL(string: "https://docs.google.com/spreadsheets/d/\(spreadsheetId)")
+    let databaseUrl: String?
+    /// Unix time of the server's last complete Notion poll.
+    let lastSuccessAt: Double?
+    let conflictCount: Int?
+
+    var databaseURL: URL? {
+        guard connected, let databaseUrl, let parts = URLComponents(string: databaseUrl),
+              parts.scheme == "https", parts.host == "www.notion.so", parts.port == nil,
+              parts.user == nil, parts.password == nil, parts.query == nil, parts.fragment == nil,
+              parts.path.range(of: #"^/[0-9a-fA-F]{32}$"#, options: .regularExpression) != nil else { return nil }
+        return parts.url
     }
+    var lastChecked: Date? { lastSuccessAt.map { Date(timeIntervalSince1970: $0) } }
 }
 
 struct ExpenseSyncNotionPage: Decodable, Identifiable {
@@ -151,9 +141,7 @@ struct ExpenseSyncNotionPage: Decodable, Identifiable {
 
 struct ExpenseSyncCapabilities: Decodable {
     let deviceEnrollment: Bool
-    let google: Bool
     let notion: Bool
-    func supports(_ provider: ExpenseSyncProvider) -> Bool { provider == .google ? google : notion }
 }
 
 struct ExpenseSyncHistoryItem: Decodable, Identifiable {
@@ -206,17 +194,7 @@ enum ExpenseSyncAPI {
         return url
     }
 
-    static func googleAuthorizationURL(_ text: String) throws -> URL {
-        guard let parts = URLComponents(string: text), parts.scheme == "https",
-              parts.host == "accounts.google.com", parts.port == nil,
-              parts.user == nil, parts.password == nil, parts.fragment == nil,
-              ["/o/oauth2/v2/auth", "/o/oauth2/auth"].contains(parts.path),
-              let url = parts.url else { throw ExpenseSyncError.response }
-        return url
-    }
-
-    static func authorizationURL(_ text: String, provider: ExpenseSyncProvider) throws -> URL {
-        if provider == .google { return try googleAuthorizationURL(text) }
+    static func notionAuthorizationURL(_ text: String) throws -> URL {
         guard let parts = URLComponents(string: text), parts.scheme == "https", let host = parts.host,
               ["api.notion.com", "www.notion.so"].contains(host), parts.port == nil,
               parts.user == nil, parts.password == nil, parts.fragment == nil,
@@ -393,7 +371,7 @@ final class ExpenseSyncController: ObservableObject {
     private let send: (ExpenseSyncCredential, String, String, Data?) async throws -> Data
     private var generation: UInt64 = 0
     private var keychain: [String: Any] {
-        [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "com.tursunov.SmartSpend.expense-sync", kSecAttrAccount as String: "sync-only"]
+        [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "ai.humblebee.smartspend.expense-sync", kSecAttrAccount as String: "sync-only"]
     }
     var connected: Bool { credential != nil && state != nil }
     var enabled: Bool { state?.enabled == true }
@@ -572,13 +550,21 @@ final class ExpenseSyncController: ObservableObject {
         message = nil
         do {
             if FileManager.default.fileExists(atPath: file.path) { try FileManager.default.removeItem(at: file) }
-        } catch { message = "The local sync file could not be removed. Close and reopen SmartSpend before connecting again." }
+        } catch { message = "The local sync file could not be removed. Close and reopen Cenzio before connecting again." }
     }
 
+    /// Called at launch and on every scene-phase change (MainTabView). Polls every
+    /// 12 seconds while active; a pass starts immediately when the loop starts.
     func foreground(_ active: Bool) {
-        loop?.cancel()
-        loop = nil
-        guard active, enabled else { return }
+        guard active, enabled else {
+            loop?.cancel()
+            loop = nil
+            return
+        }
+        // Launch fires both onAppear and an .active phase change. Restarting a
+        // running loop would cancel the first pass mid-request and, because the
+        // replacement pass sees isBusy, delay the first real sync by 12 seconds.
+        if let loop, !loop.isCancelled { return }
         loop = Task { [weak self] in
             while !Task.isCancelled {
                 await self?.sync()
@@ -686,25 +672,10 @@ final class ExpenseSyncController: ObservableObject {
         return try JSONDecoder().decode(ExpenseSyncHistoryPage.self, from: await transport(credential, "v1/sync/history/\(expenseId)?afterSequence=\(after)&limit=50", "GET", nil))
     }
 
-    func connectGoogle() async throws -> URL {
+    func notionStatus() async throws -> ExpenseSyncNotionStatus {
         guard let credential else { throw ExpenseSyncError.unauthorized }
-        let body = try JSONSerialization.data(withJSONObject: ["consent": true, "connectorId": "google-default"])
-        struct Authorization: Decodable { let authorizationUrl: String }
-        let result = try JSONDecoder().decode(Authorization.self, from: await transport(credential, "v1/connectors/google/start", "POST", body))
-        // OAuth state is passed only to the system browser; never logged or saved.
-        return try ExpenseSyncAPI.googleAuthorizationURL(result.authorizationUrl)
-    }
-
-    func googleStatus() async throws -> ExpenseSyncGoogleStatus {
-        guard let credential else { throw ExpenseSyncError.unauthorized }
-        return try JSONDecoder().decode(ExpenseSyncGoogleStatus.self,
-                                       from: await transport(credential, "v1/connectors/google/status", "GET", nil))
-    }
-
-    func providerStatus(_ provider: ExpenseSyncProvider) async throws -> ExpenseSyncProviderStatus {
-        guard let credential else { throw ExpenseSyncError.unauthorized }
-        return try JSONDecoder().decode(ExpenseSyncProviderStatus.self,
-                                        from: await transport(credential, "v1/connectors/\(provider.rawValue)/status", "GET", nil))
+        return try JSONDecoder().decode(ExpenseSyncNotionStatus.self,
+                                        from: await transport(credential, "v1/connectors/notion/status", "GET", nil))
     }
 
     func capabilities() async throws -> ExpenseSyncCapabilities {
@@ -713,19 +684,20 @@ final class ExpenseSyncController: ObservableObject {
             from: await transport(.init(server: server, token: ""), "v1/connectors/capabilities", "GET", nil))
     }
 
-    func connectProvider(_ provider: ExpenseSyncProvider) async throws -> URL {
+    func connectNotion() async throws -> URL {
         guard let credential else { throw ExpenseSyncError.unauthorized }
-        let body = try JSONSerialization.data(withJSONObject: ["consent": true, "connectorId": "\(provider.rawValue)-default"])
+        let body = try JSONSerialization.data(withJSONObject: ["consent": true, "connectorId": "notion-default"])
         struct Authorization: Decodable { let authorizationUrl: String }
         let result = try JSONDecoder().decode(Authorization.self,
-            from: await transport(credential, "v1/connectors/\(provider.rawValue)/start", "POST", body))
-        return try ExpenseSyncAPI.authorizationURL(result.authorizationUrl, provider: provider)
+            from: await transport(credential, "v1/connectors/notion/start", "POST", body))
+        // OAuth state is passed only to the system browser; never logged or saved.
+        return try ExpenseSyncAPI.notionAuthorizationURL(result.authorizationUrl)
     }
 
-    func disconnectProvider(_ provider: ExpenseSyncProvider) async throws {
+    func disconnectNotion() async throws {
         guard let credential else { throw ExpenseSyncError.unauthorized }
-        let body = try JSONSerialization.data(withJSONObject: ["consent": true, "connectorId": "\(provider.rawValue)-default"])
-        _ = try await transport(credential, "v1/connectors/\(provider.rawValue)/disconnect", "POST", body)
+        let body = try JSONSerialization.data(withJSONObject: ["consent": true, "connectorId": "notion-default"])
+        _ = try await transport(credential, "v1/connectors/notion/disconnect", "POST", body)
     }
 
     func notionPages() async throws -> [ExpenseSyncNotionPage] {

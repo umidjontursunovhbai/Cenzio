@@ -1,14 +1,16 @@
 import SwiftUI
 
+/// Integrations screen: Notion is the only provider. Expenses sync through the
+/// SmartSpend server, which polls Notion; ExpenseSyncController polls the server.
 struct ExpenseSyncView: View {
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
     @ObservedObject private var sync = ExpenseSyncController.shared
-    @State private var consentProvider: ExpenseSyncProvider?
-    @State private var disconnectProvider: ExpenseSyncProvider?
-    @State private var statuses: [ExpenseSyncProvider: ExpenseSyncProviderStatus] = [:]
+    @State private var confirmingConnect = false
+    @State private var confirmingDisconnect = false
+    @State private var status: ExpenseSyncNotionStatus?
     @State private var busy = false
-    @State private var activeProvider: ExpenseSyncProvider?
+    @State private var connecting = false
     @State private var connectionMessage: String?
     @State private var refreshError: String?
     @State private var notionPages: [ExpenseSyncNotionPage] = []
@@ -19,14 +21,13 @@ struct ExpenseSyncView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                Text("Your expenses, in the tools you use.")
+                Text("Keep your expenses in a Notion table. Changes made in Notion sync back to this iPhone.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
                     .padding(.bottom, 4)
 
-                ForEach(ExpenseSyncProvider.allCases) { provider in
-                    providerRow(provider)
-                }
+                notionCard
 
                 if let connectionMessage {
                     HStack(alignment: .top, spacing: 10) {
@@ -92,37 +93,31 @@ struct ExpenseSyncView: View {
         .background(Color(.systemGroupedBackground))
         .navigationTitle("Integrations")
         .navigationBarTitleDisplayMode(.inline)
-        .task { await refreshConnections() }
-        .refreshable { await refreshConnections() }
+        .task { await refreshConnection() }
+        .refreshable { await refreshConnection() }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { Task { await refreshConnections() } }
+            if phase == .active { Task { await refreshConnection() } }
         }
-        .confirmationDialog("Connect \(consentProvider?.name ?? "account")?", isPresented: Binding(get: { consentProvider != nil }, set: { if !$0 { consentProvider = nil } }), titleVisibility: .visible) {
-            if let provider = consentProvider {
-                Button("Continue to \(provider == .google ? "Google" : "Notion")") {
-                    Task { await connect(provider) }
-                }
-            }
+        .confirmationDialog("Connect Notion?", isPresented: $confirmingConnect, titleVisibility: .visible) {
+            Button("Continue to Notion") { Task { await connect() } }
             Button("Cancel", role: .cancel) { }
         } message: {
-            Text("Your current and archived expenses will be securely uploaded for sync. Then choose your account and approve access on its consent screen. You can disconnect at any time. Budgets, salary and microphone audio stay on your iPhone.")
+            Text("Your current and archived expenses will be securely uploaded for sync. Then choose your Notion account and approve access on its consent screen. You can disconnect at any time. Budgets, salary and microphone audio stay on your iPhone.")
         }
-        .confirmationDialog("Disconnect \(disconnectProvider?.name ?? "account")?", isPresented: Binding(get: { disconnectProvider != nil }, set: { if !$0 { disconnectProvider = nil } }), titleVisibility: .visible) {
-            if let provider = disconnectProvider {
-                Button("Disconnect", role: .destructive) {
-                    Task {
-                        busy = true
-                        defer { busy = false }
-                        do {
-                            try await sync.disconnectProvider(provider)
-                            statuses[provider] = nil
-                            connectionMessage = "Disconnected. Your saved expenses, history and external copies were kept."
-                        } catch { connectionMessage = "Could not disconnect. Try again when you are online." }
-                    }
+        .confirmationDialog("Disconnect Notion?", isPresented: $confirmingDisconnect, titleVisibility: .visible) {
+            Button("Disconnect", role: .destructive) {
+                Task {
+                    busy = true
+                    defer { busy = false }
+                    do {
+                        try await sync.disconnectNotion()
+                        status = nil
+                        connectionMessage = "Disconnected. Your saved expenses, history and Notion table were kept."
+                    } catch { connectionMessage = "Could not disconnect. Try again when you are online." }
                 }
             }
             Button("Cancel", role: .cancel) { }
-        } message: { Text("Future changes stop syncing with this account; a change already in progress may finish. External files and history are kept. To remove Google's or Notion's permission entirely, also revoke SmartSpend in that account's settings.") }
+        } message: { Text("Future changes stop syncing with Notion; a change already in progress may finish. Your Notion table and history are kept. To remove Notion's permission entirely, also revoke Cenzio in Notion's settings.") }
         .sheet(isPresented: $choosingNotionPage) {
             NavigationStack {
                 List(notionPages) { page in
@@ -133,7 +128,7 @@ struct ExpenseSyncView: View {
                             do {
                                 try await sync.selectNotionPage(page)
                                 choosingNotionPage = false
-                                statuses[.notion] = try await sync.providerStatus(.notion)
+                                status = try await sync.notionStatus()
                             } catch { notionSelectionMessage = "Could not create the expense database. Try again." }
                         }
                     }.disabled(busy)
@@ -151,22 +146,31 @@ struct ExpenseSyncView: View {
         }
     }
 
-    @ViewBuilder private func providerRow(_ provider: ExpenseSyncProvider) -> some View {
-        let status = statuses[provider]
+    private var statusText: String {
+        let unavailable = available?.notion == false || status?.configured == false
+        if unavailable { return "Not available yet" }
+        if status?.needsAttention == true { return "Needs attention" }
+        if status?.connected == true { return "Connected" }
+        if status?.needsSelection == true { return "Choose a page" }
+        if status?.pending == true { return "Connection pending" }
+        return "Not connected"
+    }
+
+    @ViewBuilder private var notionCard: some View {
         let connected = status?.connected == true
         let pending = status?.pending == true || status?.needsSelection == true || status?.needsAttention == true
-        let unavailable = available?.supports(provider) == false || status?.configured == false
+        let unavailable = available?.notion == false || status?.configured == false
         VStack(alignment: .leading, spacing: 18) {
             HStack(spacing: 14) {
-                providerIcon(provider)
+                notionIcon
                 VStack(alignment: .leading, spacing: 5) {
-                    Text(provider.name).font(.headline)
+                    Text("Notion").font(.headline)
                     HStack(spacing: 5) {
                         if connected {
                             Circle().fill(Color(.systemGreen)).frame(width: 6, height: 6)
                                 .accessibilityHidden(true)
                         }
-                        Text(unavailable ? "Not available yet" : status?.needsAttention == true ? "Needs attention" : connected ? "Connected" : status?.needsSelection == true ? "Choose a destination" : pending ? "Connection pending" : "Not connected")
+                        Text(statusText)
                             .font(.caption.weight(.medium))
                             .foregroundStyle(connected ? Color.primary : Color.secondary)
                     }
@@ -174,66 +178,75 @@ struct ExpenseSyncView: View {
                 Spacer(minLength: 0)
                 if connected || pending {
                     Menu {
-                        Button(connected ? "Disconnect" : "Cancel connection", role: .destructive) { disconnectProvider = provider }
+                        Button(connected ? "Disconnect" : "Cancel connection", role: .destructive) { confirmingDisconnect = true }
                     } label: {
                         Image(systemName: "ellipsis")
                             .font(.body.weight(.semibold))
                             .frame(minWidth: 44, minHeight: 44)
-                    }.accessibilityLabel("\(provider.name) connection options")
+                    }.accessibilityLabel("Notion connection options")
                 }
             }
 
             if !connected && !pending {
-                Text(provider == .google ? "Create a spreadsheet for your expenses." : "Choose a page for a new table, or preview one you already use.")
+                Text("Choose a page for a new table, or preview one you already use.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                Button { consentProvider = provider } label: {
+                Button { confirmingConnect = true } label: {
                     HStack(spacing: 8) {
-                        if activeProvider == provider { ProgressView().controlSize(.small) }
-                        Text("Connect")
+                        if connecting { ProgressView().controlSize(.small) }
+                        Text("Connect Notion")
                     }
                     .font(.subheadline.weight(.semibold))
                     .frame(maxWidth: .infinity, minHeight: 46)
                 }
                 .buttonStyle(.bordered)
                 .buttonBorderShape(.roundedRectangle(radius: 13))
-                .tint(Color(.systemBlue))
+                .tint(Color.accentColor)
                 .disabled(busy || sync.isBusy || unavailable)
-                .accessibilityLabel("Connect \(provider.name)")
+                .accessibilityLabel("Connect Notion")
             }
-            if provider == .google, let url = status?.spreadsheetURL {
-                Link(destination: url) {
-                    Label("Open spreadsheet", systemImage: "arrow.up.right")
-                        .font(.subheadline.weight(.medium))
-                        .frame(minHeight: 44)
+            if connected {
+                if let checked = status?.lastChecked {
+                    Text("Notion checked \(checked.formatted(date: .omitted, time: .shortened))")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                if let url = status?.databaseURL {
+                    Link(destination: url) {
+                        Label("Open in Notion", systemImage: "arrow.up.right")
+                            .font(.subheadline.weight(.medium))
+                            .frame(minHeight: 44)
+                    }
                 }
             }
-            if provider == .notion, status?.needsSelection == true {
+            if status?.needsSelection == true {
                 Button("Create new table") { Task { await chooseNotionPage() } }
                     .buttonStyle(.bordered).disabled(busy || sync.isBusy)
                 NavigationLink("Preview an existing table") { ExistingNotionPreviewView() }
                     .font(.subheadline)
             }
             if status?.needsAttention == true {
-                Text("Check your account for a table or spreadsheet already created before canceling this connection. Reconnecting may create a new copy; SmartSpend will not retry creation automatically.")
+                Text(connected
+                     ? "Some Notion rows couldn't sync. Check that each row keeps its SmartSpend ID, Category ID, Currency and a date with a time."
+                     : "Check Notion for a table already created before canceling this connection. Reconnecting may create a new copy; Cenzio will not retry creation automatically.")
                     .font(.footnote).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             } else if status?.pending == true {
-                Text("Finish the consent screen in your browser, or use connection options to cancel. If a file may already have been created, review it before reconnecting.")
+                Text("Finish the Notion consent screen in your browser, or use connection options to cancel.")
                     .font(.footnote).foregroundStyle(.secondary)
             }
         }
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 22))
-        .accessibilityIdentifier("integration.card.\(provider.rawValue)")
+        .accessibilityIdentifier("integration.card.notion")
     }
 
-    private func providerIcon(_ provider: ExpenseSyncProvider) -> some View {
+    private var notionIcon: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 13)
-                .fill(provider == .google ? Color(.systemGreen).opacity(0.10) : Color.primary.opacity(0.06))
-            Image(provider == .google ? "GoogleSheetsBrand" : "NotionBrand")
+                .fill(Color.primary.opacity(0.06))
+            Image("NotionBrand")
                 .renderingMode(.original)
                 .resizable()
                 .scaledToFit()
@@ -243,19 +256,19 @@ struct ExpenseSyncView: View {
         .accessibilityHidden(true)
     }
 
-    @MainActor private func connect(_ provider: ExpenseSyncProvider) async {
+    @MainActor private func connect() async {
         busy = true
-        activeProvider = provider
-        defer { busy = false; activeProvider = nil }
+        connecting = true
+        defer { busy = false; connecting = false }
         do {
             let capabilities = try await sync.capabilities()
-            guard capabilities.supports(provider), sync.connected || capabilities.deviceEnrollment else {
-                connectionMessage = "\(provider.name) connections are not available yet. Your expenses have not been uploaded for this connection."
+            guard capabilities.notion, sync.connected || capabilities.deviceEnrollment else {
+                connectionMessage = "Notion connections are not available yet. Your expenses have not been uploaded for this connection."
                 return
             }
             try await sync.prepareConnection()
-            let url = try await sync.connectProvider(provider)
-            connectionMessage = "Complete the \(provider == .google ? "Google" : "Notion") consent screen, then return here."
+            let url = try await sync.connectNotion()
+            connectionMessage = "Complete the Notion consent screen, then return here."
             openURL(url)
         } catch {
             guard !Task.isCancelled, !(error is CancellationError),
@@ -276,7 +289,7 @@ struct ExpenseSyncView: View {
         } catch { connectionMessage = "Could not load your Notion pages. Try again." }
     }
 
-    @MainActor private func refreshConnections() async {
+    @MainActor private func refreshConnection() async {
         guard !busy else { return }
         busy = true
         refreshError = nil
@@ -294,23 +307,21 @@ struct ExpenseSyncView: View {
             if error as? ExpenseSyncError == .connectionsUnavailable {
                 // This server does not offer account connections yet. Retrying
                 // cannot fix a missing endpoint; disable Connect until supported.
-                available = ExpenseSyncCapabilities(deviceEnrollment: false, google: false, notion: false)
+                available = ExpenseSyncCapabilities(deviceEnrollment: false, notion: false)
                 refreshError = "Account connections aren't available yet. Please try again later."
                 return
             }
             failure = "Couldn't check connections. Pull down to retry."
         }
         if sync.connected {
-            for provider in ExpenseSyncProvider.allCases {
-                do {
-                    let status = try await sync.providerStatus(provider)
-                    try Task.checkCancellation()
-                    statuses[provider] = status
-                } catch {
-                    guard !Task.isCancelled, !(error is CancellationError),
-                          (error as? URLError)?.code != .cancelled else { return }
-                    failure = "Some connection details could not be loaded. Pull down to retry."
-                }
+            do {
+                let value = try await sync.notionStatus()
+                try Task.checkCancellation()
+                status = value
+            } catch {
+                guard !Task.isCancelled, !(error is CancellationError),
+                      (error as? URLError)?.code != .cancelled else { return }
+                failure = "Notion connection details could not be loaded. Pull down to retry."
             }
         }
         // A successful refresh clears only refresh errors, not action feedback.
@@ -389,7 +400,7 @@ struct ExpenseSyncHistoryView: View {
             }
             Button("Cancel", role: .cancel) { restoreItem = nil }
         } message: {
-            if let item = restoreItem { Text("\(item.after.expense.title) · \(item.after.expense.amount). This changes the connected ledger and propagates to enabled providers.") }
+            if let item = restoreItem { Text("\(item.after.expense.title) · \(item.after.expense.amount). This changes the connected ledger and updates Notion.") }
         }
     }
 

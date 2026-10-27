@@ -46,10 +46,11 @@ enum BudgetPeriodCalculator {
 
     static func projectedRecurringTotal(
         recurringExpenses: [RecurringExpense],
-        in interval: DateInterval
+        in interval: DateInterval,
+        calendar: Calendar = .current
     ) -> Double {
         recurringExpenses.reduce(0) { total, recurring in
-            total + projectedTotal(for: recurring, in: interval)
+            total + projectedTotal(for: recurring, in: interval, calendar: calendar)
         }
     }
 
@@ -66,7 +67,8 @@ enum BudgetPeriodCalculator {
         let spent = total(for: expenses, in: month)
         let upcoming = projectedRecurringTotal(
             recurringExpenses: recurringExpenses,
-            in: remainingInterval
+            in: remainingInterval,
+            calendar: calendar
         )
         let remainingBeforeBills = monthlyIncome - spent
         let availableAfterBills = remainingBeforeBills - upcoming
@@ -88,32 +90,10 @@ enum BudgetPeriodCalculator {
 
     private static func projectedTotal(
         for recurring: RecurringExpense,
-        in interval: DateInterval
+        in interval: DateInterval,
+        calendar: Calendar
     ) -> Double {
-        guard recurring.isActive else { return 0 }
-        if let endDate = recurring.endDate, endDate < interval.start {
-            return 0
-        }
-
-        var nextDate = recurring.nextDueDate
-        var total = 0.0
-        var iterations = 0
-
-        while nextDate < interval.start && iterations < 400 {
-            nextDate = recurring.recurrenceType.nextDate(from: nextDate)
-            iterations += 1
-        }
-
-        while nextDate < interval.end && iterations < 400 {
-            if let endDate = recurring.endDate, nextDate > endDate {
-                break
-            }
-
-            total += recurring.amount
-            nextDate = recurring.recurrenceType.nextDate(from: nextDate)
-            iterations += 1
-        }
-
-        return total
+        // Anchored occurrences: Jan 31 monthly stays on month-end instead of drifting to the 28th.
+        Double(recurring.upcomingOccurrences(in: interval, calendar: calendar).count) * recurring.amount
     }
 }

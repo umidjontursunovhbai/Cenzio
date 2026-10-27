@@ -1,285 +1,293 @@
 import SwiftUI
 
 struct AddRecurringExpenseView: View {
+    var body: some View {
+        RecurringExpenseFormView(existing: nil)
+    }
+}
+
+struct EditRecurringExpenseView: View {
+    let recurringExpense: RecurringExpense
+
+    var body: some View {
+        RecurringExpenseFormView(existing: recurringExpense)
+    }
+}
+
+/// One form for add and edit. Editing copies the stored item, so its id, createdDate and
+/// processing cursor survive, and saves through `updateRecurringExpense`, which handles a stale
+/// cursor, resuming and start-date/frequency changes without duplicating charges.
+struct RecurringExpenseFormView: View {
+    let existing: RecurringExpense?
+
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var dataManager = DataManager.shared
-    
-    @State private var title = ""
-    @State private var amount = ""
+
+    @State private var title: String
+    @State private var amount: String
     @State private var selectedCategory: UserCategory?
-    @State private var selectedRecurrence: RecurrenceType = .monthly
-    @State private var startDate = Date()
-    @State private var hasEndDate = false
-    @State private var endDate = Calendar.current.date(byAdding: .year, value: 1, to: Date()) ?? Date()
-    @State private var isActive = true
+    @State private var recurrence: RecurrenceType
+    @State private var startDate: Date
+    @State private var hasEndDate: Bool
+    @State private var endDate: Date
+    @State private var isActive: Bool
     @State private var showingCategoryManagement = false
-    
+    @State private var showingDeleteConfirmation = false
+    @FocusState private var focusedField: Field?
+
+    private enum Field { case title, amount }
+
+    init(existing: RecurringExpense?) {
+        self.existing = existing
+        let calendar = Calendar.current
+        let start = calendar.startOfDay(for: existing?.startDate ?? Date())
+        let defaultEnd = calendar.date(byAdding: .year, value: 1, to: start) ?? start
+        // State is seeded here, not in onAppear, so returning from the category sheet keeps edits.
+        _title = State(initialValue: existing?.title ?? "")
+        _amount = State(initialValue: existing.map { AmountInputFormatter.formatValue($0.amount) } ?? "")
+        _selectedCategory = State(initialValue: existing.map { DataManager.shared.resolveCategory(id: $0.categoryId) })
+        _recurrence = State(initialValue: existing?.recurrenceType ?? .monthly)
+        _startDate = State(initialValue: start)
+        _hasEndDate = State(initialValue: existing?.endDate != nil)
+        _endDate = State(initialValue: max(existing?.endDate.map { calendar.startOfDay(for: $0) } ?? defaultEnd, start))
+        _isActive = State(initialValue: existing?.isActive ?? true)
+    }
+
+    private var isEditing: Bool { existing != nil }
+
+    /// The live copy, so the status rows reflect processing that ran while the sheet was open.
+    private var stored: RecurringExpense? {
+        guard let existing else { return nil }
+        return dataManager.recurringExpenses.first { $0.id == existing.id } ?? existing
+    }
+
+    private var startDay: Date { Calendar.current.startOfDay(for: startDate) }
+
     var body: some View {
         NavigationStack {
             Form {
-                Section("expense_details".localized) {
-                    TextField("title".localized, text: $title)
-                        .textInputAutocapitalization(.words)
+                detailsSection
+                scheduleSection
 
-                    HStack {
-                        Text("amount".localized)
-                        Spacer()
-                        Text(dataManager.user.currency.symbol)
-                            .foregroundStyle(.secondary)
-                        TextField("0", text: $amount)
-                            .keyboardType(.decimalPad)
-                            .multilineTextAlignment(.trailing)
-                            .frame(maxWidth: 140)
-                            .onChange(of: amount) { _, _ in formatAmountInput() }
-                    }
-
-                    RecurringCategoryPicker(selectedCategory: $selectedCategory) {
-                        showingCategoryManagement = true
-                    }
-                }
-                
-                Section("recurrence".localized) {
-                    Picker("frequency".localized, selection: $selectedRecurrence) {
-                        ForEach(RecurrenceType.allCases, id: \.self) { recurrence in
-                            HStack {
-                                HeroIcon(systemName: recurrence.icon)
-                                Text(recurrence.rawValue)
-                            }
-                            .tag(recurrence)
-                        }
-                    }
-                    
-                    DatePicker("start_date".localized, selection: $startDate, displayedComponents: .date)
-                    
-                    Toggle("end_date".localized, isOn: $hasEndDate)
-                    
-                    if hasEndDate {
-                        DatePicker("end_date".localized, selection: $endDate, in: startDate..., displayedComponents: .date)
-                    }
-                }
-                
-                Section("settings".localized) {
+                Section {
                     Toggle("active".localized, isOn: $isActive)
+                        .accessibilityIdentifier("recurringActiveToggle")
+                } footer: {
+                    Text("recurring_active_footer".localized)
                 }
-                
+
+                if let stored {
+                    statusSection(for: stored)
+                }
+
                 Section {
                     RecurrencePreviewView(
-                        recurrenceType: selectedRecurrence,
+                        recurrenceType: recurrence,
                         startDate: startDate,
                         endDate: hasEndDate ? endDate : nil
                     )
+                } footer: {
+                    if let note = backfillNote {
+                        Text(note)
+                    }
+                }
+
+                if isEditing {
+                    Section {
+                        Button("recurring_delete_button".localized, role: .destructive) {
+                            showingDeleteConfirmation = true
+                        }
+                        .frame(maxWidth: .infinity)
+                        .accessibilityIdentifier("recurringDeleteButton")
+                    }
                 }
             }
-            .navigationTitle("add_recurring_expense".localized)
+            .scrollDismissesKeyboard(.interactively)
+            .navigationTitle((isEditing ? "edit_recurring_expense" : "add_recurring_expense").localized)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("cancel".localized) {
-                        dismiss()
-                    }
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("cancel".localized) { dismiss() }
                 }
-                
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("save".localized) {
-                        saveRecurringExpense()
-                    }
-                    .disabled(!canSave)
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("save".localized, action: save)
+                        .fontWeight(.semibold)
+                        .disabled(!canSave)
+                        .accessibilityIdentifier("recurringSaveButton")
+                }
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("done".localized) { focusedField = nil }
                 }
             }
             .sheet(isPresented: $showingCategoryManagement) {
                 CategoryManagementView()
+            }
+            .confirmationDialog(
+                "recurring_delete_title".localized,
+                isPresented: $showingDeleteConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("delete".localized, role: .destructive, action: delete)
+            } message: {
+                Text("recurring_delete_message".localized)
             }
             .onAppear {
                 if selectedCategory == nil {
                     selectedCategory = dataManager.userCategories.first
                 }
             }
+            .onChange(of: startDate) { _, _ in
+                // The end picker is bounded by the start day, but moving the start later must not
+                // leave an end date behind it.
+                if endDate < startDay { endDate = startDay }
+            }
+            .onChange(of: amount) { oldValue, newValue in
+                let formatted = AmountInputFormatter.formatEditingText(newValue, previous: oldValue)
+                if formatted != newValue { amount = formatted }
+            }
         }
     }
-    
-    private var canSave: Bool {
-        guard let value = AmountInputFormatter.parse(amount), value > 0 else { return false }
-        return !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && selectedCategory != nil
+
+    private var detailsSection: some View {
+        Section("expense_details".localized) {
+            TextField("title".localized, text: $title)
+                .textInputAutocapitalization(.words)
+                .submitLabel(.next)
+                .focused($focusedField, equals: .title)
+                .onSubmit { focusedField = .amount }
+                .accessibilityIdentifier("recurringTitleField")
+
+            HStack {
+                Text("amount".localized)
+                Spacer()
+                TextField("0", text: $amount)
+                    .keyboardType(.decimalPad)
+                    .multilineTextAlignment(.trailing)
+                    .monospacedDigit()
+                    .focused($focusedField, equals: .amount)
+                    .frame(maxWidth: 160)
+                    .accessibilityIdentifier("recurringAmountField")
+                Text(dataManager.user.currency.symbol)
+                    .foregroundStyle(.secondary)
+            }
+
+            RecurringCategoryPicker(selectedCategory: $selectedCategory) {
+                showingCategoryManagement = true
+            }
+        }
     }
 
-    private func saveRecurringExpense() {
-        guard let amountValue = AmountInputFormatter.parse(amount), let categoryId = selectedCategory?.id else { return }
+    private var scheduleSection: some View {
+        Section {
+            Picker("frequency".localized, selection: $recurrence) {
+                ForEach(RecurrenceType.allCases, id: \.self) { type in
+                    Text(type.localizedName).tag(type)
+                }
+            }
+            .accessibilityIdentifier("recurringFrequencyPicker")
 
-        var newRecurring = RecurringExpense(
-            title: title.trimmingCharacters(in: .whitespacesAndNewlines),
-            amount: amountValue,
-            categoryId: categoryId,
-            recurrenceType: selectedRecurrence,
-            startDate: startDate,
-            endDate: hasEndDate ? endDate : nil
-        )
-        newRecurring.isActive = isActive
+            DatePicker("start_date".localized, selection: $startDate, displayedComponents: .date)
+                .accessibilityIdentifier("recurringStartDatePicker")
 
-        dataManager.addRecurringExpense(newRecurring)
+            Toggle("set_end_date".localized, isOn: $hasEndDate.animation())
+                .accessibilityIdentifier("recurringEndDateToggle")
+
+            if hasEndDate {
+                DatePicker("end_date".localized, selection: $endDate, in: startDay..., displayedComponents: .date)
+                    .accessibilityIdentifier("recurringEndDatePicker")
+            }
+        } header: {
+            Text("recurrence".localized)
+        } footer: {
+            if isEditing {
+                Text("recurring_schedule_footer".localized)
+            }
+        }
+    }
+
+    private func statusSection(for stored: RecurringExpense) -> some View {
+        Section("status".localized) {
+            if let lastProcessed = stored.lastProcessedDate {
+                LabeledContent("last_processed".localized) {
+                    Text(lastProcessed.formatted(date: .abbreviated, time: .omitted))
+                }
+            }
+            LabeledContent("next_due".localized) {
+                if !stored.isActive {
+                    Text("recurring_paused".localized)
+                } else if stored.isExpired {
+                    Text("expired".localized)
+                } else {
+                    Text(stored.nextDueDate.formatted(date: .abbreviated, time: .omitted))
+                }
+            }
+        }
+    }
+
+    /// Past occurrences that saving will record immediately (a new bill starting last month).
+    private var backfillNote: String? {
+        guard isActive else { return nil }
+        if let existing, existing.lastProcessedDate != nil || !existing.isActive { return nil }
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let lastDay = hasEndDate ? min(calendar.startOfDay(for: endDate), today) : today
+        var count = 0
+        var index = 0
+        while count < 1_000 {
+            let date = recurrence.occurrence(index, from: startDate)
+            guard date < today, date <= lastDay else { break }
+            count += 1
+            index += 1
+        }
+        let since = startDay.formatted(date: .abbreviated, time: .omitted)
+        switch count {
+        case 0: return nil
+        case 1: return String(format: "recurring_backfill_one_format".localized, since)
+        default: return String(format: "recurring_backfill_format".localized, count, since)
+        }
+    }
+
+    private var canSave: Bool {
+        guard let value = AmountInputFormatter.parse(amount), value > 0, value.isFinite else { return false }
+        if hasEndDate && Calendar.current.startOfDay(for: endDate) < startDay { return false }
+        return !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && selectedCategory != nil
+    }
+
+    private func save() {
+        guard canSave, let amountValue = AmountInputFormatter.parse(amount), let categoryId = selectedCategory?.id else { return }
+        let calendar = Calendar.current
+        let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let end = hasEndDate ? max(calendar.startOfDay(for: endDate), startDay) : nil
+
+        if var updated = existing {
+            updated.title = cleanTitle
+            updated.amount = amountValue
+            updated.categoryId = categoryId
+            updated.recurrenceType = recurrence
+            updated.startDate = startDay
+            updated.endDate = end
+            updated.isActive = isActive
+            dataManager.updateRecurringExpense(updated)
+        } else {
+            var newRecurring = RecurringExpense(
+                title: cleanTitle,
+                amount: amountValue,
+                categoryId: categoryId,
+                recurrenceType: recurrence,
+                startDate: startDay,
+                endDate: end
+            )
+            newRecurring.isActive = isActive
+            dataManager.addRecurringExpense(newRecurring)
+        }
         dismiss()
     }
 
-    private func formatAmountInput() {
-        let formatted = AmountInputFormatter.formatEditingText(amount)
-        if formatted != amount {
-            amount = formatted
-        }
-    }
-}
-
-struct EditRecurringExpenseView: View {
-    let recurringExpense: RecurringExpense
-    @Environment(\.dismiss) private var dismiss
-    @ObservedObject private var dataManager = DataManager.shared
-    
-    @State private var title = ""
-    @State private var amount = ""
-    @State private var selectedCategory: UserCategory?
-    @State private var selectedRecurrence: RecurrenceType = .monthly
-    @State private var startDate = Date()
-    @State private var hasEndDate = false
-    @State private var endDate = Date()
-    @State private var isActive = true
-    @State private var showingCategoryManagement = false
-    
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section("expense_details".localized) {
-                    TextField("title".localized, text: $title)
-                        .textInputAutocapitalization(.words)
-
-                    HStack {
-                        Text("amount".localized)
-                        Spacer()
-                        Text(dataManager.user.currency.symbol)
-                            .foregroundStyle(.secondary)
-                        TextField("0", text: $amount)
-                            .keyboardType(.decimalPad)
-                            .multilineTextAlignment(.trailing)
-                            .frame(maxWidth: 140)
-                            .onChange(of: amount) { _, _ in formatAmountInput() }
-                    }
-
-                    RecurringCategoryPicker(selectedCategory: $selectedCategory) {
-                        showingCategoryManagement = true
-                    }
-                }
-                
-                Section("recurrence".localized) {
-                    Picker("frequency".localized, selection: $selectedRecurrence) {
-                        ForEach(RecurrenceType.allCases, id: \.self) { recurrence in
-                            HStack {
-                                HeroIcon(systemName: recurrence.icon)
-                                Text(recurrence.rawValue)
-                            }
-                            .tag(recurrence)
-                        }
-                    }
-                    
-                    DatePicker("start_date".localized, selection: $startDate, displayedComponents: .date)
-                    
-                    Toggle("end_date".localized, isOn: $hasEndDate)
-                    
-                    if hasEndDate {
-                        DatePicker("end_date".localized, selection: $endDate, in: startDate..., displayedComponents: .date)
-                    }
-                }
-                
-                Section("settings".localized) {
-                    Toggle("active".localized, isOn: $isActive)
-                }
-                
-                Section("status".localized) {
-                    if let lastProcessed = recurringExpense.lastProcessedDate {
-                        HStack {
-                            Text("last_processed".localized)
-                            Spacer()
-                            Text(DateFormatter.shortDate.string(from: lastProcessed))
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    
-                    HStack {
-                        Text("next_due".localized)
-                        Spacer()
-                        Text(DateFormatter.shortDate.string(from: recurringExpense.nextDueDate))
-                            .foregroundColor(.secondary)
-                    }
-                }
-                
-                Section {
-                    RecurrencePreviewView(
-                        recurrenceType: selectedRecurrence,
-                        startDate: startDate,
-                        endDate: hasEndDate ? endDate : nil
-                    )
-                }
-            }
-            .navigationTitle("edit_recurring_expense".localized)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("cancel".localized) {
-                        dismiss()
-                    }
-                }
-                
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("save".localized) {
-                        saveChanges()
-                    }
-                    .disabled(!canSave)
-                }
-            }
-            .onAppear {
-                loadExpenseData()
-            }
-            .sheet(isPresented: $showingCategoryManagement) {
-                CategoryManagementView()
-            }
-        }
-    }
-    
-    private var canSave: Bool {
-        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-        !amount.isEmpty &&
-        (AmountInputFormatter.parse(amount) ?? 0) > 0
-    }
-    
-    private func loadExpenseData() {
-        title = recurringExpense.title
-        amount = AmountInputFormatter.formatValue(recurringExpense.amount)
-        selectedCategory = DataManager.shared.resolveCategory(id: recurringExpense.categoryId)
-        selectedRecurrence = recurringExpense.recurrenceType
-        startDate = recurringExpense.startDate
-        hasEndDate = recurringExpense.endDate != nil
-        endDate = recurringExpense.endDate ?? Calendar.current.date(byAdding: .year, value: 1, to: Date()) ?? Date()
-        isActive = recurringExpense.isActive
-    }
-    
-    private func saveChanges() {
-        guard let amountValue = AmountInputFormatter.parse(amount) else { return }
-        
-        var updatedExpense = recurringExpense
-        updatedExpense.title = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        updatedExpense.amount = amountValue
-        updatedExpense.categoryId = selectedCategory?.id ?? recurringExpense.categoryId
-        updatedExpense.recurrenceType = selectedRecurrence
-        updatedExpense.startDate = startDate
-        updatedExpense.endDate = hasEndDate ? endDate : nil
-        updatedExpense.isActive = isActive
-        
-        dataManager.updateRecurringExpense(updatedExpense)
+    private func delete() {
+        guard let existing else { return }
+        dataManager.deleteRecurringExpense(existing)
         dismiss()
-    }
-
-    private func formatAmountInput() {
-        let formatted = AmountInputFormatter.formatEditingText(amount)
-        if formatted != amount {
-            amount = formatted
-        }
     }
 }
 
@@ -322,79 +330,88 @@ struct RecurringCategoryPicker: View {
                         .foregroundStyle(.tertiary)
                 }
             }
+            .accessibilityIdentifier("recurringCategoryPicker")
         }
     }
 }
 
 // MARK: - Recurrence Preview
+
+/// The next few charges from today (or from the start day, if it is later).
 struct RecurrencePreviewView: View {
     let recurrenceType: RecurrenceType
     let startDate: Date
     let endDate: Date?
-    
+
+    private static let limit = 5
+
     private var upcomingDates: [Date] {
-        var dates: [Date] = []
-        var currentDate = startDate
-        
-        for _ in 0..<5 {
-            dates.append(currentDate)
-            currentDate = recurrenceType.nextDate(from: currentDate)
-            
-            if let end = endDate, currentDate > end {
-                break
-            }
-        }
-        
-        return dates
+        RecurrencePreviewView.upcomingDates(recurrenceType: recurrenceType, startDate: startDate, endDate: endDate, limit: Self.limit + 1)
     }
-    
+
+    static func upcomingDates(
+        recurrenceType: RecurrenceType,
+        startDate: Date,
+        endDate: Date?,
+        from today: Date = Date(),
+        limit: Int,
+        calendar: Calendar = .current
+    ) -> [Date] {
+        let firstDay = calendar.startOfDay(for: today)
+        let lastDay = endDate.map { calendar.startOfDay(for: $0) } ?? .distantFuture
+        var result: [Date] = []
+        var index = 0
+        // Daily schedules started years ago need many steps; the cap only guards bad dates.
+        while result.count < limit && index < 20_000 {
+            let date = recurrenceType.occurrence(index, from: startDate, calendar: calendar)
+            if date > lastDay { break }
+            if date >= firstDay { result.append(date) }
+            index += 1
+        }
+        return result
+    }
+
     var body: some View {
+        let dates = upcomingDates
+        let startDay = Calendar.current.startOfDay(for: startDate)
+
         VStack(alignment: .leading, spacing: 8) {
             Text("upcoming_occurrences".localized)
-                .font(.caption)
-                .fontWeight(.medium)
-                .foregroundColor(.secondary)
-            
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+
             VStack(alignment: .leading, spacing: 4) {
-                ForEach(upcomingDates.indices, id: \.self) { index in
+                ForEach(Array(dates.prefix(Self.limit).enumerated()), id: \.offset) { index, date in
                     HStack {
                         Text("\(index + 1).")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundStyle(.secondary)
                             .frame(width: 20, alignment: .leading)
-                        
-                        Text(DateFormatter.mediumDate.string(from: upcomingDates[index]))
-                            .font(.caption)
-                            .foregroundColor(.primary)
-                        
-                        if index == 0 {
+
+                        Text(date.formatted(date: .abbreviated, time: .omitted))
+                            .foregroundStyle(.primary)
+
+                        if date == startDay {
                             Text("(\("start".localized))")
                                 .font(.caption2)
-                                .foregroundColor(.secondary)
+                                .foregroundStyle(.secondary)
                         }
-                        
+
                         Spacer()
                     }
+                    .font(.caption.monospacedDigit())
                 }
-                
-                if upcomingDates.count == 5 {
-                    Text("...")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .padding(.leading, 20)
+
+                if dates.count > Self.limit {
+                    Text("…")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.leading, 20)
                 }
             }
         }
         .padding(.vertical, 8)
+        .accessibilityElement(children: .combine)
     }
-}
-
-extension DateFormatter {
-    static let mediumDate: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        return formatter
-    }()
 }
 
 #Preview {

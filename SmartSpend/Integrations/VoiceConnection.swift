@@ -87,7 +87,7 @@ final class VoiceConnectionStore: ObservableObject {
     static let shared = VoiceConnectionStore()
     static let defaultServer = "https://ubuntu.onca-albacore.ts.net:10000"
     @Published private(set) var connection: VoiceConnection?
-    private let service = "com.tursunov.SmartSpend.private-voice"
+    private let service = "ai.humblebee.smartspend.private-voice"
 
     private init() {
         var query = keychainQuery

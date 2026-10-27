@@ -130,7 +130,7 @@ class DataExporter: ObservableObject {
             csvContent += exportMonthlySalariesToCSV(dataManager: dataManager)
         }
         
-        return saveToFile(content: csvContent, fileName: "SmartSpend_Export", extension: "csv")
+        return saveToFile(content: csvContent, fileName: "Cenzio_Export", extension: "csv")
     }
     
     private func exportExpensesToCSV(dataManager: DataManager, dateRange: DateInterval?) -> String {
@@ -251,7 +251,7 @@ class DataExporter: ObservableObject {
         do {
             let jsonData = try JSONSerialization.data(withJSONObject: exportData, options: .prettyPrinted)
             let jsonString = String(data: jsonData, encoding: .utf8) ?? ""
-            return saveToFile(content: jsonString, fileName: "SmartSpend_Export", extension: "json")
+            return saveToFile(content: jsonString, fileName: "Cenzio_Export", extension: "json")
         } catch {
             return nil
         }
@@ -304,7 +304,7 @@ class DataExporter: ObservableObject {
         }
 
         let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("SmartSpend_Export_\(UUID().uuidString).pdf")
+            .appendingPathComponent("Cenzio_Export_\(UUID().uuidString).pdf")
         do {
             try Self.pdfData(content: content).write(to: url, options: .atomic)
             return url

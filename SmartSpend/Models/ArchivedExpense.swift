@@ -8,7 +8,9 @@ struct ArchivedExpense: Identifiable, Codable {
     let date: Date
     let archivedDate: Date
     let notes: String?
-    
+    /// Kept so a restored expense stays linked to its Notion page (absent in older saves).
+    let notionId: String?
+
     init(from expense: Expense) {
         self.id = expense.id
         self.title = expense.title
@@ -17,5 +19,6 @@ struct ArchivedExpense: Identifiable, Codable {
         self.date = expense.date
         self.archivedDate = Date()
         self.notes = nil
+        self.notionId = expense.notionId
     }
 }

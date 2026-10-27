@@ -148,8 +148,8 @@ On the private Ubuntu installation, replace `uv run smartspend-ai` with
 
 ## Private iPhone voice preview
 
-On Dashboard or Expenses, hold **+** briefly and pull it down to start listening.
-A normal tap opens only the manual form. Recording requires microphone/speech
+On Dashboard or Expenses, tap the microphone button at the bottom to start listening.
+The **+** button next to it opens only the manual form. Recording requires microphone/speech
 permission. The current inline voice flow uses Apple's on-device English recognizer.
 Runtime language/model availability is checked;
 unavailable local recognition does not silently fall back to uploading audio.

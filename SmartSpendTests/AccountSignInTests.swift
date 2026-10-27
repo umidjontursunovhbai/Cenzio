@@ -2,51 +2,27 @@ import Foundation
 import Testing
 @testable import SmartSpend
 
-@Suite("Account sign-in safety")
+@Suite("Apple account display")
 struct AccountSignInTests {
-    @Test("PKCE uses the RFC 7636 SHA256 vector")
-    func pkce() {
-        #expect(AccountSignInSecurity.challenge("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk")
-                == "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM")
+    @Test("Title prefers full name, then email, then Apple ID")
+    func titleFallbacks() {
+        #expect(AppleAccountDisplay.title(for: AppleAccount(userID: "u", fullName: "Ada Lovelace", email: "ada@example.com")) == "Ada Lovelace")
+        #expect(AppleAccountDisplay.title(for: AppleAccount(userID: "u", fullName: "  ", email: "ada@example.com")) == "ada@example.com")
+        #expect(AppleAccountDisplay.title(for: AppleAccount(userID: "u", fullName: nil, email: nil)) == "account_apple_id".localized)
+        #expect(AppleAccountDisplay.title(for: nil) == "account_apple_id".localized)
     }
 
-    @Test("Random state and verifier are URL safe, distinct and sufficiently long")
-    func randomValues() throws {
-        let first = try AccountSignInSecurity.randomValue()
-        let second = try AccountSignInSecurity.randomValue()
-        #expect(first.count == 43)
-        #expect(first != second)
-        #expect(first.range(of: #"^[A-Za-z0-9_-]{43}$"#, options: .regularExpression) != nil)
+    @Test("Subtitle shows the email only when the title doesn't already")
+    func subtitle() {
+        #expect(AppleAccountDisplay.subtitle(for: AppleAccount(userID: "u", fullName: "Ada", email: "ada@example.com")) == "ada@example.com")
+        #expect(AppleAccountDisplay.subtitle(for: AppleAccount(userID: "u", fullName: nil, email: "ada@example.com")) == "account_signed_in_with_apple".localized)
+        #expect(AppleAccountDisplay.subtitle(for: AppleAccount(userID: "u", fullName: nil, email: nil)) == "account_signed_in_with_apple".localized)
+        #expect(AppleAccountDisplay.subtitle(for: nil) == "account_not_signed_in".localized)
     }
 
-    @Test("Native callbacks require exact route and matching one-time state")
-    func callbacks() throws {
-        let code = "test-one-time-code-long-enough"
-        #expect(try AccountSignInSecurity.callbackCode(URL(string: "smartspend://account/callback?code=\(code)&state=expected")!, state: "expected") == code)
-        for text in [
-            "smartspend://account/callback?code=\(code)&state=wrong",
-            "https://account/callback?code=\(code)&state=expected",
-            "smartspend://wrong/callback?code=\(code)&state=expected",
-            "smartspend://account/other?code=\(code)&state=expected",
-            "smartspend://account/callback?code=\(code)&state=expected&state=wrong",
-            "smartspend://account/callback?code=\(code)&state=expected&error=sign_in_failed",
-            "smartspend://account/callback?code=\(code)&code=another&state=expected"
-        ] {
-            #expect(throws: AccountSignInError.self) {
-                try AccountSignInSecurity.callbackCode(URL(string: text)!, state: "expected")
-            }
-        }
-    }
-
-    @Test("Authorization rejects impostor hosts and non-HTTPS URLs")
-    func authorizationHosts() throws {
-        let server = URL(string: "https://sync.example.com:10000")!
-        #expect(try AccountSignInSecurity.authorizationURL("https://accounts.google.com/o/oauth2/v2/auth", provider: .google, server: server).host == "accounts.google.com")
-        for text in ["http://accounts.google.com/o/oauth2/v2/auth", "https://accounts.google.com.evil.example/auth",
-                     "https://user@accounts.google.com/auth", "https://sync.example.com:9999/auth"] {
-            #expect(throws: AccountSignInError.self) {
-                try AccountSignInSecurity.authorizationURL(text, provider: .google, server: server)
-            }
-        }
+    @Test("Display strings are localized, not raw keys")
+    func localized() {
+        #expect("account_apple_id".localized == "Apple ID")
+        #expect("account_signed_in_with_apple".localized == "Signed in with Apple")
     }
 }

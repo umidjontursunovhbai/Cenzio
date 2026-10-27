@@ -201,6 +201,120 @@ struct SmartSpendTests {
         #expect(overview.previousMonthsWithExpenses.map { calendar.component(.month, from: $0.month) } == [7, 5, 11])
     }
 
+    @Test("Dashboard calendar covers the whole month with per-day totals")
+    func dashboardCalendarDays() async throws {
+        let calendar = testCalendar
+        let category = UUID()
+        let overview = DashboardOverview(
+            expenses: [
+                Expense(title: "Lunch", amount: 50, categoryId: category, date: makeDate(2026, 8, 3, calendar: calendar)),
+                Expense(title: "Taxi", amount: 30, categoryId: category, date: makeDate(2026, 8, 3, calendar: calendar)),
+                Expense(title: "Future", amount: 600, categoryId: category, date: makeDate(2026, 8, 20, calendar: calendar)),
+                Expense(title: "July", amount: 40, categoryId: category, date: makeDate(2026, 7, 31, calendar: calendar))
+            ],
+            now: makeDate(2026, 8, 15, calendar: calendar),
+            calendar: calendar
+        )
+
+        #expect(overview.calendarDays.count == 31)
+        // 1 Aug 2026 is a Saturday; the Gregorian calendar starts weeks on Sunday.
+        #expect(overview.leadingBlankDays == 6)
+        let third = try #require(overview.calendarDays.first { $0.day == 3 })
+        #expect(third.amount == 80)
+        #expect(third.count == 2)
+        #expect(overview.calendarDays.first { $0.day == 1 }?.amount == 0)
+        #expect(overview.calendarDays.first { $0.day == 15 }?.isFuture == false)
+        let twentieth = try #require(overview.calendarDays.first { $0.day == 20 })
+        #expect(twentieth.isFuture)
+        #expect(twentieth.amount == 0)
+    }
+
+    @Test("Weekday pattern averages from the first recorded day, not empty weeks")
+    func dashboardWeekdayAverages() async throws {
+        let calendar = testCalendar
+        let category = UUID()
+        // 15 Aug 2026 is a Saturday.
+        let overview = DashboardOverview(
+            expenses: [
+                Expense(title: "Sat", amount: 100, categoryId: category, date: makeDate(2026, 8, 8, calendar: calendar)),
+                Expense(title: "Mon", amount: 30, categoryId: category, date: makeDate(2026, 8, 10, calendar: calendar)),
+                Expense(title: "Sat again", amount: 50, categoryId: category, date: makeDate(2026, 8, 15, calendar: calendar)),
+                Expense(title: "Too old", amount: 999, categoryId: category, date: makeDate(2026, 1, 3, calendar: calendar))
+            ],
+            now: makeDate(2026, 8, 15, calendar: calendar),
+            calendar: calendar
+        )
+
+        #expect(overview.weekdaySampleDays == 8)
+        #expect(overview.weekdayAverages.map(\.weekday) == [1, 2, 3, 4, 5, 6, 7])
+        #expect(overview.weekdayAverages.first { $0.weekday == 7 }?.average == 75)
+        #expect(overview.weekdayAverages.first { $0.weekday == 2 }?.average == 30)
+        #expect(overview.weekdayAverages.first { $0.weekday == 1 }?.average == 0)
+        #expect(overview.peakWeekday?.weekday == 7)
+    }
+
+    @Test("Top titles merge case and spacing; largest expenses rank by amount")
+    func dashboardTopTitlesAndLargest() async throws {
+        let calendar = testCalendar
+        let food = UUID()
+        let travel = UUID()
+        let overview = DashboardOverview(
+            expenses: [
+                Expense(title: "Coffee", amount: 10, categoryId: food, date: makeDate(2026, 8, 2, calendar: calendar)),
+                Expense(title: " coffee ", amount: 15, categoryId: food, date: makeDate(2026, 8, 4, calendar: calendar)),
+                Expense(title: "Taxi", amount: 20, categoryId: travel, date: makeDate(2026, 8, 5, calendar: calendar)),
+                Expense(title: "Rent", amount: 5, categoryId: food, date: makeDate(2026, 8, 6, calendar: calendar)),
+                Expense(title: "Coffee", amount: 500, categoryId: food, date: makeDate(2026, 7, 6, calendar: calendar))
+            ],
+            now: makeDate(2026, 8, 15, calendar: calendar),
+            calendar: calendar
+        )
+
+        #expect(overview.topTitles.map(\.amount) == [25, 20, 5])
+        #expect(overview.topTitles.first?.count == 2)
+        #expect(overview.topTitles.first?.title == "coffee")
+        #expect(overview.largestExpenses.map(\.amount) == [20, 15, 10, 5])
+    }
+
+    @Test("Monthly history spans six months and pace compares to an even spread")
+    func dashboardMonthlyHistoryAndPace() async throws {
+        let calendar = testCalendar
+        let category = UUID()
+        let overview = DashboardOverview(
+            expenses: [
+                Expense(title: "Aug", amount: 2_000, categoryId: category, date: makeDate(2026, 8, 2, calendar: calendar)),
+                Expense(title: "Jun", amount: 300, categoryId: category, date: makeDate(2026, 6, 9, calendar: calendar)),
+                Expense(title: "Ancient", amount: 700, categoryId: category, date: makeDate(2025, 12, 9, calendar: calendar))
+            ],
+            now: makeDate(2026, 8, 15, calendar: calendar),
+            calendar: calendar
+        )
+
+        #expect(overview.monthlyHistory.map { calendar.component(.month, from: $0.month) } == [3, 4, 5, 6, 7, 8])
+        #expect(overview.monthlyHistory.map(\.amount) == [0, 0, 0, 300, 0, 2_000])
+        // 3,100 over 31 days → 1,500 expected by day 15.
+        #expect(overview.paceDifference(monthlyIncome: 3_100) == 500)
+        #expect(overview.paceDifference(monthlyIncome: 0) == 0)
+    }
+
+    @Test("Dashboard insights stay empty for a month without spending")
+    func dashboardInsightsEmptyMonth() async throws {
+        let overview = DashboardOverview(
+            expenses: [],
+            now: makeDate(2026, 8, 15, calendar: testCalendar),
+            calendar: testCalendar
+        )
+
+        #expect(overview.calendarDays.count == 31)
+        #expect(overview.calendarDays.allSatisfy { $0.amount == 0 && $0.count == 0 })
+        #expect(overview.topTitles.isEmpty)
+        #expect(overview.largestExpenses.isEmpty)
+        #expect(overview.peakWeekday == nil)
+        #expect(overview.weekdaySampleDays == 0)
+        #expect(overview.monthlyHistory.count == 6)
+        #expect(overview.monthlyHistory.allSatisfy { $0.amount == 0 })
+    }
+
     @Test("Spendable today reserves recurring bills before month end")
     func spendableTodayReservesRecurringBills() async throws {
         let calendar = testCalendar

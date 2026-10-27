@@ -1,103 +1,78 @@
 import SwiftUI
 
+/// One expense in the Expenses list. Display only: the list owns taps,
+/// swipe actions, context menus and the edit sheet.
 struct ExpenseRowView: View {
     let expense: Expense
-    let categoryDisplayInfo: (name: String, icon: String, color: Color)
+    let category: UserCategory
     let currency: Currency
-    let isSelectionMode: Bool
-    let isSelected: Bool
-    let onToggleSelection: () -> Void
-    let onDelete: () -> Void
-
-    @State private var showingEditExpense = false
+    /// `nil` outside selection mode; otherwise whether this row is selected.
+    var selection: Bool? = nil
 
     var body: some View {
-        Button(action: {
-            if isSelectionMode {
-                onToggleSelection()
-            } else {
-                showingEditExpense = true
+        HStack(spacing: iOSDesignSystem.Spacing.medium) {
+            if let isSelected = selection {
+                selectionMark(isSelected)
+                    .transition(.move(edge: .leading).combined(with: .opacity))
             }
-        }) {
-            HStack(spacing: 14) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color(.secondarySystemGroupedBackground))
-                        .frame(width: iOSDesignSystem.Size.rowIcon, height: iOSDesignSystem.Size.rowIcon)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .stroke(categoryDisplayInfo.color.opacity(0.28), lineWidth: 1)
-                        )
-                    HeroIcon(systemName: categoryDisplayInfo.icon, size: 21)
-                        .foregroundStyle(categoryDisplayInfo.color)
-                }
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(expense.title.isEmpty ? "Unnamed" : expense.title)
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                    Text(categoryDisplayInfo.name)
-                        .font(.system(size: 13))
-                        .foregroundStyle(categoryDisplayInfo.color)
-                }
+            HeroIcon(systemName: category.iconSystemName, size: 20)
+                .foregroundStyle(category.color)
+                .frame(width: 40, height: 40)
+                .background(category.color.opacity(0.13), in: RoundedRectangle(cornerRadius: iOSDesignSystem.Radius.medium, style: .continuous))
 
-                Spacer(minLength: 8)
-
-                Text(formatCurrency(expense.amount))
-                    .font(.system(size: 16, weight: .semibold))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(displayTitle)
+                    .font(.body.weight(.medium))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.72)
-                    .multilineTextAlignment(.trailing)
+                Text(subtitle)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
 
-                if isSelectionMode {
-                    selectionMark
-                        .transition(.move(edge: .trailing).combined(with: .opacity))
-                }
-            }
-            .padding(.vertical, iOSDesignSystem.Spacing.xSmall)
-            .frame(minHeight: iOSDesignSystem.Size.minimumTapTarget)
-            .contentShape(Rectangle())
+            Spacer(minLength: iOSDesignSystem.Spacing.small)
+
+            Text(CurrencyFormatter.format(expense.amount, currency: currency))
+                .font(.body.weight(.semibold))
+                .fontDesign(.rounded)
+                .monospacedDigit()
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
         }
-        .buttonStyle(PressEffectButtonStyle())
-        .listRowInsets(EdgeInsets(top: iOSDesignSystem.Spacing.xSmall,
-                                  leading: iOSDesignSystem.Spacing.screenMargin,
-                                  bottom: iOSDesignSystem.Spacing.xSmall,
-                                  trailing: iOSDesignSystem.Spacing.screenMargin))
-        .contextMenu {
-            Button(action: { showingEditExpense = true }) {
-                HeroIconLabel(title: "Edit", systemName: "pencil")
-            }
-            Button(role: .destructive, action: {
-                onDelete()
-            }) {
-                HeroIconLabel(title: "Delete", systemName: "trash")
-            }
-        }
-        .sheet(isPresented: $showingEditExpense) {
-            EditExpenseView(expense: expense)
-        }
+        .padding(.vertical, 2)
+        .frame(minHeight: iOSDesignSystem.Size.minimumTapTarget)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(selection == true ? .isSelected : [])
     }
 
-    private func formatCurrency(_ amount: Double) -> String {
-        return CurrencyFormatter.format(amount, currency: currency)
+    private var displayTitle: String {
+        let trimmed = expense.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "exp_untitled".localized : trimmed
     }
 
-    private var selectionMark: some View {
+    /// Category, plus the time when one was recorded (imports often land at midnight).
+    private var subtitle: String {
+        let parts = Calendar.current.dateComponents([.hour, .minute], from: expense.date)
+        guard parts.hour != 0 || parts.minute != 0 else { return category.name }
+        return "\(category.name) · \(expense.date.formatted(date: .omitted, time: .shortened))"
+    }
+
+    private func selectionMark(_ isSelected: Bool) -> some View {
         ZStack {
             Circle()
-                .stroke(isSelected ? categoryDisplayInfo.color : Color(.systemGray3), lineWidth: 2)
-
+                .strokeBorder(isSelected ? Color.accentColor : Color(.systemGray3), lineWidth: 1.5)
             if isSelected {
-                Circle()
-                    .fill(categoryDisplayInfo.color)
-
+                Circle().fill(Color.accentColor)
                 HeroIcon("check", size: 12)
                     .foregroundStyle(.white)
             }
         }
         .frame(width: 24, height: 24)
+        .animation(.snappy(duration: 0.15), value: isSelected)
     }
 }
 

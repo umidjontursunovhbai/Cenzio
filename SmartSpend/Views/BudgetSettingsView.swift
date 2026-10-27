@@ -8,6 +8,7 @@ struct BudgetSettingsView: View {
 
     @State private var showingAddGoal = false
     @State private var showingResetConfirmation = false
+    @State private var showingInfo = false
 
     init(focusCategoryID: UUID? = nil) {
         self.focusCategoryID = focusCategoryID
@@ -21,15 +22,23 @@ struct BudgetSettingsView: View {
         dataManager.categoryBudgets.filter { $0.isEnabled && $0.amount > 0 }
     }
 
+    private var currentMonth: DateInterval {
+        BudgetPeriodCalculator.monthInterval(containing: Date())
+    }
+
     private var currentMonthSpendingByCategory: [UUID: Double] {
-        BudgetPeriodCalculator.totalsByCategory(
-            for: dataManager.expenses,
-            in: BudgetPeriodCalculator.monthInterval(containing: Date())
-        )
+        BudgetPeriodCalculator.totalsByCategory(for: dataManager.expenses, in: currentMonth)
     }
 
     private var totalBudget: Double {
         activeBudgets.reduce(0) { $0 + $1.amount }
+    }
+
+    /// Days left in the current month, including today.
+    private var daysLeftInMonth: Int {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        return max(calendar.dateComponents([.day], from: today, to: currentMonth.end).day ?? 1, 1)
     }
 
     private func currentMonthSpent(using spendingByCategory: [UUID: Double]) -> Double {
@@ -41,15 +50,21 @@ struct BudgetSettingsView: View {
         }
     }
 
-    private func budgetProgress(currentMonthSpent: Double) -> Double {
-        guard totalBudget > 0 else { return 0 }
-        return min(currentMonthSpent / totalBudget, 1)
+    private func statusCounts(using spendingByCategory: [UUID: Double]) -> [BudgetGoalStatus: Int] {
+        activeBudgets.reduce(into: [:]) { counts, budget in
+            let status = BudgetGoalStatus.evaluate(
+                spent: spendingByCategory[budget.categoryId, default: 0],
+                limit: budget.amount,
+                isEnabled: true
+            )
+            counts[status, default: 0] += 1
+        }
     }
 
-    private func budgetProgressColor(currentMonthSpent: Double, progress: Double) -> Color {
-        if totalBudget > 0, currentMonthSpent > totalBudget { return Color(.systemRed) }
-        if progress >= 0.8 { return Color(.systemOrange) }
-        return Color(.systemBlue)
+    /// A real category to use as the worked example in the info popup.
+    private var infoExample: (name: String, limit: Double)? {
+        guard let budget = activeBudgets.first else { return nil }
+        return (dataManager.resolveCategory(id: budget.categoryId).name, budget.amount)
     }
 
     var body: some View {
@@ -63,7 +78,10 @@ struct BudgetSettingsView: View {
                 ScrollViewReader { proxy in
                     ScrollView {
                         LazyVStack(spacing: 28) {
-                            monthlyOverview(currentMonthSpent: spentThisMonth)
+                            monthlyOverview(
+                                currentMonthSpent: spentThisMonth,
+                                counts: statusCounts(using: spendingByCategory)
+                            )
                             categoryBudgetsSection(spendingByCategory: spendingByCategory)
                             spendingGoalsSection
                             budgetToolsSection
@@ -73,6 +91,7 @@ struct BudgetSettingsView: View {
                         .padding(.bottom, 36)
                     }
                     .scrollIndicators(.hidden)
+                    .scrollDismissesKeyboard(.interactively)
                     .onAppear {
                         scrollToFocusedCategory(using: proxy)
                     }
@@ -83,6 +102,18 @@ struct BudgetSettingsView: View {
             .toolbarBackground(Color.white, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(action: presentInfo) {
+                        HeroIcon("information-circle", size: 23)
+                            .foregroundStyle(Color.accentColor)
+                            .frame(minWidth: iOSDesignSystem.Size.minimumTapTarget,
+                                   minHeight: iOSDesignSystem.Size.minimumTapTarget)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("budget_info_title".localized)
+                    .accessibilityIdentifier("budgetGoals.infoButton")
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("done".localized) {
                         dataManager.saveBudgets()
@@ -99,11 +130,11 @@ struct BudgetSettingsView: View {
                     .presentationDragIndicator(.visible)
                     .presentationBackground(Color.white)
             }
-            .alert("Reset all category budgets?", isPresented: $showingResetConfirmation) {
+            .alert("budget_reset_title".localized, isPresented: $showingResetConfirmation) {
                 Button("cancel".localized, role: .cancel) { }
                 Button("reset".localized, role: .destructive, action: resetAllBudgets)
             } message: {
-                Text("Your spending goals will stay in place.")
+                Text("budget_reset_message".localized)
             }
             .onAppear {
                 dataManager.updateSpendingGoalProgress()
@@ -112,80 +143,178 @@ struct BudgetSettingsView: View {
                 dataManager.saveBudgets()
             }
         }
+        .infoPopup(
+            isPresented: $showingInfo,
+            title: "budget_info_title".localized,
+            icon: "chart-pie",
+            accessibilityPrefix: "budgetGoals.info"
+        ) {
+            BudgetGoalsInfoContent(
+                example: infoExample,
+                currency: dataManager.user.currency
+            )
+        }
         .preferredColorScheme(.light)
     }
 
-    private func monthlyOverview(currentMonthSpent: Double) -> some View {
-        let progress = budgetProgress(currentMonthSpent: currentMonthSpent)
-        let progressColor = budgetProgressColor(currentMonthSpent: currentMonthSpent, progress: progress)
+    private func presentInfo() {
+        showingInfo = true
+    }
+
+    // MARK: - Overview
+
+    private func monthlyOverview(currentMonthSpent: Double, counts: [BudgetGoalStatus: Int]) -> some View {
+        let currency = dataManager.user.currency
+        let hasBudgets = totalBudget > 0
+        let status = BudgetGoalStatus.evaluate(spent: currentMonthSpent, limit: totalBudget, isEnabled: hasBudgets)
+        let progress = hasBudgets ? currentMonthSpent / totalBudget : 0
+        let remaining = totalBudget - currentMonthSpent
+        let tint = status == .onTrack ? Color.accentColor : status.color
 
         return VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 5) {
-                    Text("THIS MONTH")
+                    Text(Date().formatted(.dateTime.month(.wide).year()).uppercased())
                         .font(.caption2.weight(.bold))
                         .foregroundStyle(.secondary)
 
-                    Text(totalBudget > 0
-                         ? CurrencyFormatter.format(totalBudget, currency: dataManager.user.currency)
-                         : "No budget set")
+                    Text(hasBudgets
+                         ? CurrencyFormatter.format(totalBudget, currency: currency)
+                         : "budget_no_limits_title".localized)
                         .font(.title2.weight(.bold))
                         .fontDesign(.rounded)
                         .foregroundStyle(.primary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
+
+                    Text(hasBudgets
+                         ? "budget_total_limits_caption".localized(with: activeBudgets.count)
+                         : "budget_no_limits_message".localized)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Spacer(minLength: 12)
 
-                ZStack {
-                    Circle()
-                        .stroke(Color(.systemGray5), lineWidth: 6)
-                    Circle()
-                        .trim(from: 0, to: progress)
-                        .stroke(progressColor,
-                                style: StrokeStyle(lineWidth: 6, lineCap: .round))
-                        .rotationEffect(.degrees(-90))
+                if hasBudgets {
+                    ZStack {
+                        Circle()
+                            .stroke(Color(.systemGray5), lineWidth: 6)
+                        Circle()
+                            .trim(from: 0, to: min(progress, 1))
+                            .stroke(tint, style: StrokeStyle(lineWidth: 6, lineCap: .round))
+                            .rotationEffect(.degrees(-90))
 
-                    Text("\(Int((progress * 100).rounded()))%")
-                        .font(.caption.weight(.bold))
-                        .fontDesign(.rounded)
-                }
-                .frame(width: 58, height: 58)
-                .accessibilityLabel("Budget used")
-                .accessibilityValue("\(Int((progress * 100).rounded())) percent")
-            }
-
-            GeometryReader { proxy in
-                ZStack(alignment: .leading) {
-                    Capsule()
-                        .fill(Color(.systemGray5))
-                    Capsule()
-                        .fill(progressColor)
-                        .frame(width: proxy.size.width * progress)
+                        Text("\(Int((progress * 100).rounded()))%")
+                            .font(.caption.weight(.bold))
+                            .fontDesign(.rounded)
+                            .minimumScaleFactor(0.7)
+                            .padding(6)
+                    }
+                    .frame(width: 58, height: 58)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("budget_used".localized)
+                    .accessibilityValue("\(Int((progress * 100).rounded()))%")
                 }
             }
-            .frame(height: 8)
 
-            HStack(spacing: 12) {
-                overviewMetric(
-                    label: "Spent",
-                    value: CurrencyFormatter.format(currentMonthSpent, currency: dataManager.user.currency),
-                    color: progressColor
-                )
+            if hasBudgets {
+                BudgetProgressBar(progress: progress, tint: tint)
 
-                Divider()
-                    .frame(height: 34)
+                HStack(spacing: 12) {
+                    overviewMetric(
+                        label: "budget_spent_label".localized,
+                        value: CurrencyFormatter.format(currentMonthSpent, currency: currency),
+                        color: .primary
+                    )
 
-                overviewMetric(
-                    label: currentMonthSpent > totalBudget && totalBudget > 0 ? "Over" : "Remaining",
-                    value: CurrencyFormatter.format(abs(totalBudget - currentMonthSpent), currency: dataManager.user.currency),
-                    color: currentMonthSpent > totalBudget && totalBudget > 0 ? Color(.systemRed) : Color(.systemGreen)
-                )
+                    Divider().frame(height: 34)
+
+                    overviewMetric(
+                        label: remaining < 0 ? "budget_over_label".localized : "budget_left_label".localized,
+                        value: CurrencyFormatter.format(abs(remaining), currency: currency),
+                        color: remaining < 0 ? Color(.systemRed) : Color(.systemGreen)
+                    )
+
+                    Divider().frame(height: 34)
+
+                    overviewMetric(
+                        label: "budget_days_left_label".localized,
+                        value: "\(daysLeftInMonth)",
+                        color: .primary
+                    )
+                }
+
+                statusSummary(counts)
+
+                if remaining > 0 {
+                    HStack(alignment: .top, spacing: 8) {
+                        HeroIcon("calendar-days", size: 16)
+                            .foregroundStyle(.secondary)
+                        Text("budget_daily_pace".localized(with:
+                            CurrencyFormatter.format(remaining / Double(daysLeftInMonth), currency: currency),
+                            daysLeftInMonth
+                        ))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            } else if canSuggestBudgets {
+                Button(action: suggestBudgets) {
+                    HStack(spacing: 8) {
+                        HeroIcon("sparkles", size: 17)
+                        Text("budget_suggest_title".localized)
+                            .font(.subheadline.weight(.semibold))
+                    }
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity, minHeight: 46)
+                    .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                }
+                .buttonStyle(.plain)
             }
+
+            Button(action: presentInfo) {
+                HStack(spacing: 6) {
+                    HeroIcon("information-circle", size: 16)
+                    Text("budget_how_calculated".localized)
+                        .font(.footnote.weight(.semibold))
+                }
+                .foregroundStyle(Color.accentColor)
+                .frame(minHeight: iOSDesignSystem.Size.minimumTapTarget)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(.vertical, -10)
+            .accessibilityIdentifier("budgetGoals.howCalculated")
         }
         .padding(20)
         .liquidGlassCard(cornerRadius: 22)
+    }
+
+    private func statusSummary(_ counts: [BudgetGoalStatus: Int]) -> some View {
+        HStack(spacing: 8) {
+            ForEach([BudgetGoalStatus.onTrack, .nearLimit, .overBudget], id: \.self) { status in
+                let count = counts[status, default: 0]
+                HStack(spacing: 5) {
+                    Circle()
+                        .fill(status.color)
+                        .frame(width: 7, height: 7)
+                    Text("\(count) \(status.title.lowercased())")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(count > 0 ? Color.primary : Color.secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
+                .padding(.horizontal, 9)
+                .padding(.vertical, 6)
+                .background(status.color.opacity(count > 0 ? 0.12 : 0.05), in: Capsule())
+                .opacity(count > 0 ? 1 : 0.7)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
     }
 
     private func overviewMetric(label: String, value: String, color: Color) -> some View {
@@ -198,23 +327,34 @@ struct BudgetSettingsView: View {
                 .fontDesign(.rounded)
                 .foregroundStyle(color)
                 .lineLimit(1)
-                .minimumScaleFactor(0.7)
+                .minimumScaleFactor(0.6)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
     }
+
+    // MARK: - Category budgets
 
     private func categoryBudgetsSection(spendingByCategory: [UUID: Double]) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionHeading(
-                title: "Category budgets",
-                detail: activeBudgets.isEmpty ? nil : "\(activeBudgets.count) active"
-            )
+            VStack(alignment: .leading, spacing: 2) {
+                sectionHeading(
+                    title: "budget_category_section".localized,
+                    detail: dataManager.userCategories.isEmpty
+                        ? nil
+                        : "budget_active_count".localized(with: activeBudgets.count, dataManager.userCategories.count)
+                )
+                Text("budget_category_section_caption".localized)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             if dataManager.userCategories.isEmpty {
                 BudgetEmptyState(
                     icon: "tag",
-                    title: "No categories yet",
-                    message: "Create a category or import expenses before setting category budgets."
+                    title: "budget_no_categories_title".localized,
+                    message: "budget_no_categories_message".localized
                 )
             } else {
                 LazyVStack(spacing: 10) {
@@ -264,34 +404,42 @@ struct BudgetSettingsView: View {
         }
     }
 
+    // MARK: - Spending goals
+
     private var spendingGoalsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 12) {
-                sectionHeading(
-                    title: "Spending goals",
-                    detail: dataManager.spendingGoals.isEmpty ? nil : "\(dataManager.spendingGoals.count)"
-                )
+                VStack(alignment: .leading, spacing: 2) {
+                    sectionHeading(
+                        title: "budget_goals_section".localized,
+                        detail: dataManager.spendingGoals.isEmpty ? nil : "\(dataManager.spendingGoals.count)"
+                    )
+                    Text("budget_goals_section_caption".localized)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
 
                 Button {
                     showingAddGoal = true
                 } label: {
                     HeroIcon("plus", size: 20)
-                        .foregroundStyle(Color(.systemBlue))
+                        .foregroundStyle(Color.accentColor)
                         .frame(width: iOSDesignSystem.Size.minimumTapTarget,
                                height: iOSDesignSystem.Size.minimumTapTarget)
                         .liquidGlassSurface(Circle())
                         .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Add spending goal")
+                .accessibilityLabel("budget_add_goal".localized)
             }
 
             if dataManager.spendingGoals.isEmpty {
                 BudgetEmptyState(
                     icon: "flag",
-                    title: "No spending goals",
-                    message: "Create a target for a category and track progress over time.",
-                    actionTitle: "Add goal",
+                    title: "budget_no_goals_title".localized,
+                    message: "budget_no_goals_message".localized,
+                    actionTitle: "budget_add_goal".localized,
                     action: { showingAddGoal = true }
                 )
             } else {
@@ -307,18 +455,20 @@ struct BudgetSettingsView: View {
         }
     }
 
+    // MARK: - Tools
+
     private var budgetToolsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            sectionHeading(title: "Budget tools")
+            sectionHeading(title: "budget_tools_section".localized)
 
             VStack(spacing: 0) {
                 Button(action: suggestBudgets) {
                     budgetToolRow(
                         icon: "sparkles",
-                        title: "Suggest from history",
+                        title: "budget_suggest_title".localized,
                         detail: canSuggestBudgets
-                            ? "Use recent spending to set realistic category limits."
-                            : "Add at least 10 expenses to unlock suggestions.",
+                            ? "budget_suggest_detail".localized
+                            : "budget_suggest_locked".localized,
                         tint: Color(.systemIndigo)
                     )
                 }
@@ -327,15 +477,15 @@ struct BudgetSettingsView: View {
                 .opacity(canSuggestBudgets ? 1 : 0.48)
 
                 Divider()
-                    .padding(.leading, 60)
+                    .padding(.leading, 52)
 
                 Button(role: .destructive) {
                     showingResetConfirmation = true
                 } label: {
                     budgetToolRow(
                         icon: "arrow-path",
-                        title: "Reset category budgets",
-                        detail: "Turn off every category limit and clear its amount.",
+                        title: "budget_reset_row_title".localized,
+                        detail: "budget_reset_row_detail".localized,
                         tint: Color(.systemRed)
                     )
                 }
@@ -350,6 +500,7 @@ struct BudgetSettingsView: View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(title)
                 .font(.title3.weight(.bold))
+                .accessibilityAddTraits(.isHeader)
             Spacer()
             if let detail {
                 Text(detail)
@@ -461,19 +612,27 @@ struct CategoryBudgetSettingRow: View {
         AmountInputFormatter.parse(budgetAmount) ?? 0
     }
 
+    private var status: BudgetGoalStatus {
+        BudgetGoalStatus.evaluate(spent: currentMonthSpent, limit: enteredAmount, isEnabled: isEnabled)
+    }
+
     private var progress: Double {
         guard isEnabled, enteredAmount > 0 else { return 0 }
-        return min(currentMonthSpent / enteredAmount, 1)
+        return currentMonthSpent / enteredAmount
     }
 
-    private var isOverBudget: Bool {
-        isEnabled && enteredAmount > 0 && currentMonthSpent > enteredAmount
+    private var barTint: Color {
+        status == .onTrack ? category.color : status.color
     }
 
-    private var statusColor: Color {
-        if isOverBudget { return Color(.systemRed) }
-        if progress >= 0.8 { return Color(.systemOrange) }
-        return category.color
+    private var subtitle: String {
+        if !isEnabled {
+            return "budget_row_no_limit".localized(with: CurrencyFormatter.format(currentMonthSpent, currency: currency))
+        }
+        if enteredAmount <= 0 {
+            return "budget_row_enter_limit".localized
+        }
+        return "budget_row_status".localized(with: status.title, Int((progress * 100).rounded()))
     }
 
     var body: some View {
@@ -483,15 +642,25 @@ struct CategoryBudgetSettingRow: View {
                     .foregroundStyle(category.color)
                     .frame(width: 44, height: 44)
                     .background(category.color.opacity(0.1), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                    .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(category.name)
                         .font(.body.weight(.semibold))
                         .lineLimit(1)
 
-                    Text(isEnabled ? "Monthly limit on" : "No monthly limit")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    HStack(spacing: 6) {
+                        if status != .noLimit {
+                            Circle()
+                                .fill(status.color)
+                                .frame(width: 7, height: 7)
+                        }
+                        Text(subtitle)
+                            .font(.caption.weight(status == .noLimit ? .regular : .medium))
+                            .foregroundStyle(status == .noLimit || status == .onTrack ? Color.secondary : status.color)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                    }
                 }
 
                 Spacer(minLength: 8)
@@ -507,7 +676,7 @@ struct CategoryBudgetSettingRow: View {
 
                 HStack(spacing: 12) {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("Monthly limit")
+                        Text("budget_monthly_limit".localized)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         TextField("0", text: $budgetAmount)
@@ -516,6 +685,7 @@ struct CategoryBudgetSettingRow: View {
                             .fontDesign(.rounded)
                             .multilineTextAlignment(.leading)
                             .lineLimit(1)
+                            .accessibilityLabel("budget_monthly_limit".localized)
                     }
 
                     Text(currency.rawValue)
@@ -526,18 +696,32 @@ struct CategoryBudgetSettingRow: View {
                 .frame(minHeight: 54)
                 .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
 
-                VStack(spacing: 8) {
-                    ProgressView(value: progress)
-                        .tint(statusColor)
+                if enteredAmount > 0 {
+                    VStack(spacing: 8) {
+                        BudgetProgressBar(progress: progress, tint: barTint)
 
-                    HStack {
-                        Text("Spent \(CurrencyFormatter.format(currentMonthSpent, currency: currency))")
-                        Spacer()
-                        Text(isOverBudget ? "Over limit" : "\(Int((progress * 100).rounded()))% used")
-                            .foregroundStyle(isOverBudget ? Color(.systemRed) : Color.secondary)
+                        HStack(alignment: .firstTextBaseline) {
+                            Text("budget_row_spent_of".localized(with:
+                                CurrencyFormatter.format(currentMonthSpent, currency: currency),
+                                CurrencyFormatter.format(enteredAmount, currency: currency)
+                            ))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+
+                            Spacer(minLength: 8)
+
+                            Text(status == .overBudget
+                                 ? "budget_row_over".localized(with: CurrencyFormatter.format(currentMonthSpent - enteredAmount, currency: currency))
+                                 : "budget_row_left".localized(with: CurrencyFormatter.format(enteredAmount - currentMonthSpent, currency: currency)))
+                                .fontWeight(.semibold)
+                                .foregroundStyle(status == .overBudget ? Color(.systemRed) : Color.primary)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.75)
+                        }
+                        .font(.caption)
                     }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .accessibilityElement(children: .combine)
                 }
             }
         }
@@ -546,8 +730,8 @@ struct CategoryBudgetSettingRow: View {
         .onChange(of: isEnabled) { _, _ in
             updateBudget()
         }
-        .onChange(of: budgetAmount) { _, _ in
-            formatBudgetInput()
+        .onChange(of: budgetAmount) { old, _ in
+            formatBudgetInput(previous: old)
             updateBudget()
         }
         .onChange(of: budget) { _, newBudget in
@@ -573,8 +757,8 @@ struct CategoryBudgetSettingRow: View {
         if isEnabled != budget.isEnabled { isEnabled = budget.isEnabled }
     }
 
-    private func formatBudgetInput() {
-        let formatted = AmountInputFormatter.formatEditingText(budgetAmount)
+    private func formatBudgetInput(previous: String) {
+        let formatted = AmountInputFormatter.formatEditingText(budgetAmount, previous: previous)
         if formatted != budgetAmount {
             budgetAmount = formatted
         }
@@ -716,7 +900,7 @@ struct AddSpendingGoalView: View {
                             }
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity, minHeight: 50)
-                            .background(Color(.systemBlue), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                             .opacity(canSave ? 1 : 0.4)
                         }
                         .buttonStyle(.plain)
@@ -752,7 +936,7 @@ struct AddSpendingGoalView: View {
     private var goalIntro: some View {
         HStack(spacing: 14) {
             HeroIcon("flag", size: 25)
-                .foregroundStyle(Color(.systemBlue))
+                .foregroundStyle(Color.accentColor)
                 .frame(width: 52, height: 52)
                 .liquidGlassSurface(RoundedRectangle(cornerRadius: 16, style: .continuous))
 
@@ -788,7 +972,7 @@ struct AddSpendingGoalView: View {
                         .keyboardType(.decimalPad)
                         .multilineTextAlignment(.trailing)
                         .fontDesign(.rounded)
-                        .onChange(of: targetAmount) { _, _ in formatTargetAmountInput() }
+                        .onChange(of: targetAmount) { old, _ in formatTargetAmountInput(previous: old) }
                     Text(dataManager.user.currency.rawValue)
                         .font(.caption.weight(.bold))
                         .foregroundStyle(.secondary)
@@ -872,8 +1056,8 @@ struct AddSpendingGoalView: View {
         dismiss()
     }
 
-    private func formatTargetAmountInput() {
-        let formatted = AmountInputFormatter.formatEditingText(targetAmount)
+    private func formatTargetAmountInput(previous: String) {
+        let formatted = AmountInputFormatter.formatEditingText(targetAmount, previous: previous)
         if formatted != targetAmount {
             targetAmount = formatted
         }
@@ -890,9 +1074,9 @@ private struct BudgetEmptyState: View {
     var body: some View {
         VStack(spacing: 12) {
             HeroIcon(icon, size: 26)
-                .foregroundStyle(Color(.systemBlue))
+                .foregroundStyle(Color.accentColor)
                 .frame(width: 52, height: 52)
-                .background(Color(.systemBlue).opacity(0.09), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .background(Color.accentColor.opacity(0.09), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
 
             VStack(spacing: 4) {
                 Text(title)
@@ -907,7 +1091,7 @@ private struct BudgetEmptyState: View {
             if let actionTitle, let action {
                 Button(actionTitle, action: action)
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Color(.systemBlue))
+                    .foregroundStyle(Color.accentColor)
                     .padding(.horizontal, 18)
                     .frame(minHeight: iOSDesignSystem.Size.minimumTapTarget)
                     .liquidGlassSurface(Capsule())

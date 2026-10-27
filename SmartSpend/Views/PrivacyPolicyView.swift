@@ -15,13 +15,13 @@ struct PrivacyPolicyView: View {
                     policyGroup(
                         title: "Optional voice and AI drafts",
                         sections: [
-                            PolicySection(icon: "lock-closed", tint: Color(.systemBlue),
+                            PolicySection(icon: "lock-closed", tint: Color.accentColor,
                                           title: "Your choice before sending",
                                           text: "Recording starts only after you hold and pull the + button, or tap a microphone, and grant permission. Audio is kept in a temporary protected file on this iPhone, transcribed locally after Stop, and deleted after transcription or cancellation. The first use may download an Apple speech model. Recorded audio is not uploaded. Keyboard dictation follows your iPhone's own settings."),
-                            PolicySection(icon: "arrow-up-tray", tint: Color(.systemBlue),
+                            PolicySection(icon: "arrow-up-tray", tint: Color.accentColor,
                                           title: "Text sent to AI only with consent",
                                           text: "The first time you use AI expense preparation, the app asks permission to send recognized text, current category names and IDs, currency, reference date and timezone through the authenticated server to OpenRouter/OpenAI. After you agree, stopping a recording automatically sends this context for an AI draft. Past expenses, salary, budgets and audio are not sent. Provider retention policies apply; this is not a zero-retention guarantee. Drafts are kept temporarily in server memory for safe retries, not in the expense database. Nothing is saved until you review and tap Save."),
-                            PolicySection(icon: "key", tint: Color(.systemBlue),
+                            PolicySection(icon: "key", tint: Color.accentColor,
                                           title: "Disconnect any time",
                                           text: "The provider API key stays on your server. Your phone's separate revocable connection credential is stored in iOS Keychain and does not sync to iCloud Keychain. Disconnect in Voice connection to remove it and request server revocation. If your server is offline, revoke the device from the server separately.")
                         ]
@@ -32,21 +32,21 @@ struct PrivacyPolicyView: View {
                         sections: [
                             PolicySection(
                                 icon: "wallet",
-                                tint: Color(.systemBlue),
-                                title: "What SmartSpend stores",
-                                text: "SmartSpend stores the expenses, categories, budgets, spending goals, monthly salary values, recurring expenses, archived expenses, learned suggestions, and preferences you add or create in the app."
+                                tint: Color.accentColor,
+                                title: "What Cenzio stores",
+                                text: "Cenzio stores the expenses, categories, budgets, spending goals, monthly salary values, recurring expenses, archived expenses, learned suggestions, and preferences you add or create in the app."
                             ),
                             PolicySection(
                                 icon: "hand-raised",
                                 tint: Color(.systemIndigo),
                                 title: "Stored on this iPhone",
-                                text: "Your SmartSpend records are saved locally in Apple App Group storage on your device. App Group storage does not upload your data to SmartSpend or to a third-party server."
+                                text: "Your Cenzio records are saved locally in Apple App Group storage on your device. App Group storage does not upload your data to Cenzio or to a third-party server."
                             ),
                             PolicySection(
                                 icon: "arrow-down-tray",
                                 tint: Color(.systemTeal),
                                 title: "Imports and exports",
-                                text: "CSV imports are read and processed on your device. Export files are created in SmartSpend's local app storage only when you request an export. You decide if and where an export is shared."
+                                text: "CSV imports are read and processed on your device. Export files are created in Cenzio's local app storage only when you request an export. You decide if and where an export is shared."
                             )
                         ]
                     )
@@ -58,19 +58,19 @@ struct PrivacyPolicyView: View {
                                 icon: "eye",
                                 tint: Color(.systemGreen),
                                 title: "No tracking or advertising",
-                                text: "SmartSpend does not track you across apps or websites, sell your data, show third-party ads, or include third-party analytics in the current build."
+                                text: "Cenzio does not track you across apps or websites, sell your data, show third-party ads, or include third-party analytics in the current build."
                             ),
                             PolicySection(
                                 icon: "wifi",
                                 tint: Color(.systemOrange),
                                 title: "Local use without an account",
-                                text: "Local expense tracking does not require an account. Connected sync is optional and off by default. SmartSpend does not use CloudKit to sync your records."
+                                text: "Local expense tracking does not require an account. Connected sync is optional and off by default. Cenzio does not use CloudKit to sync your records."
                             ),
                             PolicySection(
                                 icon: "trash",
                                 tint: Color(.systemRed),
                                 title: "Delete your app data",
-                                text: "Clear All Data removes local SmartSpend records and resets app preferences. It does not erase exports, server history, backups, or copies in connected services. Disconnect and revoke access separately, and ask your server administrator to remove retained server copies."
+                                text: "Clear All Data removes local Cenzio records and resets app preferences. It does not erase exports, server history, backups, or copies in connected services. Disconnect and revoke access separately, and ask your server administrator to remove retained server copies."
                             )
                         ]
                     )
@@ -78,12 +78,12 @@ struct PrivacyPolicyView: View {
                     policyGroup(
                         title: "Optional connected sync",
                         sections: [
-                            PolicySection(icon: "arrow-up-tray", tint: Color(.systemBlue),
+                            PolicySection(icon: "arrow-up-tray", tint: Color.accentColor,
                                           title: "Only after you enable it",
-                                          text: "Connected sync sends expenses, archived expenses, categories, currency and timezone to SmartSpend's configured sync service after separate consent. Budgets, salary and recorded audio are not included. Changes and older versions are retained for history and restore. A random installation credential is stored in this iPhone's Keychain to keep your ledger separate; it is not a cross-device account or recovery service."),
+                                          text: "Connected sync sends expenses, archived expenses, categories, currency and timezone to Cenzio's configured sync service after separate consent. Budgets, salary and recorded audio are not included. Changes and older versions are retained for history and restore. A random installation credential is stored in this iPhone's Keychain to keep your ledger separate; it is not a cross-device account or recovery service."),
                             PolicySection(icon: "key", tint: Color(.systemIndigo),
                                           title: "Connected services and AI clients",
-                                          text: "You choose your own Google or Notion account and which Notion pages to share. Provider tokens are encrypted on the sync service; the phone's separate credential stays in Keychain. An independently authorized MCP AI client can access only its granted ledger permissions, but connecting Google or Notion does not authorize an AI client. Provider policies also apply. Disconnecting does not erase server history, backups or external copies. Contact support about retained service copies, and manage external copies and permissions in the connected account."),
+                                          text: "You choose your own Notion account and which Notion pages to share. The Notion token is encrypted on the sync service; the phone's separate credential stays in Keychain. An independently authorized MCP AI client can access only its granted ledger permissions, but connecting Notion does not authorize an AI client. Notion's policies also apply. Disconnecting does not erase server history, backups or your Notion table. Contact support about retained service copies, and manage your Notion table and permissions in Notion."),
                             PolicySection(icon: "document", tint: Color(.systemTeal),
                                           title: "Existing Notion table previews",
                                           text: "After you select a shared table and approve a preview, its expense rows are read by the sync service to check your column and category mapping. A preview does not import rows into your ledger, start sync, or change the Notion table.")
@@ -158,7 +158,7 @@ struct PrivacyPolicyView: View {
             VStack(spacing: 0) {
                 dataPathRow(
                     icon: "document-plus",
-                    tint: Color(.systemBlue),
+                    tint: Color.accentColor,
                     title: "You add it",
                     detail: "Expenses, plans, categories, and preferences"
                 )
@@ -168,7 +168,7 @@ struct PrivacyPolicyView: View {
                 dataPathRow(
                     icon: "phone",
                     tint: Color(.systemIndigo),
-                    title: "SmartSpend keeps it local",
+                    title: "Cenzio keeps it local",
                     detail: "Saved in the app's on-device storage"
                 )
 
@@ -235,7 +235,7 @@ struct PrivacyPolicyView: View {
             sectionLabel("Contact")
 
             VStack(alignment: .leading, spacing: 14) {
-                Text("Questions about this policy or your data can be sent directly to SmartSpend support. Your email and anything you include are handled by your email provider and used to respond to your request.")
+                Text("Questions about this policy or your data can be sent directly to Cenzio support. Your email and anything you include are handled by your email provider and used to respond to your request.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .lineSpacing(3)
@@ -250,7 +250,7 @@ struct PrivacyPolicyView: View {
                         Spacer(minLength: 4)
                         HeroIcon("arrow-right", size: 16)
                     }
-                    .foregroundStyle(Color(.systemBlue))
+                    .foregroundStyle(Color.accentColor)
                     .padding(.horizontal, 15)
                     .frame(minHeight: 48)
                     .liquidGlassSurface(RoundedRectangle(cornerRadius: 15, style: .continuous))
@@ -264,7 +264,7 @@ struct PrivacyPolicyView: View {
     }
 
     private var updatedLabel: some View {
-        Text("Effective \(effectiveDate) · This policy describes the current SmartSpend build.")
+        Text("Effective \(effectiveDate) · This policy describes the current Cenzio build.")
             .font(.footnote)
             .foregroundStyle(.tertiary)
             .frame(maxWidth: .infinity)

@@ -90,7 +90,7 @@ struct ExistingNotionPreviewView: View {
                     ForEach(sources) { item in Text(item.title.isEmpty ? "Untitled table" : item.title).tag(item.id) }
                 }
                 if sources.isEmpty && !busy {
-                    Text("No tables found. Share the page containing your table with SmartSpend in Notion, then reconnect.")
+                    Text("No tables found. Share the page containing your table with Cenzio in Notion, then reconnect.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
             }
@@ -163,7 +163,7 @@ struct ExistingNotionPreviewView: View {
             Button("Read and preview expenses") { Task { await loadPreview() } }
             Button("Cancel", role: .cancel) { }
         } message: {
-            Text("The selected table's expense rows will be read by SmartSpend's service to check your mapping. No rows are imported, saved to your ledger or changed in Notion.")
+            Text("The selected table's expense rows will be read by Cenzio's service to check your mapping. No rows are imported, saved to your ledger or changed in Notion.")
         }
     }
 

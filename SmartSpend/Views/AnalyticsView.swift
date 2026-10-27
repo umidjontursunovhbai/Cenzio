@@ -109,7 +109,7 @@ struct AnalyticsView: View {
                         if periodOffset != 0 {
                             Text("tap_to_return_today".localized)
                                 .font(.caption2)
-                                .foregroundStyle(Color(.systemBlue))
+                                .foregroundStyle(Color.accentColor)
                         }
                     }
                     .frame(maxWidth: .infinity, minHeight: 44)
@@ -131,7 +131,7 @@ struct AnalyticsView: View {
             periodOffset = max(periodOffset + (forward ? -1 : 1), 0)
         } label: {
             HeroIcon(forward ? "chevron-right" : "chevron-left", size: 18)
-                .foregroundStyle(enabled ? Color(.systemBlue) : Color(.tertiaryLabel))
+                .foregroundStyle(enabled ? Color.accentColor : Color(.tertiaryLabel))
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
         }
@@ -271,7 +271,7 @@ struct AnalyticsView: View {
                             currency: dataManager.user.currency
                         )
                     },
-                    tint: Color(.systemBlue)
+                    tint: Color.accentColor
                 )
 
                 Chart {
@@ -280,21 +280,21 @@ struct AnalyticsView: View {
                             x: .value("Date", point.date),
                             y: .value("Amount", point.amount)
                         )
-                        .foregroundStyle(Color(.systemBlue).opacity(0.08))
+                        .foregroundStyle(Color.accentColor.opacity(0.08))
                         .interpolationMethod(.linear)
 
                         LineMark(
                             x: .value("Date", point.date),
                             y: .value("Amount", point.amount)
                         )
-                        .foregroundStyle(Color(.systemBlue))
+                        .foregroundStyle(Color.accentColor)
                         .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round))
                         .interpolationMethod(.linear)
                     }
 
                     if let selection {
                         RuleMark(x: .value("Selected date", selection.date))
-                            .foregroundStyle(Color(.systemBlue).opacity(0.34))
+                            .foregroundStyle(Color.accentColor.opacity(0.34))
                             .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
 
                         PointMark(
@@ -309,7 +309,7 @@ struct AnalyticsView: View {
                             y: .value("Selected amount", selection.amount)
                         )
                         .symbolSize(34)
-                        .foregroundStyle(Color(.systemBlue))
+                        .foregroundStyle(Color.accentColor)
                     }
                 }
                 .chartXSelection(value: $selectedTrendDate)
@@ -520,9 +520,9 @@ struct AnalyticsView: View {
     private var emptyState: some View {
         VStack(spacing: 12) {
             HeroIcon("chart-bar", size: 27)
-                .foregroundStyle(Color(.systemBlue))
+                .foregroundStyle(Color.accentColor)
                 .frame(width: 52, height: 52)
-                .background(Color(.systemBlue).opacity(0.08), in: Circle())
+                .background(Color.accentColor.opacity(0.08), in: Circle())
 
             Text("No spending in this period")
                 .font(.headline)

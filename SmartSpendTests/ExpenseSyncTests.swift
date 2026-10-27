@@ -28,13 +28,6 @@ struct ExpenseSyncTests {
             #expect(throws: ExpenseSyncError.self) { try ExpenseSyncAPI.server(url) }
         }
     }
-    @Test("Google consent URL stays on Google's authorization endpoint")
-    func googleURLValidation() throws {
-        #expect(try ExpenseSyncAPI.googleAuthorizationURL("https://accounts.google.com/o/oauth2/v2/auth?state=test").host == "accounts.google.com")
-        for text in ["https://accounts.google.com.evil.example/o/oauth2/v2/auth", "http://accounts.google.com/o/oauth2/v2/auth", "https://accounts.google.com/other", "https://user@accounts.google.com/o/oauth2/v2/auth"] {
-            #expect(throws: ExpenseSyncError.self) { try ExpenseSyncAPI.googleAuthorizationURL(text) }
-        }
-    }
     @Test("Outbox IDs survive Codable restart and offline repeated diff")
     func stableRetries() throws {
         var original = state()
