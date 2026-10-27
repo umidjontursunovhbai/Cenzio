@@ -245,7 +245,7 @@ private struct InfoPopupContainer<PopupContent: View>: View {
             ViewThatFits(in: .vertical) {
                 bodyContent
                 ScrollView { bodyContent }
-                    .scrollIndicators(.visible)
+                    .scrollIndicators(.hidden)
                     .scrollBounceBehavior(.basedOnSize)
             }
 

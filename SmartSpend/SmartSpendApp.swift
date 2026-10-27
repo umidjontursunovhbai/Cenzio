@@ -21,6 +21,8 @@ struct SmartSpendApp: App {
                     SmartSpendAppShortcuts.updateAppShortcutParameters()
                 }
                 .preferredColorScheme(.light)
+                // No scroll bars anywhere; this environment value reaches every screen and sheet.
+                .scrollIndicators(.hidden)
         }
     }
 }
@@ -31,6 +33,9 @@ final class SmartSpendAppDelegate: NSObject, UIApplicationDelegate {
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         // No rubber-band overscroll: lists stop at their ends instead of springing past and back.
         UIScrollView.appearance().bounces = false
+        // Also covers UIKit-backed scrolling (Form, List) that SwiftUI's modifier may not reach.
+        UIScrollView.appearance().showsVerticalScrollIndicator = false
+        UIScrollView.appearance().showsHorizontalScrollIndicator = false
         CloudSyncController.shared.start()
         application.registerForRemoteNotifications()
         return true
