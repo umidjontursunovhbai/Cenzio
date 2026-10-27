@@ -100,6 +100,7 @@ struct VoiceExpenseBatchView: View {
                 }
             }
             .scrollDismissesKeyboard(.interactively)
+            .scrollIndicators(.hidden)
             .navigationTitle(voiceText("\(rows.count) expenses", "Расходов: \(rows.count)"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

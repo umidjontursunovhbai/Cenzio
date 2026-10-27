@@ -221,6 +221,7 @@ struct AddExpenseView: View {
                 }
             }
             .scrollDismissesKeyboard(.interactively)
+            .scrollIndicators(.hidden)
             .navigationTitle("add_expense".localized)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
