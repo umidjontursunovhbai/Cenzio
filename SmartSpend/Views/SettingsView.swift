@@ -12,7 +12,6 @@ struct SettingsView: View {
     @State private var showingDataExport = false
     @State private var showingDataImport = false
     @State private var showingBudgetGoals = false
-    @State private var showingIntegrations = false
     @State private var showingAccount = false
     @State private var showingPrivacyPolicy = false
     @State private var showingAlert = false
@@ -78,23 +77,13 @@ struct SettingsView: View {
                 .sheet(isPresented: $showingBudgetGoals) {
                     BudgetSettingsView()
                 }
-                .sheet(isPresented: $showingIntegrations) {
-                    NavigationStack {
-                        ExpenseSyncView()
-                            .toolbar {
-                                ToolbarItem(placement: .confirmationAction) {
-                                    Button("Done") { showingIntegrations = false }
-                                }
-                            }
-                    }
-                }
                 .alert("clear_all_data".localized, isPresented: $showingAlert) {
                     Button("cancel".localized, role: .cancel) { }
                     Button("delete".localized, role: .destructive) {
                         clearAllData()
                     }
                 } message: {
-                    Text("\("clear_all_data_message".localized) Your Notion table, server copies and remote history are not deleted. \("icloud_sync_clear_note".localized) A sync change already in progress may finish. Revoke Cenzio in your Notion settings and contact the server administrator to remove remote copies or retained access.")
+                    Text("\("clear_all_data_message".localized) \("icloud_sync_clear_note".localized)")
                 }
         }
     }
@@ -158,11 +147,6 @@ struct SettingsView: View {
                     settingsButtonRow(icon: "archive-box", title: "deleted_expenses".localized, tint: Color(.systemGray)) {
                         showingDeletedExpenses = true
                     }
-                    sectionDivider
-                    settingsButtonRow(icon: "arrow-path", title: "Integrations", tint: Color(.systemIndigo)) {
-                        showingIntegrations = true
-                    }
-                    .accessibilityIdentifier("settings.integrations")
                 }
 
                 settingsSection("support".localized) {
@@ -176,7 +160,7 @@ struct SettingsView: View {
                         tint: Color(.systemBlue),
                         showsChevron: false
                     ) {
-                        if let url = URL(string: "mailto:tursunov.umidjon.uz@gmail.com") {
+                        if let url = URL(string: "mailto:umidjon.muydinov@icloud.com") {
                             UIApplication.shared.open(url)
                         }
                     }
@@ -443,7 +427,6 @@ struct SettingsView: View {
     }
 
     private func clearAllData() {
-        ExpenseSyncController.shared.clearLocalConnection()
         cloudSync.localDataWasCleared()
         Task { await VoiceConnectionStore.shared.disconnect() }
         dataManager.clearAllData()

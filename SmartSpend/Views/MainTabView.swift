@@ -31,7 +31,6 @@ struct MainTabView: View {
             AddExpenseView()
         }
         .onAppear {
-            ExpenseSyncController.shared.foreground(true)
             dataManager.reloadFromSharedStorage()
             dataManager.processRecurringExpenses()
             checkAddExpenseIntent()
@@ -39,14 +38,7 @@ struct MainTabView: View {
         .onReceive(NotificationCenter.default.publisher(for: .smartSpendOpenAddExpense)) { _ in
             checkAddExpenseIntent()
         }
-        .onReceive(dataManager.$expenses.debounce(for: .milliseconds(800), scheduler: RunLoop.main)) { _ in
-            if scenePhase == .active { ExpenseSyncController.shared.localDidChange() }
-        }
-        .onReceive(dataManager.$deletedExpenses.debounce(for: .milliseconds(800), scheduler: RunLoop.main)) { _ in
-            if scenePhase == .active { ExpenseSyncController.shared.localDidChange() }
-        }
         .onChange(of: scenePhase) { _, newPhase in
-            ExpenseSyncController.shared.foreground(newPhase == .active)
             if newPhase == .active {
                 dataManager.reloadFromSharedStorage()
                 dataManager.processRecurringExpenses()

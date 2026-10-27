@@ -3,7 +3,7 @@ import SwiftUI
 struct PrivacyPolicyView: View {
     @Environment(\.dismiss) private var dismiss
 
-    private let effectiveDate = "October 21, 2026"
+    private let effectiveDate = "October 27, 2026"
 
     var body: some View {
         NavigationStack {
@@ -40,7 +40,13 @@ struct PrivacyPolicyView: View {
                                 icon: "hand-raised",
                                 tint: Color(.systemIndigo),
                                 title: "Stored on this iPhone",
-                                text: "Your Cenzio records are saved locally in Apple App Group storage on your device. App Group storage does not upload your data to Cenzio or to a third-party server."
+                                text: "Your Cenzio records are saved locally in Apple App Group storage on your device and shared only with Cenzio's own widgets."
+                            ),
+                            PolicySection(
+                                icon: "cloud",
+                                tint: Color(.systemBlue),
+                                title: "iCloud sync between your devices",
+                                text: "Your records are copied to the private iCloud database of the iCloud account signed in on this iPhone, so your other devices with the same account stay up to date. Apple stores this data under its iCloud terms; Cenzio's developer cannot read it. Remove it in the Settings app under your name > iCloud > Manage Storage."
                             ),
                             PolicySection(
                                 icon: "arrow-down-tray",
@@ -63,30 +69,15 @@ struct PrivacyPolicyView: View {
                             PolicySection(
                                 icon: "wifi",
                                 tint: Color(.systemOrange),
-                                title: "Local use without an account",
-                                text: "Local expense tracking does not require an account. Connected sync is optional and off by default. Cenzio does not use CloudKit to sync your records."
+                                title: "Sign in with Apple",
+                                text: "Cenzio asks you to sign in with Apple when it opens. It keeps only Apple's anonymous user ID and, if you share them, your name and email, stored in this iPhone's Keychain. They are not sent to Cenzio's developer. Stop using your Apple ID with Cenzio in the Settings app under your name > Sign-In & Security."
                             ),
                             PolicySection(
                                 icon: "trash",
                                 tint: Color(.systemRed),
                                 title: "Delete your app data",
-                                text: "Clear All Data removes local Cenzio records and resets app preferences. It does not erase exports, server history, backups, or copies in connected services. Disconnect and revoke access separately, and ask your server administrator to remove retained server copies."
+                                text: "Clear All Data removes Cenzio records from this iPhone and resets app preferences. Copies already in your iCloud and on your other devices stay there, and exports you saved elsewhere are not deleted."
                             )
-                        ]
-                    )
-
-                    policyGroup(
-                        title: "Optional connected sync",
-                        sections: [
-                            PolicySection(icon: "arrow-up-tray", tint: Color.accentColor,
-                                          title: "Only after you enable it",
-                                          text: "Connected sync sends expenses, archived expenses, categories, currency and timezone to Cenzio's configured sync service after separate consent. Budgets, salary and recorded audio are not included. Changes and older versions are retained for history and restore. A random installation credential is stored in this iPhone's Keychain to keep your ledger separate; it is not a cross-device account or recovery service."),
-                            PolicySection(icon: "key", tint: Color(.systemIndigo),
-                                          title: "Connected services and AI clients",
-                                          text: "You choose your own Notion account and which Notion pages to share. The Notion token is encrypted on the sync service; the phone's separate credential stays in Keychain. An independently authorized MCP AI client can access only its granted ledger permissions, but connecting Notion does not authorize an AI client. Notion's policies also apply. Disconnecting does not erase server history, backups or your Notion table. Contact support about retained service copies, and manage your Notion table and permissions in Notion."),
-                            PolicySection(icon: "document", tint: Color(.systemTeal),
-                                          title: "Existing Notion table previews",
-                                          text: "After you select a shared table and approve a preview, its expense rows are read by the sync service to check your column and category mapping. A preview does not import rows into your ledger, start sync, or change the Notion table.")
                         ]
                     )
 
@@ -178,7 +169,7 @@ struct PrivacyPolicyView: View {
                     icon: "arrow-up-tray",
                     tint: Color(.systemGreen),
                     title: "You choose when it leaves",
-                    detail: "Through exports, support email, consented AI drafts, or optional connected sync"
+                    detail: "Synced to your private iCloud; otherwise only through exports, support email, or consented AI drafts"
                 )
             }
             .padding(.horizontal, 18)
@@ -241,10 +232,10 @@ struct PrivacyPolicyView: View {
                     .lineSpacing(3)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Link(destination: URL(string: "mailto:tursunov.umidjon.uz@gmail.com")!) {
+                Link(destination: URL(string: "mailto:umidjon.muydinov@icloud.com")!) {
                     HStack(spacing: 10) {
                         HeroIcon("envelope", size: 20)
-                        Text("tursunov.umidjon.uz@gmail.com")
+                        Text("umidjon.muydinov@icloud.com")
                             .font(.subheadline.weight(.semibold))
                             .lineLimit(2)
                         Spacer(minLength: 4)

@@ -1,10 +1,10 @@
-# SmartSpend — Claude Context
+# Cenzio (SmartSpend) — Claude Context
 
 ## Project Overview
-Privacy-first iOS expense tracker. Swift 6, SwiftUI, MVVM. No cloud — all data lives on-device.
+Privacy-first iOS expense tracker, App Store name **Cenzio**. Swift 6, SwiftUI, MVVM. Data lives on-device and syncs through the user's private iCloud (CKSyncEngine, `SmartSpend/Sync/`).
 
-- **Bundle ID**: `muydinov.SmartSpend`
-- **App Group**: `group.muydinov.SmartSpend` (shared between app and Widget extension)
+- **Bundle ID**: `ai.humblebee.smartspend` (team 94MJH9FHS9)
+- **App Group**: `group.ai.humblebee.smartspend` (shared between app and Widget extension)
 - **Minimum iOS**: 17.0 | **Xcode**: 16.0+
 
 ## Architecture
@@ -19,7 +19,7 @@ Privacy-first iOS expense tracker. Swift 6, SwiftUI, MVVM. No cloud — all data
 | `Widget/Widget.swift` | WidgetKit provider — reads from shared UserDefaults using lightweight mirror types |
 
 ### Data Persistence
-All data is JSON-encoded into `UserDefaults(suiteName: "group.muydinov.SmartSpend")`.
+All data is JSON-encoded into `UserDefaults(suiteName: "group.ai.humblebee.smartspend")`.
 Every mutation calls `saveData()` which re-encodes and saves **all** collections at once.
 
 ### Smart Learning Engine
