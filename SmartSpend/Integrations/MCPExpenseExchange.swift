@@ -211,7 +211,7 @@ enum MCPExpenseExchangeError: LocalizedError {
         case .conflict: return "An expense changed after the AI snapshot, or an ID is already in use. Export a fresh snapshot and review the conflict."
         case .reusedOperation: return "A previously applied operation ID was reused with different contents. No changes were applied."
         case .fileTooLarge: return "Choose an AI changes file smaller than 5 MB."
-        case .storageFailure: return "SmartSpend could not safely save the AI changes. Try again."
+        case .storageFailure: return "Cenzio could not safely save the AI changes. Try again."
         case .missingCategory: return "Every expense needs a valid category before MCP export. For a deleted expense, restore it and choose a current category first. Category names must be nonblank and at most 100 characters."
         }
     }

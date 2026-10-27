@@ -11,8 +11,18 @@ extension String {
     /// Returns the localized version of the string.
     /// For now, returns the English translation directly.
     var localized: String {
-        // Map of localization keys to English text
-        let translations: [String: String] = [
+        let catalogValue = NSLocalizedString(self, comment: "")
+        if catalogValue != self {
+            return catalogValue
+        }
+
+        // Return the fallback translation if the string catalog does not have it.
+        return String.englishFallbacks[self] ?? self
+    }
+
+    /// Map of localization keys to English text. Built once (it used to be
+    /// rebuilt — ~500 entries — on every `.localized` call, i.e. many times per frame).
+    private static let englishFallbacks: [String: String] = [
             // Tab Bar
             "dashboard": "Dashboard",
             "expenses": "Expenses",
@@ -52,7 +62,7 @@ extension String {
             "categories": "Categories",
             "about": "About",
             "not_set": "Not Set",
-            "smartspend": "SmartSpend",
+            "smartspend": "Cenzio",
             "smart_learning": "Smart Learning",
             
             // Dashboard
@@ -80,6 +90,54 @@ extension String {
             "other_categories": "Other categories",
             "add_first_expense": "Add an expense to start tracking.",
             "previous_months": "Previous months",
+            "dashboard_vs_last_month": "vs. same day last month",
+            "dashboard_this_month": "This month",
+            "dashboard_last_month": "Last month",
+            "dashboard_today": "Today",
+            "dashboard_forecast": "Month-end forecast",
+            "dashboard_expense_count_format": "%d expenses",
+            "dashboard_avg_per_day_format": "%@ / day on average",
+            "dashboard_last_7_days": "Last 7 days",
+            "dash_left_to_spend": "Left to spend",
+            "dash_over_plan": "Over your plan by",
+            "dash_of_income_days_format": "of %@ income · %d days left",
+            "dash_set_income_hint": "See how much is safe to spend each day",
+            "dash_safe_per_day": "Safe per day",
+            "dash_spent_today": "Spent today",
+            "dash_daily_average": "Daily average",
+            "dash_forecast": "Month-end forecast",
+            "dash_legend_spent": "Spent",
+            "dash_legend_bills": "Bills",
+            "dash_legend_free": "Free",
+            "dash_spending_pace": "Spending pace",
+            "dash_even_pace": "Even pace",
+            "dash_pace_above_format": "%@ above even pace",
+            "dash_pace_below_format": "%@ under even pace",
+            "dash_day_format": "Day %d",
+            "dash_daily_spending": "Daily spending",
+            "dash_less": "Less",
+            "dash_more": "More",
+            "dash_no_spending_day": "No spending",
+            "dash_upcoming_day": "Upcoming",
+            "dash_where_it_goes": "Where it goes",
+            "dash_budgets": "Budgets",
+            "dash_budget_alert_count_format": "%d categories near or over budget",
+            "dash_budget_of_format": "Budget %@",
+            "dash_budget_left_format": "%@ left",
+            "dash_budget_over_format": "%@ over",
+            "dash_category_hint": "Opens this category's budget",
+            "dash_spotlight": "Top spending",
+            "dash_top_places": "Top places",
+            "dash_largest": "Largest",
+            "dash_times_format": "%d times",
+            "dash_weekday_pattern": "Weekday pattern",
+            "dash_weekday_subtitle": "Average per day over the last 12 weeks",
+            "dash_weekday_peak_format": "You spend the most on %@ — about %@",
+            "dash_monthly_history": "Monthly history",
+            "dash_monthly_average_format": "%@ / month avg",
+            "dash_no_expenses_month": "No expenses this month yet",
+            "dash_empty_month_hint": "Add an expense to see your daily calendar, categories and spending pace.",
+            "dash_yesterday": "Yesterday",
             "remaining_this_month": "Remaining This Month",
             "spend_per_day_format": "You can spend %@/day",
             "spendable_today": "Spendable Today",
@@ -125,6 +183,40 @@ extension String {
             "date_to": "Date To",
             "date_range_instruction_first": "Select a start date",
             "date_range_instruction_second": "Select an end date",
+
+            // Expenses page
+            "exp_select": "Select",
+            "exp_select_all": "Select All",
+            "exp_deselect_all": "Deselect All",
+            "exp_filters_on": "Filters on",
+            "exp_more_actions": "More",
+            "exp_items_count_format": "%d items",
+            "exp_custom_range": "Custom range",
+            "exp_remove_category_filter": "Removes the category filter",
+            "exp_categories_count_format": "%d categories",
+            "exp_all_categories": "All Categories",
+            "exp_no_categories": "No categories yet",
+            "exp_empty_title": "No expenses yet",
+            "exp_empty_body": "Tap + to add your first expense, or tap the mic and just say it.",
+            "exp_no_matches_in_period_format": "No results for \u{201C}%@\u{201D} in %@.",
+            "exp_nothing_in_period_format": "Nothing recorded for %@.",
+            "exp_clear_filters": "Clear Filters",
+            "exp_edit": "Edit",
+            "exp_add_again": "Add Again Today",
+            "exp_loading_more": "Loading more…",
+            "exp_moved_to_deleted_format": "%d moved to Deleted",
+            "exp_undo": "Undo",
+            "exp_untitled": "Untitled",
+            "exp_edit_title": "Edit Expense",
+            "exp_title_placeholder": "Expense title",
+            "exp_amount_must_be_positive": "Enter an amount greater than zero.",
+            "exp_delete_expense": "Delete Expense",
+            "exp_delete_footer": "Deleted expenses can be restored for 30 days.",
+            "exp_deleted_empty_body": "Expenses you delete stay here for 30 days, so you can restore them.",
+            "exp_deleted_footer": "Swipe right to restore. Expenses are removed for good 30 days after deletion.",
+            "exp_delete_forever_title": "Delete permanently?",
+            "exp_delete_forever_message": "This expense will be removed for good. This can't be undone.",
+            "exp_days_left_format": "%dd left",
             
             // Add/Edit Expense
             "add_expense": "Add Expense",
@@ -134,7 +226,7 @@ extension String {
             "create_new_category": "Create New Category",
             "column_date": "Date",
             "expense_details": "Expense Details",
-            "smart_suggestions_footer": "SmartSpend learns from your spending patterns to provide smart suggestions",
+            "smart_suggestions_footer": "Cenzio learns from your spending patterns to provide smart suggestions",
             "make_recurring": "Make Recurring",
             "frequency": "Frequency",
             "set_end_date": "Set End Date",
@@ -240,14 +332,14 @@ extension String {
             "import_failed_error": "Import failed: %@",
             "csv_format_guide": "CSV Format Guide",
             "csv_format_subtitle": "Learn how to format your CSV file for import",
-            "smartspend_format": "SmartSpend Format",
+            "smartspend_format": "Cenzio Format",
             "smartspend_format_desc": "The standard format with exact column names:",
             "required": "Required",
             "column_title": "Title",
             "column_amount": "Amount",
             "column_category": "Category",
             "custom_format": "Custom Format",
-            "custom_format_desc": "Flexible column names that SmartSpend will detect:",
+            "custom_format_desc": "Flexible column names that Cenzio will detect:",
             "column_title_name_description": "Title/Name/Description",
             "any_of_these": "Any of these",
             "column_amount_price_cost": "Amount/Price/Cost",
@@ -259,7 +351,10 @@ extension String {
             "tip_currency_symbols": "Currency symbols in amounts will be ignored",
             "required_columns": "Required Columns",
             "example_header": "Example",
-            
+
+            // Import info
+            "import_scope_note": "CSV import adds expenses. Budgets, goals, and app settings need to be set up separately.",
+
             // Recurring Expenses
             "recurring_expenses_title": "Recurring Expenses",
             "process": "Process",
@@ -282,7 +377,40 @@ extension String {
             "next_due": "Next Due",
             "upcoming_occurrences": "Upcoming Occurrences",
             "start": "Start",
-            
+
+            // Recurring
+            "recurrence_daily": "Daily",
+            "recurrence_weekly": "Weekly",
+            "recurrence_biweekly": "Every 2 weeks",
+            "recurrence_monthly": "Monthly",
+            "recurrence_quarterly": "Quarterly",
+            "recurrence_yearly": "Yearly",
+            "recurring_select": "Select",
+            "recurring_paused": "Paused",
+            "recurring_pause": "Pause",
+            "recurring_resume": "Resume",
+            "recurring_overdue_one_day": "Overdue by 1 day",
+            "recurring_overdue_days_format": "Overdue by %d days",
+            "recurring_ended_on_format": "Ended %@",
+            "recurring_ends_on_format": "Ends %@",
+            "recurring_per_month": "Per month",
+            "recurring_active_count_format": "%d active",
+            "recurring_next_charge_format": "Next: %@, %@",
+            "recurring_empty_active_title": "Nothing active",
+            "recurring_empty_active_message": "Resume a paused expense or add a new one.",
+            "recurring_empty_inactive_title": "Nothing paused or ended",
+            "recurring_empty_inactive_message": "Paused and ended recurring expenses show up here.",
+            "recurring_delete_title": "Delete recurring expense?",
+            "recurring_delete_selected_format": "Delete %d recurring expenses?",
+            "recurring_delete_message": "Future charges stop. Expenses already recorded stay in your history.",
+            "recurring_delete_button": "Delete Recurring Expense",
+            "recurring_active_footer": "Paused expenses don't record charges. Resuming continues from today.",
+            "recurring_schedule_footer": "A new start date or frequency applies from today. Charges already recorded are not added again.",
+            "recurring_backfill_one_format": "1 past charge on %@ will be added to your expenses.",
+            "recurring_backfill_format": "%d past charges since %@ will be added to your expenses.",
+            "recurring_reminder_today_format": "Reminder: %@ is due today. You'll have %@ left after this payment.",
+            "recurring_reminder_tomorrow_format": "Reminder: %@ is due tomorrow. You'll have %@ left after this payment.",
+
             // Problem Expenses
             "problem_expenses": "Problem Expenses",
             "problem_expenses_title": "Problem Expenses",
@@ -304,7 +432,7 @@ extension String {
             "email_us": "Email Support",
             "privacy_policy": "Privacy Policy",
             "chat_placeholder": "How can I help you today?",
-            "support_agent_name": "SmartSpend AI",
+            "support_agent_name": "Cenzio AI",
             "support_agent_status": "Always Active",
             
             // AI Coach Tips
@@ -312,18 +440,107 @@ extension String {
             "coach_tip_budget_warning": "Caution: You've used %d%% of your %@ budget. You're approaching your limit!",
             "coach_tip_budget_exceeded": "Alert: You've exceeded your monthly budget for %@. Let's try to slow down in this category.",
             "coach_tip_savings_success": "Excellent work! Your spending is down 20% compared to last week. You're becoming a savings master!",
-            "coach_tip_set_budget": "Pro Tip: Setting monthly category budgets helps you save 15% more on average. Try setting one in Budget Settings!"
-        ]
-        
-        let catalogValue = NSLocalizedString(self, comment: "")
-        if catalogValue != self {
-            return catalogValue
-        }
+            "coach_tip_set_budget": "Pro Tip: Setting monthly category budgets helps you save 15% more on average. Try setting one in Budget Settings!",
 
-        // Return the fallback translation if the string catalog does not have it.
-        return translations[self] ?? self
-    }
-    
+            // Budget Goals screen
+            "close": "Close",
+            "budget_status_no_limit": "No limit",
+            "budget_status_on_track": "On track",
+            "budget_no_limits_title": "No limits yet",
+            "budget_no_limits_message": "Switch on a category below and enter a monthly limit to start tracking.",
+            "budget_total_limits_caption": "Total of %d monthly limits",
+            "budget_spent_label": "Spent",
+            "budget_left_label": "Left",
+            "budget_over_label": "Over",
+            "budget_days_left_label": "Days left",
+            "budget_daily_pace": "About %@ a day keeps you within your limits for the next %d days.",
+            "budget_how_calculated": "How is this calculated?",
+            "budget_category_section": "Category budgets",
+            "budget_category_section_caption": "Monthly limits per category. They reset on the 1st of every month.",
+            "budget_active_count": "%d of %d on",
+            "budget_no_categories_title": "No categories yet",
+            "budget_no_categories_message": "Create a category or import expenses before setting category budgets.",
+            "budget_monthly_limit": "Monthly limit",
+            "budget_row_no_limit": "No limit · %@ spent this month",
+            "budget_row_enter_limit": "Enter a limit to start tracking",
+            "budget_row_status": "%@ · %d%% used",
+            "budget_row_spent_of": "%@ of %@",
+            "budget_row_left": "%@ left",
+            "budget_row_over": "%@ over",
+            "budget_goals_section": "Spending goals",
+            "budget_goals_section_caption": "Long-term targets that count every expense in a category.",
+            "budget_add_goal": "Add goal",
+            "budget_no_goals_title": "No spending goals",
+            "budget_no_goals_message": "Create a target for a category and track progress over time.",
+            "budget_tools_section": "Budget tools",
+            "budget_suggest_title": "Suggest from history",
+            "budget_suggest_detail": "Use recent spending to set realistic category limits.",
+            "budget_suggest_locked": "Add at least 10 expenses to unlock suggestions.",
+            "budget_reset_row_title": "Reset category budgets",
+            "budget_reset_row_detail": "Turn off every category limit and clear its amount.",
+            "budget_reset_title": "Reset all category budgets?",
+            "budget_reset_message": "Your spending goals will stay in place.",
+
+            // Apple sign-in
+            "apple_signin_title": "Welcome to Cenzio",
+            "apple_signin_subtitle": "Private expense tracking that stays on your iPhone.",
+            "apple_signin_point_private": "Your expenses never leave this device",
+            "apple_signin_point_smart": "Smart categories that learn your habits",
+            "apple_signin_point_insights": "Clear budgets and spending insights",
+            "apple_signin_privacy_note": "Sign in with Apple only identifies you. Cenzio doesn't upload or sync your expenses.",
+            "apple_signin_error_generic": "Sign in with Apple didn't complete. Please try again.",
+
+            // Info popup
+            "got_it": "Got it",
+
+            // Account (Apple only)
+            "account_title": "Account",
+            "account_apple_id": "Apple ID",
+            "account_signed_in_with_apple": "Signed in with Apple",
+            "account_not_signed_in": "Not signed in",
+            "account_name": "Name",
+            "account_email": "Email",
+            "account_sign_out": "Sign Out",
+            "account_sign_out_confirm_title": "Sign out of Cenzio?",
+            "account_sign_out_confirm_message": "Your expenses stay on this iPhone. You'll need to sign in with Apple again to open Cenzio.",
+            "account_local_data_footer": "Your expenses are stored only on this iPhone. Signing out doesn't delete them.",
+            "account_manage_apple_id_footer": "To stop using your Apple ID with Cenzio, open the Settings app, tap your name, then Sign-In & Security > Sign in with Apple.",
+
+            // iCloud sync
+            "icloud_sync_status_no_account": "Sign in to iCloud",
+            "icloud_sync_status_restricted": "iCloud is restricted on this device",
+            "icloud_sync_status_unavailable": "iCloud is temporarily unavailable",
+            "icloud_sync_footer": "Your data syncs automatically with iCloud across all your devices.",
+            "icloud_sync_no_account_footer": "iCloud Sync uses the iCloud account in the Settings app. Sign in there with the same Apple ID on each device and allow Cenzio to use iCloud.",
+            "icloud_sync_account_mismatch": "Some synced data came from a device signed in to Cenzio with a different Apple ID. iCloud Sync follows this iPhone's iCloud account, so use the same Apple ID for iCloud and for Cenzio on every device.",
+            "icloud_sync_error_network": "No internet connection. Changes will sync when you're back online.",
+            "icloud_sync_error_quota": "Your iCloud storage is full. Free up space to keep syncing.",
+            "icloud_sync_error_busy": "iCloud is busy. Cenzio will try again shortly.",
+            "icloud_sync_error_not_configured": "iCloud isn't available for this build of Cenzio.",
+            "icloud_sync_clear_note": "Data already synced to iCloud stays in iCloud and on your other devices.",
+
+            // Budget Goals info popup
+            "budget_info_title": "How budget goals work",
+            "budget_info_got_it": "Got it",
+            "budget_info_why_title": "Why set them",
+            "budget_info_why_body": "A monthly limit turns \"I spend too much on food\" into a number you can watch. You see trouble in the middle of the month, while there is still time to adjust, instead of after the money is gone.",
+            "budget_info_calc_title": "How it's calculated",
+            "budget_info_calc_month": "Only expenses dated in the current calendar month count, from the 1st to the last day. Each month starts fresh, and nothing carries over.",
+            "budget_info_calc_category": "Each category is measured on its own: what you spent in that category this month, divided by its monthly limit.",
+            "budget_info_calc_active": "Only categories that are switched on with a limit above 0 are tracked. The totals at the top add up just those categories.",
+            "budget_info_states_title": "What the colors mean",
+            "budget_info_state_on_track": "Spent less than 80% of the limit.",
+            "budget_info_state_near": "Spent 80% of the limit or more. An early warning while there's still room to adjust.",
+            "budget_info_state_over": "Spent more than the limit. The amount over is shown in red.",
+            "budget_info_example": "Example: %@ has a %@ limit, so the warning starts at %@.",
+            "budget_info_alerts_title": "Where you'll see alerts",
+            "budget_info_alerts_body": "On the Dashboard, the Categories card turns a category orange or red when it is near or over its limit, and Insights lists them too. Tap a category on the Dashboard to jump straight to its budget here. Alerts stay inside the app; Cenzio doesn't send notifications for budgets.",
+            "budget_info_more_title": "Good to know",
+            "budget_info_more_goals": "Spending goals are separate: they add up every expense ever recorded in their category, not just this month, and compare it with your target.",
+            "budget_info_more_suggest": "Suggest from history sets each limit to your average monthly spending in that category over the last 2 months, plus 5%."
+        ]
+
+
     /// Returns the localized version of the string with arguments.
     /// - Parameters:
     ///   - arguments: The arguments to substitute in the localized string format.

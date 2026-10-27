@@ -48,17 +48,18 @@ class DataManager: ObservableObject {
     @Published var selectedTimePeriod: TimePeriod = .currentMonth
     @Published var customStartDate: Date = Date()
     @Published var customEndDate: Date = Date()
-    @Published var cloudSyncState: CloudSyncState = .idle
 
     private let sharedDefaults: UserDefaults
     private let activityManager: GamificationManager
     private let flushMCPStorage: () -> Bool
     private var dataLastChangedAt: Date = Date()
     private var isApplyingRemoteSnapshot = false
+    /// Called after every local persist so iCloud sync can diff and upload (debounced there).
+    var onLocalDataPersisted: (() -> Void)?
 
     private convenience init() {
         self.init(
-            defaults: UserDefaults(suiteName: "group.com.tursunov.SmartSpend") ?? .standard,
+            defaults: UserDefaults(suiteName: "group.ai.humblebee.smartspend") ?? .standard,
             activityManager: .shared,
             startBackgroundTasks: true
         )
@@ -125,6 +126,7 @@ class DataManager: ObservableObject {
             print("Error saving data: \(error)")
         }
         WidgetCenter.shared.reloadAllTimelines()
+        if !isApplyingRemoteSnapshot { onLocalDataPersisted?() }
     }
 
     private func loadData() {
@@ -202,6 +204,8 @@ class DataManager: ObservableObject {
 
     func reloadFromSharedStorage() {
         loadData()
+        // Intents and the MCP bridge can write the shared keys outside saveData().
+        onLocalDataPersisted?()
     }
 
     // MARK: - Explicit MCP file exchange
@@ -333,69 +337,39 @@ class DataManager: ObservableObject {
 
     // MARK: - iCloud Sync
 
-    var syncSnapshot: SmartSpendSyncSnapshot {
-        SmartSpendSyncSnapshot(
-            schemaVersion: 1,
-            updatedAt: dataLastChangedAt,
+    /// The synced subset of state (learned patterns and UI-only values stay local).
+    var cloudSyncDataset: CloudSyncDataset {
+        CloudSyncDataset(
             expenses: expenses,
-            user: user,
             deletedExpenses: deletedExpenses,
+            userCategories: userCategories,
             categoryBudgets: categoryBudgets,
             spendingGoals: spendingGoals,
             monthlySalaries: monthlySalaries,
             recurringExpenses: recurringExpenses,
-            learnedPatterns: learnedPatterns,
-            userCategories: userCategories,
-            customStartDate: customStartDate,
-            customEndDate: customEndDate
+            user: user
         )
     }
 
-    @MainActor
-    func checkICloudSyncStatus() async {
-        cloudSyncState = .checking
-        cloudSyncState = await CloudSyncService.shared.checkAccountStatus()
-    }
-
-    @MainActor
-    func syncWithICloud() async {
-        cloudSyncState = .syncing
-
-        do {
-            let syncedSnapshot = try await CloudSyncService.shared.sync(localSnapshot: syncSnapshot)
-            applySyncSnapshot(syncedSnapshot)
-            cloudSyncState = .synced(Date())
-        } catch {
-            cloudSyncState = .failed(CloudSyncService.shared.syncMessage(for: error))
-        }
-    }
-
-    private func applySyncSnapshot(_ snapshot: SmartSpendSyncSnapshot) {
+    /// Applies merged iCloud changes with one assignment per collection and one save, like
+    /// `applyMCPChanges`. Observers (widget, Notion sync) see a single ordinary local change.
+    /// No gamification, MCP receipts or recurring processing run here, and the save does
+    /// not call back into iCloud sync, so remote changes are never echoed back.
+    func applyCloudSyncDataset(_ dataset: CloudSyncDataset) {
         isApplyingRemoteSnapshot = true
         defer { isApplyingRemoteSnapshot = false }
-
-        // A full restore has no matching MCP receipts. Require a new mirror
-        // rather than trusting acknowledgments from the replaced expense state.
-        sharedDefaults.removeObject(forKey: "mcpPendingCommit")
-        sharedDefaults.removeObject(forKey: "mcpAppliedOperations")
-        sharedDefaults.removeObject(forKey: "mcpLedgerId")
-
-        expenses = snapshot.expenses
-        user = snapshot.user
-        deletedExpenses = snapshot.deletedExpenses
-        categoryBudgets = snapshot.categoryBudgets
-        spendingGoals = snapshot.spendingGoals
-        monthlySalaries = snapshot.monthlySalaries
-        recurringExpenses = snapshot.recurringExpenses
-        learnedPatterns = snapshot.learnedPatterns
-        userCategories = snapshot.userCategories
-        customStartDate = snapshot.customStartDate
-        customEndDate = snapshot.customEndDate
-        dataLastChangedAt = snapshot.updatedAt
-
+        expenses = dataset.expenses
+        deletedExpenses = dataset.deletedExpenses
+        userCategories = dataset.userCategories
+        categoryBudgets = dataset.categoryBudgets
+        spendingGoals = dataset.spendingGoals
+        monthlySalaries = dataset.monthlySalaries
+        recurringExpenses = dataset.recurringExpenses
+        user = dataset.user
+        rebuildLearnedPatternsFromRecentExpenses()
         saveData()
     }
-    
+
     // MARK: - Expense Management
 
     // Voice review must not claim success before the expense key is persisted.
@@ -428,6 +402,7 @@ class DataManager: ObservableObject {
         updateLearnedPatterns(for: expense)
         gamificationManager.recordExpense()
         WidgetCenter.shared.reloadAllTimelines()
+        onLocalDataPersisted?()
     }
     
     func addExpense(_ expense: Expense) {
@@ -449,7 +424,8 @@ class DataManager: ObservableObject {
 
     private func addExpenseInternal(_ expense: Expense) {
         expenses.append(expense)
-        saveData()
+        // updateLearnedPatterns persists everything (expense included); a second full
+        // saveData() here re-encoded every collection twice per added expense.
         updateLearnedPatterns(for: expense)
         // Gamification tracking
         gamificationManager.recordExpense()
@@ -474,18 +450,38 @@ class DataManager: ObservableObject {
         saveData()
     }
     
+    /// Archives several expenses with a single save.
+    func moveToDeletedExpenses(_ toArchive: [Expense]) {
+        guard !toArchive.isEmpty else { return }
+        let ids = Set(toArchive.map(\.id))
+        deletedExpenses.append(contentsOf: toArchive.map { ArchivedExpense(from: $0) })
+        expenses.removeAll { ids.contains($0.id) }
+        saveData()
+    }
+
     func restoreExpense(_ deletedExpense: ArchivedExpense) {
-        guard deletedExpenses.contains(where: { $0.id == deletedExpense.id }),
-              !expenses.contains(where: { $0.id == deletedExpense.id }) else { return }
-        var expense = Expense(
-            title: deletedExpense.title,
-            amount: deletedExpense.amount,
-            categoryId: deletedExpense.categoryId,
-            date: deletedExpense.date
-        )
-        expense.id = deletedExpense.id
-        expenses.append(expense)
-        deletedExpenses.removeAll { $0.id == deletedExpense.id }
+        restoreExpenses(ids: [deletedExpense.id])
+    }
+
+    /// Restores archived expenses (e.g. an undo after a bulk delete) with a single save.
+    /// Keeps the original id and Notion link; ids that are already active are left archived.
+    func restoreExpenses(ids: Set<UUID>) {
+        let activeIds = Set(expenses.map(\.id))
+        let toRestore = deletedExpenses.filter { ids.contains($0.id) && !activeIds.contains($0.id) }
+        guard !toRestore.isEmpty else { return }
+        let restoredIds = Set(toRestore.map(\.id))
+        expenses.append(contentsOf: toRestore.map { archived in
+            var expense = Expense(
+                title: archived.title,
+                amount: archived.amount,
+                categoryId: archived.categoryId,
+                date: archived.date,
+                notionId: archived.notionId
+            )
+            expense.id = archived.id
+            return expense
+        })
+        deletedExpenses.removeAll { restoredIds.contains($0.id) }
         saveData()
     }
     
@@ -639,15 +635,35 @@ class DataManager: ObservableObject {
         processRecurringExpenses()
     }
     
-    func updateRecurringExpense(_ expense: RecurringExpense) {
-        if let index = recurringExpenses.firstIndex(where: { $0.id == expense.id }) {
-            recurringExpenses[index] = expense
-            saveData()
+    func updateRecurringExpense(_ expense: RecurringExpense, resumedOn today: Date = Date(), calendar: Calendar = .current) {
+        guard let index = recurringExpenses.firstIndex(where: { $0.id == expense.id }) else { return }
+        let stored = recurringExpenses[index]
+        var updated = expense
+        // An edit sheet carries the cursor from when it opened; processing may have moved it since.
+        updated.lastProcessedDate = [stored.lastProcessedDate, expense.lastProcessedDate].compactMap { $0 }.max()
+        let isResuming = !stored.isActive && expense.isActive
+        // A new start day or frequency on a bill that already charged applies from today;
+        // otherwise past dates of the new schedule would be recorded as fresh charges.
+        let scheduleChanged = stored.recurrenceType != expense.recurrenceType
+            || calendar.startOfDay(for: stored.startDate) != calendar.startOfDay(for: expense.startDate)
+        if isResuming || (scheduleChanged && updated.lastProcessedDate != nil),
+           let yesterday = calendar.date(byAdding: .day, value: -1, to: calendar.startOfDay(for: today)) {
+            // Resuming continues from today instead of backfilling the paused period.
+            updated.lastProcessedDate = max(updated.lastProcessedDate ?? yesterday, yesterday)
         }
+        recurringExpenses[index] = updated
+        saveData()
+        processRecurringExpenses(through: today, calendar: calendar)
     }
-    
+
     func deleteRecurringExpense(_ expense: RecurringExpense) {
-        recurringExpenses.removeAll { $0.id == expense.id }
+        deleteRecurringExpenses(ids: [expense.id])
+    }
+
+    /// Removes the schedules only; expenses they already recorded stay in history.
+    func deleteRecurringExpenses(ids: Set<UUID>) {
+        guard !ids.isEmpty else { return }
+        recurringExpenses.removeAll { ids.contains($0.id) }
         saveData()
     }
     
@@ -772,10 +788,11 @@ class DataManager: ObservableObject {
                 
                 // Merge patterns with high similarity (>0.8)
                 if similarity > 0.8 {
-                    // Merge pattern j into pattern i
-                    for categoryFreq in learnedPatterns[j].categoryFrequencies {
-                        for _ in 0..<categoryFreq.frequency {
-                            learnedPatterns[i].addCombination(price: 0, categoryId: categoryFreq.categoryId)
+                    // Merge pattern j into pattern i, keeping real prices (merging with price 0
+                    // made "0" the most-used price and the suggested amount).
+                    for combination in learnedPatterns[j].combinations {
+                        for _ in 0..<combination.frequency {
+                            learnedPatterns[i].addCombination(price: combination.price, categoryId: combination.categoryId)
                         }
                     }
                     
@@ -873,10 +890,13 @@ class DataManager: ObservableObject {
         // Sort by score and return top categories
         let totalScore = categoryScores.values.reduce(0, +)
         
+        // Patterns can still reference a deleted category; resolveCategory would hand back a fresh
+        // "Other" with a new id that the Add Expense form could select and save as an orphan.
         return categoryScores
-            .map { (id, score) -> (category: UserCategory, confidence: Double) in
+            .compactMap { (id, score) -> (category: UserCategory, confidence: Double)? in
+                guard let category = getCategory(id: id) else { return nil }
                 let confidence = totalScore > 0 ? score / totalScore : 0.0
-                return (category: resolveCategory(id: id), confidence: min(confidence, 1.0))
+                return (category: category, confidence: min(confidence, 1.0))
             }
             .sorted { $0.confidence > $1.confidence }
             .prefix(limit)
@@ -930,8 +950,13 @@ class DataManager: ObservableObject {
             self.cleanupExpiredDeletedExpenses()
             self.processRecurringExpenses()
         }
+        // The hourly timer can lag a new day by up to an hour, and it does not fire while the app is
+        // suspended; MainTabView also processes on every scenePhase `.active`.
+        NotificationCenter.default.addObserver(forName: .NSCalendarDayChanged, object: nil, queue: .main) { [weak self] _ in
+            self?.processRecurringExpenses()
+        }
     }
-    
+
     private func cleanupExpiredDeletedExpenses() {
         let calendar = Calendar.current
         let thirtyDaysAgo = calendar.date(byAdding: .day, value: -30, to: Date()) ?? Date()
@@ -952,17 +977,27 @@ class DataManager: ObservableObject {
         }
 
         var generated: [Expense] = []
+        var cursorMoved = false
+        // Occurrence ids are deterministic, so a charge another device already recorded
+        // (and iCloud delivered, active or Deleted) is not recorded a second time.
+        var knownIds = Set(expenses.map(\.id)).union(deletedExpenses.map(\.id))
         for index in recurringExpenses.indices {
             let recurring = recurringExpenses[index]
             let dueDates = recurring.dueDates(through: date, calendar: calendar)
             guard let lastDueDate = dueDates.last else { continue }
-            generated.append(contentsOf: dueDates.map {
-                Expense(title: recurring.title, amount: recurring.amount,
-                        categoryId: recurring.categoryId, date: $0)
-            })
+            for dueDate in dueDates {
+                var expense = Expense(title: recurring.title, amount: recurring.amount,
+                                      categoryId: recurring.categoryId, date: dueDate)
+                expense.id = recurring.occurrenceExpenseID(for: dueDate, calendar: calendar)
+                if knownIds.insert(expense.id).inserted { generated.append(expense) }
+            }
             recurringExpenses[index].lastProcessedDate = lastDueDate
+            cursorMoved = true
         }
-        guard !generated.isEmpty else { return }
+        guard !generated.isEmpty else {
+            if cursorMoved { saveData() }
+            return
+        }
         // Persist the occurrence cursors and their records together, before another refresh.
         addExpensesBatch(generated)
     }
@@ -1038,19 +1073,11 @@ class DataManager: ObservableObject {
     }
     
     func getRecurringExpenseNotifications() -> [RecurringExpenseNotification] {
-        var notifications: [RecurringExpenseNotification] = []
-        
-        for recurringExpense in recurringExpenses {
-            if recurringExpense.shouldCreateExpense(on: Date()) {
-                let notification = RecurringExpenseNotification(
-                    recurringExpense: recurringExpense,
-                    type: .due
-                )
-                notifications.append(notification)
-            }
-        }
-        
-        return notifications
+        // Overdue (missed a past day) first, then oldest pending charge first.
+        recurringExpenses
+            .filter { $0.shouldCreateExpense(on: Date()) }
+            .sorted { $0.nextDueDate < $1.nextDueDate }
+            .map { RecurringExpenseNotification(recurringExpense: $0, type: $0.isOverdue ? .overdue : .due) }
     }
     
     func saveBudgets() {
@@ -1171,20 +1198,17 @@ class DataManager: ObservableObject {
         let spent = getTotalExpensesForPeriod()
         let remainingBudget = max(0, salary - spent)
         
-        for bill in recurringExpenses {
+        let today = calendar.startOfDay(for: now)
+        for bill in recurringExpenses where bill.isActive && !bill.isExpired {
+            // Due dates are start-of-day, so compare whole days: a bill due today is not "in the past".
             let nextDate = bill.nextDueDate
-            guard nextDate >= now && nextDate <= twoDaysFromNow else { continue }
-            
+            let daysUntil = calendar.dateComponents([.day], from: today, to: calendar.startOfDay(for: nextDate)).day ?? -1
+            guard (0...1).contains(daysUntil), nextDate <= twoDaysFromNow else { continue }
+
             let budgetAfterBill = remainingBudget - bill.amount
-            let daysUntil = calendar.dateComponents([.day], from: now, to: nextDate).day ?? 0
-            
-            let dayText = daysUntil == 0 ? "today".localized : "tomorrow".localized
+            let format = daysUntil == 0 ? "recurring_reminder_today_format" : "recurring_reminder_tomorrow_format"
             let formattedRemainder = CurrencyFormatter.format(budgetAfterBill, currency: user.currency)
-            
-            // Note: Since .localized doesn't support placeholders for placeholders in StringExtensions yet,
-            // we'll format it normally or add keys.
-            let message = "Reminder: \(bill.title) is due \(dayText). You'll have \(formattedRemainder) left after this payment."
-            reminders.append(message)
+            reminders.append(String(format: format.localized, bill.title, formattedRemainder))
         }
         
         return reminders

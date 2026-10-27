@@ -4,7 +4,7 @@ import AppIntents
 
 // MARK: - Lightweight mirror types for decoding app data
 
-private let appGroupID = "group.com.tursunov.SmartSpend"
+private let appGroupID = "group.ai.humblebee.smartspend"
 
 private struct WExpense: Codable {
     let amount: Double
@@ -221,7 +221,7 @@ struct MediumWidgetView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 13) {
             HStack(alignment: .center) {
-                WidgetTopLine(title: "SmartSpend", icon: "wallet.pass.fill")
+                WidgetTopLine(title: "Cenzio", icon: "wallet.pass.fill")
                 Spacer()
                 Text(monthYearShortString())
                     .font(.system(size: 11, weight: .medium))
@@ -276,7 +276,7 @@ struct LargeWidgetView: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
-                    WidgetTopLine(title: "SmartSpend", icon: "wallet.pass.fill")
+                    WidgetTopLine(title: "Cenzio", icon: "wallet.pass.fill")
                     Text(monthYearString())
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(.secondary)
@@ -496,7 +496,7 @@ struct AccessoryRectangularView: View {
             HStack(spacing: 3) {
                 Image(systemName: "banknote.fill")
                     .font(.system(size: 9, weight: .semibold))
-                Text("SmartSpend")
+                Text("Cenzio")
                     .font(.system(size: 10, weight: .semibold))
             }
 
@@ -637,7 +637,7 @@ struct SmartSpendWidget: Widget {
             SmartSpendWidgetView(entry: entry)
                 .containerBackground(.fill.tertiary, for: .widget)
         }
-        .configurationDisplayName("SmartSpend")
+        .configurationDisplayName("Cenzio")
         .description("Track your spending at a glance.")
         .supportedFamilies([
             .systemSmall, .systemMedium, .systemLarge,

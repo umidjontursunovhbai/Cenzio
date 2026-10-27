@@ -16,16 +16,13 @@ struct MCPIntegrationView: View {
         NavigationStack {
             Form {
                 Section {
-                    NavigationLink("Expense sync & history") {
-                        ExpenseSyncView()
-                    }
                     NavigationLink(voiceText("Voice connection", "Подключение голоса")) {
                         VoiceConnectionView()
                     }
                 }
                 Section {
                     Label("Manual file exchange", systemImage: "doc.badge.arrow.up")
-                    Text("Share an expense snapshot with your private SmartSpend MCP server. Review its changes here before applying them.")
+                    Text("Share an expense snapshot with your private Cenzio MCP server. Review its changes here before applying them.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 } footer: {
@@ -81,7 +78,7 @@ struct MCPIntegrationView: View {
                 ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } }
             }
             .fileExporter(isPresented: $showingExport, document: exportDocument,
-                          contentType: .json, defaultFilename: "SmartSpend-MCP-snapshot") { result in
+                          contentType: .json, defaultFilename: "Cenzio-MCP-snapshot") { result in
                 if case .failure(let error) = result { message = error.localizedDescription }
             }
             .fileImporter(isPresented: $showingImport, allowedContentTypes: [.json]) { result in
@@ -116,7 +113,7 @@ struct MCPIntegrationView: View {
                     }
                 }
             } message: {
-                Text("SmartSpend will check the current records again. A conflict stops the entire batch; archived expenses remain in Deleted Expenses.")
+                Text("Cenzio will check the current records again. A conflict stops the entire batch; archived expenses remain in Deleted Expenses.")
             }
             .alert("AI file exchange", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
                 Button("OK") { message = nil }

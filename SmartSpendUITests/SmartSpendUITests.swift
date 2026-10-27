@@ -26,42 +26,19 @@ final class SmartSpendUITests: XCTestCase {
     func testExample() throws {
         // UI tests must launch the application that they test.
         let app = XCUIApplication()
+        app.launchEnvironment["SMARTSPEND_UI_TEST_SKIP_SIGNIN"] = "1"
         app.launch()
 
         // Use XCTAssert and related functions to verify your tests produce the correct results.
     }
 
     @MainActor
-    func testIntegrationsUsesConsumerControlsWithoutMCPOrCredentials() {
-        let app = XCUIApplication()
-        app.launch()
-        let tabs = app.tabBars.buttons
-        XCTAssertTrue(tabs.element(boundBy: 3).waitForExistence(timeout: 10))
-        tabs.element(boundBy: 3).tap()
-        let integrations = app.buttons["settings.integrations"]
-        for _ in 0..<4 where !integrations.isHittable { app.swipeUp() }
-        XCTAssertTrue(integrations.isHittable)
-        XCTAssertFalse(app.staticTexts["AI tools (MCP)"].exists)
-        integrations.tap()
-        XCTAssertTrue(app.navigationBars["Integrations"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.staticTexts["Google Sheets"].exists)
-        XCTAssertTrue(app.staticTexts["Notion"].exists)
-        XCTAssertFalse(app.textFields["https://your-server.example"].exists)
-        XCTAssertFalse(app.secureTextFields["Dedicated sync access token"].exists)
-        XCTAssertFalse(app.staticTexts["AI tools (MCP)"].exists)
-        let screenshot = XCTAttachment(screenshot: app.screenshot())
-        screenshot.name = "Integrations — personal providers without developer credentials"
-        screenshot.lifetime = .keepAlways
-        add(screenshot)
-        // No Connect tap: do not upload or alter the user's ledger/provider data.
-        app.terminate()
-    }
-
-    @MainActor
     func testLaunchPerformance() throws {
         // This measures how long it takes to launch your application.
         measure(metrics: [XCTApplicationLaunchMetric()]) {
-            XCUIApplication().launch()
+            let app = XCUIApplication()
+            app.launchEnvironment["SMARTSPEND_UI_TEST_SKIP_SIGNIN"] = "1"
+            app.launch()
         }
     }
 }

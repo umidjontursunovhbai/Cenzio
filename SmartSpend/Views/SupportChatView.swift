@@ -260,7 +260,7 @@ struct SupportChatView: View {
         let now = Date()
         let sevenDaysLater = Calendar.current.date(byAdding: .day, value: 7, to: now) ?? now
         return dataManager.recurringExpenses.filter {
-            $0.isActive && $0.nextDueDate >= now && $0.nextDueDate <= sevenDaysLater
+            $0.isActive && !$0.isExpired && $0.nextDueDate >= now && $0.nextDueDate <= sevenDaysLater
         }
     }
 }

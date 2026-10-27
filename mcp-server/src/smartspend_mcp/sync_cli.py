@@ -142,6 +142,7 @@ def parser():
     serve.add_argument("--oauth-jwks-url")
     serve.add_argument("--google-client-config", help="Owner-only downloaded Google web OAuth JSON")
     serve.add_argument("--notion-client-config", help="Owner-only Notion public OAuth client JSON")
+    serve.add_argument("--account-client-config", help="Owner-only Google/Apple/Telegram sign-in configuration; separate from expense connector credentials")
     serve.add_argument("--allow-device-enrollment", action="store_true", help="Explicitly enable bounded per-installation signup; configure edge abuse protection before public use")
     token = commands.add_parser("create-token")
     token.add_argument("--ledger", required=True)
@@ -218,6 +219,9 @@ def run(args):
         oauth = OAuthVerifier(repo.grants, issuer=args.oauth_issuer, resource=public + "/mcp", jwks_url=args.oauth_jwks_url) if args.oauth_issuer else None
         google = _google_oauth(repo.root, public, args.google_client_config) if args.google_client_config else None
         app_options = {"public_url": public, "oauth": oauth}
+        if args.account_client_config:
+            from .account_auth import AccountAuth
+            app_options["account_auth"] = AccountAuth.from_private_file(repo.root, public, Path(args.account_client_config).expanduser())
         if google is not None:
             app_options["google_oauth"] = google
         if args.notion_client_config:

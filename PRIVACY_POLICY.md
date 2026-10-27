@@ -1,33 +1,45 @@
-# SmartSpend Privacy Policy
+# Cenzio Privacy Policy
 
-Effective date: September 27, 2026
+Effective date: October 27, 2026
 
-SmartSpend is a personal expense tracker. This policy describes the current iOS app and widget.
+Cenzio is a personal expense tracker for iPhone. This policy describes the current iOS app and its widgets. The published version is at <https://umidjontursunovhbai.github.io/Cenzio/privacy.html>.
 
 ## Information you enter
 
-SmartSpend stores expenses, categories, budgets, spending goals, monthly income, recurring expenses, archived expenses, learned suggestions, and app preferences that you enter or create. This information is stored on your device. The app and widget share the information needed by the widget through Apple's App Group storage.
+Cenzio stores the expenses, categories, budgets, spending goals, monthly income, recurring expenses, deleted (archived) expenses, learned suggestions and app preferences that you enter or create. They are saved on your device and shared with Cenzio's own widgets through Apple's App Group storage.
 
-The current app does not require an account and does not upload your SmartSpend records to a SmartSpend server or sync them through CloudKit. Depending on your device settings, Apple's device backup may include app data; those backups are managed by Apple and your device settings, not by SmartSpend.
+## Sign in with Apple
+
+Cenzio asks you to sign in with Apple when it opens. It keeps Apple's anonymous user identifier and, if you choose to share them, your name and email address. They are stored in your iPhone's Keychain and are not sent to the developer. You can stop using your Apple ID with Cenzio in the Settings app under your name → Sign-In & Security → Sign in with Apple.
+
+## iCloud sync
+
+Your records are synced automatically to the private iCloud database of the iCloud account signed in on your device, so your other devices with the same account show the same data. This data is stored by Apple under the iCloud terms. The developer has no access to your private iCloud database. You can delete Cenzio's iCloud data in the Settings app under your name → iCloud → Manage Storage.
+
+## Voice and AI expense drafts
+
+Voice recording starts only when you tap the microphone and grant permission. Audio is transcribed on your device and deleted afterwards; it is never uploaded. The first time you use AI expense preparation, Cenzio asks for permission to send the recognized text, your category names and identifiers, currency, reference date and time zone to an AI provider (OpenRouter/OpenAI) through Cenzio's server. Past expenses, income, budgets and audio are not sent. The AI provider's own retention policies apply. Nothing is saved until you review the draft and tap Save.
 
 ## Imports and exports
 
-CSV files that you choose to import are processed on your device. When you export data, SmartSpend creates a file on your device and lets you choose where to save or share it. Once you share or save an exported copy elsewhere, that copy is controlled by the destination you chose.
+CSV files you choose to import are processed on your device. When you export, Cenzio creates a file on your device and lets you choose where to save or share it. A shared or saved copy is controlled by the destination you chose.
 
-## Analytics, advertising, and tracking
+## Analytics, advertising and tracking
 
-The current app does not include third-party advertising or analytics, does not sell your data, and does not track you across other apps or websites.
+Cenzio does not include third-party advertising or analytics, does not sell your data, and does not track you across other apps or websites.
 
 ## Support email
 
-If you choose to email support, your email address and anything you include in the message are sent through your email provider. We use that message only to respond to your request. Please do not include financial details that are not needed to explain the issue.
+If you email support, your email address and message are delivered through your email provider. We use them only to answer you. Please do not include financial details that are not needed to explain the issue.
 
 ## Retention and deletion
 
-Your SmartSpend records remain on your device until you delete them in Settings or remove the app. An exported file or support email is a separate copy and is not deleted when you clear app data. You can delete exported copies from the places where you saved them. If you restored an iOS device backup, app data may be restored with it.
+Your records remain on your devices and in your iCloud until you delete them. **Settings → Clear All Data** removes records from the current device only; copies in iCloud and on your other devices remain until you delete them there or remove Cenzio's iCloud data. Exported files and support emails are separate copies that you delete where you saved them. Restoring an iOS device backup may restore app data.
 
-To ask about a support email you sent or this policy, contact us at [tursunov.umidjon.uz@gmail.com](mailto:tursunov.umidjon.uz@gmail.com).
+## Children
 
-## Changes
+Cenzio is not directed at children under 13.
 
-If SmartSpend adds accounts, cloud sync, analytics, or other data practices in a later version, this policy will be updated before those features are released.
+## Changes and contact
+
+We will update this policy before releasing new data practices. Questions about this policy or your data: [umidjon.muydinov@icloud.com](mailto:umidjon.muydinov@icloud.com).
