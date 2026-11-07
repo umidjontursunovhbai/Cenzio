@@ -505,8 +505,8 @@ extension String {
 
             // Apple sign-in
             "apple_signin_title": "Welcome to Cenzio",
-            "apple_signin_subtitle": "Private expense tracking that stays on your iPhone.",
-            "apple_signin_point_private": "Your expenses never leave this device",
+            "apple_signin_subtitle": "Private expense tracking that stays on your devices.",
+            "apple_signin_point_private": "Your expenses stay on your devices and in your private iCloud",
             "apple_signin_point_smart": "Smart categories that learn your habits",
             "apple_signin_point_insights": "Clear budgets and spending insights",
             "apple_signin_privacy_note": "Signing in is optional. Your expenses stay on your devices and sync only through your own iCloud.",
