@@ -14,7 +14,7 @@ The app has four tabs: **Dashboard, Expenses, Recurring and Settings**.
 
 ## Sign in and sync
 
-Cenzio asks you to **Sign in with Apple** when it opens. Your records are saved on the iPhone and **synced automatically through iCloud** to your other devices signed in to the same iCloud account. Sync is always on, runs quietly in the background and uses your private iCloud database. The developer cannot read it.
+**Sign in with Apple** is optional: the welcome screen lets you sign in or continue without an account, and Cenzio works the same either way. You can sign in, sign out or delete your account later in **Settings → Account**. Your records are saved on the iPhone and **synced automatically through iCloud** to your other devices signed in to the same iCloud account. Sync is always on, runs quietly in the background and uses your private iCloud database. The developer cannot read it.
 
 ## Add an expense by voice
 
@@ -23,6 +23,7 @@ Tap the **microphone** next to the **+** button on the Dashboard or Expenses tab
 ## Your data
 
 - Export a copy from **Settings → Export Data**. CSV expenses can be imported again.
+- **Settings → Account → Delete Account** deletes your account and all your records on this iPhone and in iCloud, on every device.
 - **Settings → Clear All Data** clears this iPhone only. Copies in your iCloud and on your other devices stay there.
 - Remove Cenzio's iCloud data in the Settings app under your name → iCloud → Manage Storage.
 
