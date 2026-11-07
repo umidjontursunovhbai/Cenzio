@@ -124,7 +124,7 @@ class DataManager: ObservableObject {
             sharedDefaults.removeObject(forKey: "mcpPendingCommit")
             
         } catch {
-            print("Error saving data: \(error)")
+            debugLog("Error saving data: \(error)")
         }
         WidgetCenter.shared.reloadAllTimelines()
         if !isApplyingRemoteSnapshot { onLocalDataPersisted?() }

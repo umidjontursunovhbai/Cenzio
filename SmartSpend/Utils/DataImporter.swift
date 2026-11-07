@@ -91,7 +91,7 @@ class DataImporter: ObservableObject {
             
             // Detect CSV format (SmartSpend or custom)
             let format = detectCSVFormat(header: header)
-            print("📝 Detected Format: \(format)")
+            debugLog("📝 Detected Format: \(format)")
             
             var importedCount = 0
             var skippedCount = 0
@@ -100,7 +100,7 @@ class DataImporter: ObservableObject {
             var foundCategories: Set<String> = []
             
             // First pass: collect all categories from the CSV
-            print("🔄 First Pass: Collecting categories...")
+            debugLog("🔄 First Pass: Collecting categories...")
             for row in dataRows {
                 let parsedColumns = row
                 if let categoryString = extractCategoryString(parsedColumns, header: header, format: format) {
@@ -117,13 +117,13 @@ class DataImporter: ObservableObject {
                     foundCategories.insert(fallbackCategoryName)
                 }
             }
-            print("📝 Found \(foundCategories.count) unique categories: \(foundCategories)")
+            debugLog("📝 Found \(foundCategories.count) unique categories: \(foundCategories)")
             
             // Sync with DataManager to create categories and get IDs
             // We need a map of category name -> UserCategory ID
             var categoryMap: [String: UUID] = [:]
             let syncCategories = {
-                print("🔄 Syncing categories with DataManager...")
+                debugLog("🔄 Syncing categories with DataManager...")
                 for categoryName in foundCategories {
                     let normalized = categoryName.lowercased()
                     
@@ -131,13 +131,13 @@ class DataImporter: ObservableObject {
                     // Check if UserCategory already exists
                     if let existingCategory = dataManager.userCategories.first(where: { $0.name.lowercased() == normalized }) {
                         categoryMap[normalized] = existingCategory.id
-                        print("   Mapped '\(categoryName)' to existing user category")
+                        debugLog("   Mapped '\(categoryName)' to existing user category")
                     } else {
                         // Create new UserCategory
                         let newUserCategory = UserCategory.imported(name: categoryName)
                         dataManager.addUserCategory(newUserCategory)
                         categoryMap[normalized] = newUserCategory.id
-                        print("   Created new user category for '\(categoryName)'")
+                        debugLog("   Created new user category for '\(categoryName)'")
                     }
                 }
             }
@@ -145,7 +145,7 @@ class DataImporter: ObservableObject {
             else { DispatchQueue.main.sync(execute: syncCategories) }
             
             // Second pass: parse and create expenses
-            print("🔄 Second Pass: Parsing expenses...")
+            debugLog("🔄 Second Pass: Parsing expenses...")
             for (index, row) in dataRows.enumerated() {
                 do {
                     let parsedColumns = row
@@ -161,14 +161,14 @@ class DataImporter: ObservableObject {
                     
                     // Only print first 5 errors for debugging
                     if skippedCount <= 5 {
-                        print("❌ Import Error on row \(index + 2): \(error.localizedDescription)")
+                        debugLog("❌ Import Error on row \(index + 2): \(error.localizedDescription)")
                     }
                 }
             }
             
             // Add all expenses on main thread in a single batch
             let addExpenses = {
-                print("🔄 Adding \(expensesToAdd.count) expenses to DataManager...")
+                debugLog("🔄 Adding \(expensesToAdd.count) expenses to DataManager...")
                 if !expensesToAdd.isEmpty, let importedCurrency,
                    self.isFinancialStoreEmpty(dataManager) {
                     dataManager.updateCurrency(importedCurrency)
@@ -178,10 +178,10 @@ class DataImporter: ObservableObject {
             if Thread.isMainThread { addExpenses() }
             else { DispatchQueue.main.sync(execute: addExpenses) }
             
-            print("✅ Import completed: \(importedCount) imported, \(skippedCount) skipped")
+            debugLog("✅ Import completed: \(importedCount) imported, \(skippedCount) skipped")
             
             if skippedCount > 5 {
-                print("   (Showing only first 5 errors in console)")
+                debugLog("   (Showing only first 5 errors in console)")
             }
             
             return .success(importedCount: importedCount, skippedCount: skippedCount, errors: errors)
@@ -574,7 +574,7 @@ class DataImporter: ObservableObject {
         
         // Validation: If the category string parses as a valid date, it's likely a mapping error
         if parseDate(categoryString) != nil {
-            print("⚠️ Warning: Category value '\(categoryString)' looks like a date. Ignoring to prevent miscategorization.")
+            debugLog("⚠️ Warning: Category value '\(categoryString)' looks like a date. Ignoring to prevent miscategorization.")
             return fallbackCategoryId(from: categoryMap)
         }
         
@@ -583,7 +583,7 @@ class DataImporter: ObservableObject {
             return id
         }
         
-        print("⚠️ Warning: Category '\(categoryString)' (normalized: '\(normalized)') not found in map. Falling back to \(fallbackCategoryName).")
+        debugLog("⚠️ Warning: Category '\(categoryString)' (normalized: '\(normalized)') not found in map. Falling back to \(fallbackCategoryName).")
         return fallbackCategoryId(from: categoryMap)
     }
 
