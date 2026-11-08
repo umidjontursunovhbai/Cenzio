@@ -7,7 +7,7 @@ Updated October 27, 2026. This is a preparation checklist, not proof of App Stor
 - App Store name: **Cenzio**. Subtitle: **Expense Tracker & Budget App**. SKU `smartspend-ios` (cannot be changed).
 - Team: HUMBLE BEE AI, MCHJ (`94MJH9FHS9`). App Store Connect app ID `6827398944`.
 - Bundle IDs: `ai.humblebee.smartspend` and `ai.humblebee.smartspend.widget`. App Group `group.ai.humblebee.smartspend`. iCloud container `iCloud.ai.humblebee.smartspend`.
-- Sign in with Apple is required at launch. Records sync automatically through the user's private CloudKit database (always on).
+- Sign in with Apple is optional (welcome screen offers "Continue without account"). Settings → Account offers sign in, sign out and Delete Account. Records sync automatically through the user's private CloudKit database (always on).
 - No Notion, Google Sheets or other connected-sync service in the app.
 - Public pages: [Privacy](https://umidjontursunovhbai.github.io/Cenzio/privacy.html) and [Support](https://umidjontursunovhbai.github.io/Cenzio/support.html) (served from the default branch).
 - Support email: umidjon.muydinov@icloud.com.
@@ -21,8 +21,8 @@ Updated October 27, 2026. This is a preparation checklist, not proof of App Stor
 ## Before App Review
 
 1. **Voice AI runs through the Cloudflare Worker** in `voice-worker/` (OpenRouter key as a Worker secret). Deploy it, set `VoiceAPI.endpoint`, and give the OpenRouter key a monthly credit limit. See `voice-worker/README.md`.
-2. **Login requirement.** Apple guideline 5.1.1 discourages requiring sign-in when core features do not need an account. Be ready to explain why sign-in is required, or make it optional.
-3. **Account deletion.** If App Review treats Sign in with Apple as account creation, the app needs an in-app way to delete the account (sign out plus clearing local and iCloud data).
+2. **Login (5.1.1).** Sign-in is optional; every feature works without an account. Mention this in the App Review notes.
+3. **Account deletion (5.1.1(v)).** Settings → Account → Delete Account (shown when signed in) asks for Face ID or the passcode, deletes the app's iCloud zone and local data, then forgets the Apple ID.
 4. In App Store Connect set the Privacy Policy URL and Support URL above, then answer **App Privacy**: data is not collected by the developer; AI voice text goes to a third-party provider only with consent.
 5. Age rating questionnaire, content rights, pricing and availability, category **Finance**.
 6. Screenshots of the release build with synthetic data (6.9" iPhone, plus iPad if iPad stays supported).
