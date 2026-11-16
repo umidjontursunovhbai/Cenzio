@@ -175,3 +175,6 @@ logs/
 # Cloudflare Wrangler local state
 .wrangler/
 voice-worker/.wrangler/
+
+# Xcode archives (uploaded builds)
+*.xcarchive/
