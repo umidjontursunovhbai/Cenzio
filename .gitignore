@@ -165,3 +165,16 @@ logs/
 
 # Local user exports and previews may contain private financial data.
 /outputs/
+
+# Signing material and certificates
+*.p8
+*.pem
+*.p12
+*.mobileprovision
+
+# Cloudflare Wrangler local state
+.wrangler/
+voice-worker/.wrangler/
+
+# Xcode archives (uploaded builds)
+*.xcarchive/

@@ -5,7 +5,7 @@ Privacy-first iOS expense tracker, App Store name **Cenzio**. Swift 6, SwiftUI, 
 
 - **Bundle ID**: `ai.humblebee.smartspend` (team 94MJH9FHS9)
 - **App Group**: `group.ai.humblebee.smartspend` (shared between app and Widget extension)
-- **Minimum iOS**: 17.0 | **Xcode**: 16.0+
+- **Minimum iOS**: 18.5 (app and widget) | **Xcode**: 16.0+
 
 ## Architecture
 

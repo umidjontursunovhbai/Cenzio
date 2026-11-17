@@ -358,7 +358,9 @@ struct InlineVoiceExpenseStatus: View {
                         .accessibilityIdentifier("voice.speech-message")
                 }
                 if controller.needsAIConsent {
-                    Text(voiceText("Allow AI to prepare expenses from your text, categories, currency and date. Audio and expense history stay on your iPhone. Nothing is saved without review.", "Разрешить ИИ подготовить расходы из текста, категорий, валюты и даты. Аудио и история расходов остаются на iPhone. Сохранение — только после проверки.")).font(.footnote)
+                    Text(voiceText("To prepare drafts, the recognized text, your category names, currency and date are sent through Cenzio's server to OpenRouter, which uses an OpenAI model. Audio and expense history stay on your iPhone. Nothing is saved until you tap Save.", "Для подготовки черновиков распознанный текст, названия категорий, валюта и дата отправляются через сервер Cenzio в OpenRouter, который использует модель OpenAI. Аудио и история расходов остаются на iPhone. Ничего не сохраняется, пока вы не нажмёте «Сохранить».")).font(.footnote)
+                    Link(voiceText("Privacy Policy", "Политика конфиденциальности"), destination: VoiceAPI.privacyPolicyURL)
+                        .font(.footnote)
                     Button { controller.allowAI() } label: {
                         Text(voiceText("Continue", "Продолжить"))
                             .frame(minHeight: 44)

@@ -29,6 +29,7 @@ private final class VoiceNoRedirects: NSObject, URLSessionTaskDelegate {
 enum VoiceAPI {
     /// Cloudflare Worker in `voice-worker/`. It holds the OpenRouter key; the app holds no credential.
     static let endpoint = URL(string: "https://cenzio-voice.cenzio.workers.dev")!
+    static let privacyPolicyURL = URL(string: "https://umidjontursunovhbai.github.io/Cenzio/privacy.html")!
 
     private static let session: URLSession = {
         let configuration = URLSessionConfiguration.ephemeral

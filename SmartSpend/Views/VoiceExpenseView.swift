@@ -84,7 +84,7 @@ struct VoiceExpenseView: View {
                 }
 
                 Section {
-                    Toggle(voiceText("Allow AI to prepare these expenses", "Разрешить ИИ подготовить расходы"), isOn: $consent)
+                    Toggle(voiceText("Send this text to OpenRouter (OpenAI model) to prepare drafts", "Отправить текст в OpenRouter (модель OpenAI) для подготовки черновиков"), isOn: $consent)
                         .disabled(busy)
                     Button(action: prepareDrafts) {
                         HStack {
@@ -96,7 +96,10 @@ struct VoiceExpenseView: View {
                     .disabled(busy || !textIsValid || !consent)
                     .accessibilityIdentifier("voice.review")
                 } footer: {
-                    Text(voiceText("Only this text, category names, currency, date and timezone go through Cenzio's server to OpenRouter/OpenAI. No audio or expense history is sent. AI can make mistakes; nothing is saved until you review and tap Save.", "Только этот текст, названия категорий, валюта, дата и часовой пояс отправляются через сервер Cenzio в OpenRouter/OpenAI. Аудио и история расходов не передаются. ИИ может ошибаться: запись сохраняется только после проверки и нажатия «Сохранить»."))
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(voiceText("Only this text, your category names, currency, date and timezone are sent through Cenzio's server to OpenRouter, which uses an OpenAI model to prepare drafts. No audio or expense history is sent. AI can make mistakes; nothing is saved until you review and tap Save.", "Только этот текст, названия категорий, валюта, дата и часовой пояс отправляются через сервер Cenzio в OpenRouter, который использует модель OpenAI для подготовки черновиков. Аудио и история расходов не передаются. ИИ может ошибаться: ничего не сохраняется, пока вы не проверите и не нажмёте «Сохранить»."))
+                        Link(voiceText("Privacy Policy", "Политика конфиденциальности"), destination: VoiceAPI.privacyPolicyURL)
+                    }
                 }
 
                 if let error {

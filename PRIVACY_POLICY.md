@@ -10,7 +10,7 @@ Cenzio stores the expenses, categories, budgets, spending goals, monthly income,
 
 ## Sign in with Apple
 
-Cenzio asks you to sign in with Apple when it opens. It keeps Apple's anonymous user identifier and, if you choose to share them, your name and email address. They are stored in your iPhone's Keychain and are not sent to the developer. You can stop using your Apple ID with Cenzio in the Settings app under your name → Sign-In & Security → Sign in with Apple.
+Signing in with Apple is optional; Cenzio works fully without an account. If you sign in, Cenzio keeps Apple's anonymous user identifier and, if you choose to share them, your name and email address. They are stored in your iPhone's Keychain and are not sent to the developer. You can stop using your Apple ID with Cenzio in the Settings app under your name → Sign-In & Security → Sign in with Apple.
 
 ## iCloud sync
 
@@ -34,7 +34,7 @@ If you email support, your email address and message are delivered through your 
 
 ## Retention and deletion
 
-Your records remain on your devices and in your iCloud until you delete them. **Settings → Clear All Data** removes records from the current device only; copies in iCloud and on your other devices remain until you delete them there or remove Cenzio's iCloud data. Exported files and support emails are separate copies that you delete where you saved them. Restoring an iOS device backup may restore app data.
+Your records remain on your devices and in your iCloud until you delete them. **Cenzio → Settings → Account → Delete Account** deletes your account and all your records on this device and in iCloud, which also removes them from your other devices. **Settings → Clear All Data** removes records from the current device only; copies in iCloud and on your other devices remain until you delete them there or remove Cenzio's iCloud data. Exported files and support emails are separate copies that you delete where you saved them. Restoring an iOS device backup may restore app data.
 
 ## Children
 

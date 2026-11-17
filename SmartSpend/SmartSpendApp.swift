@@ -17,7 +17,7 @@ struct SmartSpendApp: App {
         WindowGroup {
             AppRootView()
                 .onAppear {
-                    print("✅ App window appeared")
+                    debugLog("✅ App window appeared")
                     SmartSpendAppShortcuts.updateAppShortcutParameters()
                 }
                 // No scroll bars anywhere; this environment value reaches every screen and sheet.

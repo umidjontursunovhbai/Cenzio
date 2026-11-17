@@ -33,12 +33,12 @@ struct ContentView: View {
         }
         .onAppear {
             // Initialize managers
-            print("🔄 Initializing managers...")
+            debugLog("🔄 Initializing managers...")
             _ = DataManager.shared
-            print("✅ DataManager initialized")
+            debugLog("✅ DataManager initialized")
             _ = TabManager.shared
-            print("✅ TabManager initialized")
-            print("✅ All managers initialized successfully")
+            debugLog("✅ TabManager initialized")
+            debugLog("✅ All managers initialized successfully")
         }
     }
 }
