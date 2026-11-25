@@ -351,10 +351,10 @@ struct SettingsView: View {
         }
         .background(alignment: .topLeading) {
             RadialGradient(
-                colors: [Color.green.opacity(colorScheme == .dark ? 0.26 : 0.14), .clear],
+                colors: [Color.green.opacity(colorScheme == .dark ? 0.40 : 0.22), .clear],
                 center: UnitPoint(x: 0.05, y: 0.0),
                 startRadius: 0,
-                endRadius: 280
+                endRadius: 320
             )
             .allowsHitTesting(false)
             .accessibilityHidden(true)
