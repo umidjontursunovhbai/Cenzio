@@ -19,7 +19,7 @@ struct SettingsView: View {
 
     private enum Metrics {
         static let horizontalMargin: CGFloat = 24
-        static let sectionSpacing: CGFloat = 24
+        static let sectionSpacing: CGFloat = 28
         static let cardRadius: CGFloat = 20
         static let rowMinHeight: CGFloat = 52
         static let tileSize: CGFloat = 30
@@ -96,12 +96,16 @@ struct SettingsView: View {
             AppScreenHeader("settings".localized)
 
             VStack(alignment: .leading, spacing: Metrics.sectionSpacing) {
-                VStack(alignment: .leading, spacing: 8) {
-                    accountCard
+                // Sign-in lives only on the launch welcome screen; Settings shows
+                // the account just to manage it (sign out, delete) once signed in.
+                VStack(alignment: .leading, spacing: 10) {
+                    if appleAccount.account != nil {
+                        accountCard
+                    }
                     iCloudSyncSection
                 }
 
-                settingsSection("monthly_salaries".localized) {
+                settingsSection("settings_section_money".localized) {
                     salaryRow
                     sectionDivider
                     Button {
@@ -110,12 +114,18 @@ struct SettingsView: View {
                         rowLabel(
                             icon: "credit-card",
                             title: "currency".localized,
-                            tint: Color(.systemTeal),
                             trailing: dataManager.user.currency.rawValue
                         )
                     }
                     .buttonStyle(SettingsPressStyle())
                     sectionDivider
+                    // Budget Goals owns its NavigationStack and Done button, so present it like Dashboard does.
+                    settingsButtonRow(icon: "flag", title: "budget_goals".localized) {
+                        showingBudgetGoals = true
+                    }
+                }
+
+                settingsSection("settings_section_preferences".localized) {
                     Menu {
                         Picker("appearance".localized, selection: $appearance) {
                             ForEach(AppearanceMode.allCases) { mode in
@@ -126,51 +136,43 @@ struct SettingsView: View {
                         rowLabel(
                             icon: "paint-brush",
                             title: "appearance".localized,
-                            tint: Color(.systemIndigo),
-                            trailing: appearance.title
+                            trailing: appearance.title,
+                            showsChevron: false
                         )
                     }
                     .buttonStyle(SettingsPressStyle())
                     .accessibilityIdentifier("settings.appearance")
-                }
-
-                settingsSection("planning".localized) {
-                    // Budget Goals owns its NavigationStack and Done button, so present it like Dashboard does.
-                    settingsButtonRow(icon: "flag", title: "budget_goals".localized, tint: Color(.systemGreen)) {
-                        showingBudgetGoals = true
-                    }
 
                     sectionDivider
 
                     NavigationLink(destination: CategoryManagementView()) {
-                        rowLabel(icon: "tag", title: "categories".localized, tint: Color(.systemOrange))
+                        rowLabel(icon: "tag", title: "categories".localized)
                     }
                     .buttonStyle(SettingsPressStyle())
                 }
 
                 settingsSection("data_management".localized) {
-                    settingsButtonRow(icon: "arrow-down-tray", title: "import_data".localized, tint: Color(.systemBlue)) {
+                    settingsButtonRow(icon: "arrow-down-tray", title: "import_data".localized) {
                         showingDataImport = true
                     }
                     sectionDivider
-                    settingsButtonRow(icon: "arrow-up-tray", title: "export_data".localized, tint: Color(.systemGreen)) {
+                    settingsButtonRow(icon: "arrow-up-tray", title: "export_data".localized) {
                         showingDataExport = true
                     }
                     sectionDivider
-                    settingsButtonRow(icon: "archive-box", title: "deleted_expenses".localized, tint: Color(.systemGray)) {
+                    settingsButtonRow(icon: "archive-box", title: "deleted_expenses".localized) {
                         showingDeletedExpenses = true
                     }
                 }
 
                 settingsSection("support".localized) {
-                    settingsButtonRow(icon: "hand-raised", title: "privacy_policy".localized, tint: Color(.systemPurple)) {
+                    settingsButtonRow(icon: "hand-raised", title: "privacy_policy".localized) {
                         showingPrivacyPolicy = true
                     }
                     sectionDivider
                     settingsButtonRow(
                         icon: "envelope",
                         title: "email_us".localized,
-                        tint: Color(.systemBlue),
                         showsChevron: false
                     ) {
                         if let url = URL(string: "mailto:umidjon.muydinov@icloud.com") {
@@ -180,15 +182,17 @@ struct SettingsView: View {
                 }
 
                 destructiveSection
+                    .padding(.top, 8)
 
                 Text(appVersionText)
-                    .font(.caption2)
+                    .font(.caption)
                     .foregroundStyle(.tertiary)
                     .frame(maxWidth: .infinity)
+                    .padding(.top, 4)
             }
             .padding(.horizontal, Metrics.horizontalMargin)
             .padding(.top, 8)
-            .padding(.bottom, 28)
+            .padding(.bottom, 32)
         }
         .scrollIndicators(.hidden)
     }
@@ -263,6 +267,15 @@ struct SettingsView: View {
         .font(.footnote)
         .foregroundStyle(iCloudStatusIsProblem ? Color(.systemOrange) : .secondary)
         .padding(.horizontal, Metrics.rowPadding)
+        .padding(.vertical, iCloudStatusIsProblem ? 12 : 0)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            // A problem gets a tinted plate so it reads as something to act on;
+            // the normal state stays a quiet line of text.
+            if iCloudStatusIsProblem {
+                cardShape.fill(Color(.systemOrange).opacity(0.12))
+            }
+        }
         .accessibilityIdentifier("settings.icloudSync.note")
     }
 
@@ -291,16 +304,16 @@ struct SettingsView: View {
         Button {
             showingMonthlySalary = true
         } label: {
-            HStack(spacing: Metrics.rowSpacing) {
-                iconTile("banknotes", tint: Color.accentColor)
+            HStack(alignment: .center, spacing: Metrics.rowSpacing) {
+                iconTile("banknotes")
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("monthly_salaries".localized)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("settings_salary_this_month".localized)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                     Text(currentMonthSalaryText)
-                        .font(.system(.title3, design: .rounded, weight: .bold))
-                        .foregroundStyle(currentMonthSalary > 0 ? Color.primary : Color.orange)
+                        .font(.system(.title2, design: .rounded, weight: .bold))
+                        .foregroundStyle(currentMonthSalary > 0 ? Color.primary : Color(.systemOrange))
                         .monospacedDigit()
                         .lineLimit(1)
                         .minimumScaleFactor(0.6)
@@ -311,11 +324,12 @@ struct SettingsView: View {
                 chevron
             }
             .padding(.horizontal, Metrics.rowPadding)
-            .padding(.vertical, 12)
-            .frame(maxWidth: .infinity, minHeight: 68, alignment: .leading)
+            .padding(.vertical, 16)
+            .frame(maxWidth: .infinity, minHeight: 80, alignment: .leading)
             .contentShape(Rectangle())
         }
         .buttonStyle(SettingsPressStyle())
+        .accessibilityIdentifier("settings.salary")
     }
 
     // MARK: - Building blocks
@@ -326,9 +340,8 @@ struct SettingsView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
-                .font(.footnote.weight(.semibold))
+                .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.secondary)
-                .textCase(.uppercase)
                 .padding(.horizontal, Metrics.rowPadding)
                 .accessibilityAddTraits(.isHeader)
 
@@ -354,23 +367,24 @@ struct SettingsView: View {
             .foregroundStyle(.tertiary)
     }
 
-    private func iconTile(_ icon: String, tint: Color) -> some View {
+    /// One tint for every row: a soft accent plate with an accent glyph. Color is
+    /// kept for meaning (red only on the destructive row), not to tell rows apart.
+    private func iconTile(_ icon: String, tint: Color = .accentColor) -> some View {
         HeroIcon(icon, size: Metrics.tileGlyph)
-            .foregroundStyle(.white)
+            .foregroundStyle(tint)
             .frame(width: Metrics.tileSize, height: Metrics.tileSize)
-            .background(tint, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .background(tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
             .accessibilityHidden(true)
     }
 
     private func settingsButtonRow(
         icon: String,
         title: String,
-        tint: Color,
         showsChevron: Bool = true,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            rowLabel(icon: icon, title: title, tint: tint, showsChevron: showsChevron)
+            rowLabel(icon: icon, title: title, showsChevron: showsChevron)
         }
         .buttonStyle(SettingsPressStyle())
     }
@@ -378,12 +392,11 @@ struct SettingsView: View {
     private func rowLabel(
         icon: String,
         title: String,
-        tint: Color,
         trailing: String? = nil,
         showsChevron: Bool = true
     ) -> some View {
         HStack(spacing: Metrics.rowSpacing) {
-            iconTile(icon, tint: tint)
+            iconTile(icon)
 
             Text(title)
                 .font(.body)
@@ -394,14 +407,19 @@ struct SettingsView: View {
 
             if let trailing {
                 Text(trailing)
-                    .font(.subheadline.weight(.medium))
+                    .font(.body)
                     .foregroundStyle(.secondary)
-                    .monospaced()
                     .lineLimit(1)
             }
 
             if showsChevron {
                 chevron
+            } else if trailing != nil {
+                // Menus open in place, so they get the up-down glyph instead of a chevron.
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .accessibilityHidden(true)
             }
         }
         .padding(.horizontal, Metrics.rowPadding)

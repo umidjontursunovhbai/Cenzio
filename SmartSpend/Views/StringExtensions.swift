@@ -519,6 +519,9 @@ extension String {
             // Account (Apple only)
             "account_title": "Account",
             "appearance": "Appearance",
+            "settings_section_money": "Money",
+            "settings_section_preferences": "Preferences",
+            "settings_salary_this_month": "This month's salary",
             "appearance_system": "System",
             "appearance_light": "Light",
             "appearance_dark": "Dark",

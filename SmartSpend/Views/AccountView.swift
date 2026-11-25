@@ -1,4 +1,3 @@
-import AuthenticationServices
 import LocalAuthentication
 import SwiftUI
 
@@ -22,7 +21,8 @@ enum AppleAccountDisplay {
     }
 }
 
-/// The optional Apple account: sign in, sign out, or delete the account with all data.
+/// The signed-in Apple account: sign out, or delete the account with all data.
+/// Signing in happens only on the launch welcome screen (`SignInGateView`).
 struct AccountView: View {
     @ObservedObject private var store = AppleAccountStore.shared
     @State private var confirmingSignOut = false
@@ -86,24 +86,6 @@ struct AccountView: View {
                     .accessibilityIdentifier("account.delete")
                 } footer: {
                     Text("account_delete_footer".localized)
-                }
-            } else {
-                Section {
-                    SignInWithAppleButton(.signIn) { request in
-                        request.requestedScopes = [.fullName, .email]
-                    } onCompletion: { result in
-                        store.handle(result)
-                    }
-                    .signInWithAppleButtonStyle(.black)
-                    .frame(height: 48)
-                    .listRowInsets(EdgeInsets())
-                    .accessibilityIdentifier("account.signIn")
-                } footer: {
-                    if let message = store.errorMessage {
-                        Text(message).foregroundStyle(.red)
-                    } else {
-                        Text("account_sign_in_footer".localized)
-                    }
                 }
             }
         }

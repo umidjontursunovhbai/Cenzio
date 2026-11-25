@@ -25,7 +25,7 @@ final class AppleAccountStore: ObservableObject {
     @Published private(set) var state: State = .checking
     /// Localized message for the last non-cancellation sign-in failure.
     @Published private(set) var errorMessage: String?
-    /// The owner chose "Continue without account" on the welcome screen, or signed out later.
+    /// The owner chose "Continue without account" on the welcome screen.
     @Published private(set) var hasSkippedSignIn: Bool
 
     /// The welcome screen shows only until the owner signs in or skips it.
@@ -94,11 +94,12 @@ final class AppleAccountStore: ObservableObject {
         errorMessage = nil
     }
 
-    /// Signing in is optional, so signing out keeps the app open.
+    /// Signing out returns to the welcome screen, the only place to sign in.
+    /// "Continue without account" there still opens the app.
     func signOut() {
         keychain.delete()
         errorMessage = nil
-        setSkippedSignIn(true)
+        setSkippedSignIn(false)
         state = .signedOut
     }
 
