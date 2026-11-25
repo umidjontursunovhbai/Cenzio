@@ -37,7 +37,7 @@ struct AccountView: View {
                 HStack(spacing: 14) {
                     Image(systemName: "apple.logo")
                         .font(.system(size: 22, weight: .medium))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(iOSDesignSystem.appBackground)
                         .frame(width: 44, height: 44)
                         .background(Color.primary, in: Circle())
                         .accessibilityHidden(true)
@@ -63,6 +63,7 @@ struct AccountView: View {
             } footer: {
                 Text("account_local_data_footer".localized)
             }
+            .listRowBackground(iOSDesignSystem.elevatedBackground)
 
             if store.account != nil {
                 Section {
@@ -71,6 +72,7 @@ struct AccountView: View {
                 } footer: {
                     Text("account_manage_apple_id_footer".localized)
                 }
+                .listRowBackground(iOSDesignSystem.elevatedBackground)
 
                 Section {
                     Button(role: .destructive) { confirmingDelete = true } label: {
@@ -87,9 +89,11 @@ struct AccountView: View {
                 } footer: {
                     Text("account_delete_footer".localized)
                 }
+                .listRowBackground(iOSDesignSystem.elevatedBackground)
             }
         }
         .listStyle(.insetGrouped)
+        .groupedListBackdrop()
         .navigationTitle("account_title".localized)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

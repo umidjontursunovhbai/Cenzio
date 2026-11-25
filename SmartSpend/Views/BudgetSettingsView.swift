@@ -75,7 +75,7 @@ struct BudgetSettingsView: View {
 
         return NavigationStack {
             ZStack {
-                iOSDesignSystem.appBackground.ignoresSafeArea()
+                AppBackdrop().ignoresSafeArea()
 
                 ScrollViewReader { proxy in
                     ScrollView {
@@ -190,7 +190,10 @@ struct BudgetSettingsView: View {
                     HeroIcon("x-mark", size: 16)
                         .foregroundStyle(.secondary)
                         .frame(width: 30, height: 30)
-                        .background(Color(.systemGray6), in: Circle())
+                        .background(iOSDesignSystem.insetFill, in: Circle())
+                        .frame(width: iOSDesignSystem.Size.minimumTapTarget,
+                               height: iOSDesignSystem.Size.minimumTapTarget)
+                        .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("close".localized)
@@ -247,7 +250,7 @@ struct BudgetSettingsView: View {
                 if hasBudgets {
                     ZStack {
                         Circle()
-                            .stroke(Color(.systemGray5), lineWidth: 6)
+                            .stroke(iOSDesignSystem.insetFill, lineWidth: 6)
                         Circle()
                             .trim(from: 0, to: min(progress, 1))
                             .stroke(tint, style: StrokeStyle(lineWidth: 6, lineCap: .round))
@@ -315,7 +318,7 @@ struct BudgetSettingsView: View {
                         Text("budget_suggest_title".localized)
                             .font(.subheadline.weight(.semibold))
                     }
-                    .foregroundStyle(.white)
+                    .foregroundStyle(iOSDesignSystem.onAccent)
                     .frame(maxWidth: .infinity, minHeight: 46)
                     .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
                 }
@@ -474,7 +477,7 @@ struct BudgetSettingsView: View {
                         .foregroundStyle(Color.accentColor)
                         .frame(width: iOSDesignSystem.Size.minimumTapTarget,
                                height: iOSDesignSystem.Size.minimumTapTarget)
-                        .liquidGlassSurface(Circle())
+                        .liquidGlassSurface(Circle(), interactive: true)
                         .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
@@ -741,7 +744,7 @@ struct CategoryBudgetSettingRow: View {
                 }
                 .padding(.horizontal, 12)
                 .frame(minHeight: 54)
-                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .background(BudgetRowStyle.wellFill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
 
                 if enteredAmount > 0 {
                     VStack(spacing: 8) {
@@ -901,14 +904,35 @@ struct SpendingGoalRow: View {
     }
 }
 
+/// Category and goal rows repeat down the page, so they stay off glass: an opaque
+/// plate with a hairline rim. Light mode keeps its original fills; dark mode is a
+/// near-black plate on the black backdrop with a white-alpha well inside.
+private enum BudgetRowStyle {
+    static let plateFill = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(iOSDesignSystem.elevatedBackground).resolvedColor(with: traits)
+            : .secondarySystemBackground
+    })
+
+    static let wellFill = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(iOSDesignSystem.insetFill).resolvedColor(with: traits)
+            : .systemGray6
+    })
+
+    static let shadow = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark ? .clear : UIColor.black.withAlphaComponent(0.035)
+    })
+}
+
 private extension View {
     func budgetScrollCard(cornerRadius: CGFloat) -> some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
 
         return self
-            .background(Color(.secondarySystemBackground), in: shape)
+            .background(BudgetRowStyle.plateFill, in: shape)
             .overlay(shape.stroke(iOSDesignSystem.layerStroke, lineWidth: 1))
-            .shadow(color: Color.black.opacity(0.035), radius: 5, x: 0, y: 2)
+            .shadow(color: BudgetRowStyle.shadow, radius: 5, x: 0, y: 2)
     }
 }
 
@@ -932,7 +956,7 @@ struct AddSpendingGoalView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                iOSDesignSystem.appBackground.ignoresSafeArea()
+                AppBackdrop().ignoresSafeArea()
 
                 ScrollView {
                     VStack(spacing: 22) {
@@ -945,7 +969,7 @@ struct AddSpendingGoalView: View {
                                 Text("Add goal")
                                     .fontWeight(.semibold)
                             }
-                            .foregroundStyle(.white)
+                            .foregroundStyle(iOSDesignSystem.onAccent)
                             .frame(maxWidth: .infinity, minHeight: 50)
                             .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                             .opacity(canSave ? 1 : 0.4)
@@ -961,8 +985,6 @@ struct AddSpendingGoalView: View {
             }
             .navigationTitle("New spending goal")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(iOSDesignSystem.appBackground, for: .navigationBar)
-            .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("cancel".localized) {
@@ -984,7 +1006,8 @@ struct AddSpendingGoalView: View {
             HeroIcon("flag", size: 25)
                 .foregroundStyle(Color.accentColor)
                 .frame(width: 52, height: 52)
-                .liquidGlassSurface(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                // Inside the glass card: a well, not nested glass.
+                .background(iOSDesignSystem.insetFill, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
 
             VStack(alignment: .leading, spacing: 4) {
                 Text("Set a clear target")
@@ -1140,7 +1163,8 @@ private struct BudgetEmptyState: View {
                     .foregroundStyle(Color.accentColor)
                     .padding(.horizontal, 18)
                     .frame(minHeight: iOSDesignSystem.Size.minimumTapTarget)
-                    .liquidGlassSurface(Capsule())
+                    .background(iOSDesignSystem.insetFill, in: Capsule())
+                    .contentShape(Capsule())
                     .buttonStyle(.plain)
             }
         }

@@ -48,7 +48,7 @@ struct AnalyticsView: View {
                 .padding(.top, 8)
                 .padding(.bottom, 24)
             }
-            .background(iOSDesignSystem.appBackground)
+            .appBackdrop()
             .navigationBarHidden(true)
             .sheet(isPresented: $showingAddExpense) {
                 AddExpenseView()
@@ -179,7 +179,7 @@ struct AnalyticsView: View {
                 }
                 .padding(.vertical, 12)
                 .background(
-                    Color(.secondarySystemBackground).opacity(0.72),
+                    AnalyticsTone.well,
                     in: RoundedRectangle(cornerRadius: 14, style: .continuous)
                 )
             }
@@ -302,7 +302,7 @@ struct AnalyticsView: View {
                             y: .value("Selected amount", selection.amount)
                         )
                         .symbolSize(92)
-                        .foregroundStyle(Color.white)
+                        .foregroundStyle(iOSDesignSystem.onAccent)
 
                         PointMark(
                             x: .value("Selected date", selection.date),
@@ -317,7 +317,7 @@ struct AnalyticsView: View {
                 .chartXAxis {
                     AxisMarks(values: .automatic(desiredCount: selectedTimeframe == .week ? 7 : 6)) { value in
                         AxisGridLine().foregroundStyle(Color.clear)
-                        AxisTick().foregroundStyle(Color(.systemGray4))
+                        AxisTick().foregroundStyle(AnalyticsTone.tick)
                         AxisValueLabel {
                             if let date = value.as(Date.self) {
                                 Text(axisDateLabel(date))
@@ -329,7 +329,7 @@ struct AnalyticsView: View {
                 }
                 .chartYAxis {
                     AxisMarks(position: .leading, values: .automatic(desiredCount: 4)) { value in
-                        AxisGridLine().foregroundStyle(Color(.systemGray5))
+                        AxisGridLine().foregroundStyle(AnalyticsTone.grid)
                         AxisTick().foregroundStyle(Color.clear)
                         AxisValueLabel {
                             if let amount = value.as(Double.self) {
@@ -413,7 +413,7 @@ struct AnalyticsView: View {
 
                 GeometryReader { geometry in
                     Capsule()
-                        .fill(Color(.systemGray5))
+                        .fill(AnalyticsTone.track)
                         .overlay(alignment: .leading) {
                             Capsule()
                                 .fill(category.category.color)
@@ -490,7 +490,7 @@ struct AnalyticsView: View {
                 }
                 .chartYAxis {
                     AxisMarks(position: .leading, values: .automatic(desiredCount: 3)) { value in
-                        AxisGridLine().foregroundStyle(Color(.systemGray5))
+                        AxisGridLine().foregroundStyle(AnalyticsTone.grid)
                         AxisTick().foregroundStyle(Color.clear)
                         AxisValueLabel {
                             if let amount = value.as(Double.self) {
@@ -938,17 +938,52 @@ private struct ChartReadoutSlot: View {
 }
 
 private extension View {
+    /// Native Liquid Glass in dark mode; the original white plate in light mode.
     func analyticsCardSurface() -> some View {
-        background(
-            iOSDesignSystem.elevatedBackground,
-            in: RoundedRectangle(cornerRadius: 20, style: .continuous)
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .stroke(iOSDesignSystem.layerStroke, lineWidth: 1)
-        }
-        .shadow(color: Color.black.opacity(0.035), radius: 12, x: 0, y: 6)
+        modifier(AnalyticsCardSurface())
     }
+}
+
+private struct AnalyticsCardSurface: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+
+    func body(content: Content) -> some View {
+        if colorScheme == .dark {
+            content.liquidGlassCard(cornerRadius: 20)
+        } else {
+            content
+                .background(
+                    iOSDesignSystem.elevatedBackground,
+                    in: RoundedRectangle(cornerRadius: 20, style: .continuous)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .stroke(iOSDesignSystem.layerStroke, lineWidth: 1)
+                }
+                .shadow(color: Color.black.opacity(0.035), radius: 12, x: 0, y: 6)
+        }
+    }
+}
+
+/// Dark-mode chart and well tones. Light values are the original system colors.
+private enum AnalyticsTone {
+    /// Horizontal gridline: a ~10% white hairline on black.
+    static let grid = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark ? UIColor.white.withAlphaComponent(0.10) : .systemGray5
+    })
+    static let tick = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark ? UIColor.white.withAlphaComponent(0.22) : .systemGray4
+    })
+    /// Empty part of a share bar.
+    static let track = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark ? UIColor.white.withAlphaComponent(0.10) : .systemGray5
+    })
+    /// Metric strip inside the summary card.
+    static let well = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor.white.withAlphaComponent(0.06)
+            : UIColor.secondarySystemBackground.withAlphaComponent(0.72)
+    })
 }
 
 private extension AnalyticsView {

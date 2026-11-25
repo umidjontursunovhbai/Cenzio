@@ -29,6 +29,7 @@ struct GamificationView: View {
                 }
                 .padding()
             }
+            .appBackdrop()
             .navigationTitle("achievements_title".localized)
             .navigationBarTitleDisplayMode(.large)
             .onAppear {
@@ -88,7 +89,7 @@ struct UserLevelCard: View {
             }
         }
         .padding()
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .liquidGlassCard(cornerRadius: 16)
     }
 }
 
@@ -148,7 +149,7 @@ struct StreakCard: View {
             }
         }
         .padding()
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .liquidGlassCard(cornerRadius: 16)
     }
 }
 
@@ -310,10 +311,15 @@ struct AchievementCard: View {
         }
         .padding()
         .frame(minHeight: 120)
-        .background(achievement.isUnlocked ? .regularMaterial : .thickMaterial, in: RoundedRectangle(cornerRadius: 12))
+        // Grid cells stay off glass (many of them): an opaque plate when unlocked,
+        // a quieter well when locked.
+        .background(
+            achievement.isUnlocked ? iOSDesignSystem.elevatedBackground : iOSDesignSystem.insetFill,
+            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+        )
         .overlay(
             RoundedRectangle(cornerRadius: 12)
-                .stroke(achievement.isUnlocked ? achievement.category.color.opacity(0.3) : Color.gray.opacity(0.2), lineWidth: 1)
+                .stroke(achievement.isUnlocked ? achievement.category.color.opacity(0.3) : iOSDesignSystem.layerStroke, lineWidth: 1)
         )
     }
 }

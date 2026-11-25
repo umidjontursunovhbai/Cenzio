@@ -23,6 +23,7 @@ struct MCPIntegrationView: View {
                 } footer: {
                     Text("This does not connect ChatGPT or enable live sync. Nothing is uploaded automatically.")
                 }
+                .listRowBackground(iOSDesignSystem.elevatedBackground)
 
                 Section {
                     Button("Export snapshot", systemImage: "square.and.arrow.up") {
@@ -36,6 +37,7 @@ struct MCPIntegrationView: View {
                 } footer: {
                     Text("The JSON includes expense titles, amounts, dates, categories and archived expenses. Share it only with a server or AI you trust. It does not include income, budgets or goals.")
                 }
+                .listRowBackground(iOSDesignSystem.elevatedBackground)
 
                 Section {
                     Button("Review AI changes", systemImage: "square.and.arrow.down") {
@@ -44,6 +46,7 @@ struct MCPIntegrationView: View {
                 } footer: {
                     Text("Choose the operations JSON from your MCP server. Changed or duplicate records are checked before anything is saved.")
                 }
+                .listRowBackground(iOSDesignSystem.elevatedBackground)
 
                 if let plan {
                     Section("Changes to apply") {
@@ -65,8 +68,10 @@ struct MCPIntegrationView: View {
                             }
                         }
                     }
+                    .listRowBackground(iOSDesignSystem.elevatedBackground)
                 }
             }
+            .groupedListBackdrop()
             .navigationTitle("AI tools (MCP)")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

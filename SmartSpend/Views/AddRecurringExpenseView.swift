@@ -75,6 +75,7 @@ struct RecurringExpenseFormView: View {
                 } footer: {
                     Text("recurring_active_footer".localized)
                 }
+                .listRowBackground(iOSDesignSystem.elevatedBackground)
 
                 if let stored {
                     statusSection(for: stored)
@@ -91,6 +92,7 @@ struct RecurringExpenseFormView: View {
                         Text(note)
                     }
                 }
+                .listRowBackground(iOSDesignSystem.elevatedBackground)
 
                 if isEditing {
                     Section {
@@ -100,9 +102,12 @@ struct RecurringExpenseFormView: View {
                         .frame(maxWidth: .infinity)
                         .accessibilityIdentifier("recurringDeleteButton")
                     }
+                    .listRowBackground(iOSDesignSystem.elevatedBackground)
                 }
             }
             .scrollDismissesKeyboard(.interactively)
+            .scrollContentBackground(.hidden)
+            .background { RecurringFormBackdrop().ignoresSafeArea() }
             .navigationTitle((isEditing ? "edit_recurring_expense" : "add_recurring_expense").localized)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -176,6 +181,7 @@ struct RecurringExpenseFormView: View {
                 showingCategoryManagement = true
             }
         }
+        .listRowBackground(iOSDesignSystem.elevatedBackground)
     }
 
     private var scheduleSection: some View {
@@ -204,6 +210,7 @@ struct RecurringExpenseFormView: View {
                 Text("recurring_schedule_footer".localized)
             }
         }
+        .listRowBackground(iOSDesignSystem.elevatedBackground)
     }
 
     private func statusSection(for stored: RecurringExpense) -> some View {
@@ -223,6 +230,7 @@ struct RecurringExpenseFormView: View {
                 }
             }
         }
+        .listRowBackground(iOSDesignSystem.elevatedBackground)
     }
 
     /// Past occurrences that saving will record immediately (a new bill starting last month).
@@ -288,6 +296,22 @@ struct RecurringExpenseFormView: View {
         guard let existing else { return }
         dataManager.deleteRecurringExpense(existing)
         dismiss()
+    }
+}
+
+// MARK: - Form Backdrop
+
+/// Grouped-form background: unchanged in light mode, true black with the app's
+/// top glow in dark mode so the near-black rows read as layers above it.
+private struct RecurringFormBackdrop: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        if colorScheme == .dark {
+            AppBackdrop()
+        } else {
+            Color(.systemGroupedBackground)
+        }
     }
 }
 

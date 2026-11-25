@@ -24,6 +24,7 @@ struct ClearDataView: View {
                     ))
                     .fontWeight(.medium)
                 }
+                .listRowBackground(iOSDesignSystem.elevatedBackground)
 
                 Section {
                     ForEach(Part.allCases) { part in
@@ -49,6 +50,7 @@ struct ClearDataView: View {
                 } footer: {
                     Text("icloud_sync_clear_note".localized)
                 }
+                .listRowBackground(iOSDesignSystem.elevatedBackground)
 
                 if let authError {
                     Section {
@@ -56,6 +58,7 @@ struct ClearDataView: View {
                             .font(.callout)
                             .foregroundStyle(.orange)
                     }
+                    .listRowBackground(iOSDesignSystem.elevatedBackground)
                 }
 
                 Section {
@@ -71,7 +74,9 @@ struct ClearDataView: View {
                     }
                     .disabled(selection.isEmpty || isAuthenticating)
                 }
+                .listRowBackground(iOSDesignSystem.elevatedBackground)
             }
+            .groupedListBackdrop()
             .navigationTitle("clear_data_title".localized)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

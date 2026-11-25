@@ -21,13 +21,16 @@ struct LanguageSelectionView: View {
                         )
                     }
                 }
+                .listRowBackground(iOSDesignSystem.elevatedBackground)
                 
                 Section {
                     Text("app_interface_language".localized)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+                .listRowBackground(iOSDesignSystem.elevatedBackground)
             }
+            .groupedListBackdrop()
             .navigationTitle("language".localized)
             .navigationBarTitleDisplayMode(.large)
             .toolbar {

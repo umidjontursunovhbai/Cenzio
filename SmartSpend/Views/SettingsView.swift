@@ -48,7 +48,7 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             settingsContent
-                .background(iOSDesignSystem.appBackground.ignoresSafeArea())
+                .appBackdrop()
                 .navigationTitle("")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar(.hidden, for: .navigationBar)
@@ -243,11 +243,11 @@ struct SettingsView: View {
             if let initial = name?.trimmingCharacters(in: .whitespaces).first {
                 Text(String(initial).uppercased())
                     .font(.system(size: 22, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(iOSDesignSystem.onAccent)
             } else {
                 Image(systemName: "person.fill")
                     .font(.system(size: 22, weight: .medium))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(iOSDesignSystem.onAccent)
             }
         }
         .frame(width: 52, height: 52)
@@ -465,4 +465,41 @@ private struct SettingsPressStyle: ButtonStyle {
         configuration.label
             .background(configuration.isPressed ? Color(.systemFill).opacity(0.6) : Color.clear)
     }
+}
+
+// MARK: - Grouped list backdrop
+
+extension View {
+    /// For `.insetGrouped` List/Form screens. Dark mode hides the gray grouped
+    /// background so the black backdrop shows; light mode keeps the system look.
+    /// Pair rows with `.listRowBackground(iOSDesignSystem.elevatedBackground)`.
+    func groupedListBackdrop() -> some View {
+        modifier(GroupedListBackdrop())
+    }
+}
+
+private struct GroupedListBackdrop: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+
+    func body(content: Content) -> some View {
+        content
+            .scrollContentBackground(colorScheme == .dark ? .hidden : .automatic)
+            .appBackdrop()
+    }
+}
+
+// MARK: - Settings-area fills
+
+extension iOSDesignSystem {
+    /// Quiet well/chip fill: light keeps systemGray6, dark is a faint white on black.
+    static let settingsWellFill = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark ? UIColor.white.withAlphaComponent(0.06) : UIColor.systemGray6
+    })
+
+    /// Nested card plate: light keeps the tertiary grouped gray, dark is the near-black plate.
+    static let settingsNestedPlate = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.075, green: 0.075, blue: 0.08, alpha: 1)
+            : UIColor.tertiarySystemGroupedBackground
+    })
 }

@@ -627,6 +627,21 @@ private func colorFromName(_ name: String) -> Color {
     }
 }
 
+// MARK: - Widget Background
+
+/// Pure black in dark mode to match the app; light keeps the system tertiary fill.
+private struct WidgetContainerBackground: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        if colorScheme == .dark {
+            Color.black
+        } else {
+            Rectangle().fill(.fill.tertiary)
+        }
+    }
+}
+
 // MARK: - Widget Declaration
 
 struct SmartSpendWidget: Widget {
@@ -635,7 +650,7 @@ struct SmartSpendWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: SmartSpendProvider()) { entry in
             SmartSpendWidgetView(entry: entry)
-                .containerBackground(.fill.tertiary, for: .widget)
+                .containerBackground(for: .widget) { WidgetContainerBackground() }
         }
         .configurationDisplayName("Cenzio")
         .description("Track your spending at a glance.")

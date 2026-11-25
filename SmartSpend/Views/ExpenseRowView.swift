@@ -68,7 +68,7 @@ struct ExpenseRowView: View {
             if isSelected {
                 Circle().fill(Color.accentColor)
                 HeroIcon("check", size: 12)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(iOSDesignSystem.onAccent)
             }
         }
         .frame(width: 24, height: 24)

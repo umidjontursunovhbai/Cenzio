@@ -40,6 +40,7 @@ struct DataExportView: View {
                         }
                     }
                 }
+                .listRowBackground(iOSDesignSystem.elevatedBackground)
                 
                 Section("export_format_section".localized) {
                     ForEach(DataExporter.ExportFormat.allCases, id: \.self) { format in
@@ -66,6 +67,7 @@ struct DataExportView: View {
                         }
                     }
                 }
+                .listRowBackground(iOSDesignSystem.elevatedBackground)
                 
                 Section("date_range_section".localized) {
                     Toggle("use_date_range".localized, isOn: $useDateRange)
@@ -75,6 +77,7 @@ struct DataExportView: View {
                         DatePicker("end_date".localized, selection: $endDate, in: startDate..., displayedComponents: .date)
                     }
                 }
+                .listRowBackground(iOSDesignSystem.elevatedBackground)
                 
                 Section("preview_section".localized) {
                     VStack(alignment: .leading, spacing: 8) {
@@ -113,7 +116,9 @@ struct DataExportView: View {
                         }
                     }
                 }
+                .listRowBackground(iOSDesignSystem.elevatedBackground)
             }
+            .groupedListBackdrop()
             .navigationTitle("export_data_title".localized)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

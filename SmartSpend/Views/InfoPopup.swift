@@ -254,7 +254,8 @@ private struct InfoPopupContainer<PopupContent: View>: View {
             Button(action: close) {
                 Text("got_it".localized)
                     .font(.body.weight(.semibold))
-                    .foregroundStyle(.white)
+                    // The accent flips to near-white in dark mode, so its label flips too.
+                    .foregroundStyle(tint == Color.accentColor ? iOSDesignSystem.onAccent : Color.white)
                     .frame(maxWidth: .infinity, minHeight: 50)
                     .background(tint, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                     .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -264,13 +265,7 @@ private struct InfoPopupContainer<PopupContent: View>: View {
             .accessibilityIdentifier("\(accessibilityPrefix).gotIt")
         }
         .frame(maxWidth: 420)
-        .background(Color(.secondarySystemGroupedBackground),
-                    in: RoundedRectangle(cornerRadius: 28, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .stroke(Color.primary.opacity(colorScheme == .dark ? 0.12 : 0.06), lineWidth: 1)
-        )
-        .shadow(color: .black.opacity(colorScheme == .dark ? 0.5 : 0.2), radius: 32, x: 0, y: 16)
+        .modifier(InfoPopupCardSurface(isDark: colorScheme == .dark))
         .scaleEffect(isVisible || reduceMotion ? 1 : 0.85)
         .offset(y: isVisible || reduceMotion ? 0 : 28)
         .opacity(isVisible ? 1 : 0)
@@ -325,5 +320,23 @@ private struct InfoPopupPressStyle: ButtonStyle {
             .scaleEffect(configuration.isPressed ? 0.97 : 1)
             .opacity(configuration.isPressed ? 0.88 : 1)
             .animation(.spring(response: 0.25, dampingFraction: 0.7), value: configuration.isPressed)
+    }
+}
+
+/// Dark mode: a Liquid Glass sheet floating over the dimmed screen.
+/// Light mode: the original opaque card with a hairline and soft shadow.
+private struct InfoPopupCardSurface: ViewModifier {
+    let isDark: Bool
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 28, style: .continuous)
+        if isDark {
+            content.liquidGlassCard(cornerRadius: 28)
+        } else {
+            content
+                .background(Color(.secondarySystemGroupedBackground), in: shape)
+                .overlay(shape.stroke(Color.primary.opacity(0.06), lineWidth: 1))
+                .shadow(color: .black.opacity(0.2), radius: 32, x: 0, y: 16)
+        }
     }
 }

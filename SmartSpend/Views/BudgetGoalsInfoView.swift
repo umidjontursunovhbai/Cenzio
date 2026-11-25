@@ -49,13 +49,14 @@ struct BudgetProgressBar: View {
             let clamped = min(max(progress, 0), 1)
             ZStack(alignment: .leading) {
                 Capsule()
-                    .fill(Color(.systemGray5))
+                    .fill(iOSDesignSystem.insetFill)
                 Capsule()
                     .fill(tint)
                     .frame(width: clamped > 0 ? max(proxy.size.width * clamped, height) : 0)
                 if showsThreshold {
+                    // Cut-out notch: white on the light track, black on the dark one.
                     Capsule()
-                        .fill(Color.white)
+                        .fill(iOSDesignSystem.appBackground)
                         .frame(width: 2, height: height + 2)
                         .offset(x: proxy.size.width * BudgetGoalStatus.warningThreshold - 1)
                 }
@@ -102,7 +103,7 @@ struct BudgetGoalsInfoContent: View {
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 4)
-                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .background(iOSDesignSystem.insetFill, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
 
             if let example {

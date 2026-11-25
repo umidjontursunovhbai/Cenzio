@@ -114,6 +114,7 @@ struct AddExpenseView: View {
     var body: some View {
         NavigationStack {
             Form {
+                Group {
                 Section {
                     // Title Field with Auto-completion
                     VStack(alignment: .leading, spacing: 8) {
@@ -214,7 +215,10 @@ struct AddExpenseView: View {
                 } header: {
                     Text("expense_details".localized)
                 }
+                }
+                .expenseDarkRowBackground()
             }
+            .expenseDarkFormBackdrop()
             .scrollDismissesKeyboard(.interactively)
             .scrollIndicators(.hidden)
             .navigationTitle("add_expense".localized)
@@ -392,7 +396,7 @@ struct SmartSuggestionChips: View {
                 .font(.caption.weight(.medium))
                 .padding(.horizontal, iOSDesignSystem.Spacing.medium)
                 .frame(minHeight: iOSDesignSystem.Size.minimumTapTarget)
-                .liquidGlassSurface(Capsule())
+                .liquidGlassSurface(Capsule(), interactive: true)
                 .foregroundStyle(.primary)
         }
         .liquidGlassButtonStyle()

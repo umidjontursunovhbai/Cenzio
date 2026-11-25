@@ -12,6 +12,7 @@ struct CategoryManagementView: View {
                 if dataManager.userCategories.isEmpty {
                     Text("No categories yet")
                         .foregroundStyle(.secondary)
+                        .listRowBackground(iOSDesignSystem.elevatedBackground)
                 } else {
                     ForEach(dataManager.userCategories) { category in
                         HStack(spacing: 12) {
@@ -45,9 +46,11 @@ struct CategoryManagementView: View {
                             .tint(.orange)
                         }
                     }
+                    .listRowBackground(iOSDesignSystem.elevatedBackground)
                 }
             }
             .listStyle(.insetGrouped)
+            .groupedListBackdrop()
             .navigationTitle("categories".localized)
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
@@ -123,19 +126,23 @@ struct CategoryEditorView: View {
                     TextField("Category name", text: $name)
                         .textInputAutocapitalization(.words)
                 }
+                .listRowBackground(iOSDesignSystem.elevatedBackground)
 
                 // Icon
                 Section("Icon") {
                     iconGrid
                         .listRowInsets(EdgeInsets(top: iOSDesignSystem.Spacing.medium, leading: iOSDesignSystem.Spacing.screenMargin, bottom: iOSDesignSystem.Spacing.medium, trailing: iOSDesignSystem.Spacing.screenMargin))
                 }
+                .listRowBackground(iOSDesignSystem.elevatedBackground)
 
                 // Color
                 Section("Color") {
                     colorGrid
                         .listRowInsets(EdgeInsets(top: iOSDesignSystem.Spacing.medium, leading: iOSDesignSystem.Spacing.screenMargin, bottom: iOSDesignSystem.Spacing.medium, trailing: iOSDesignSystem.Spacing.screenMargin))
                 }
+                .listRowBackground(iOSDesignSystem.elevatedBackground)
             }
+            .groupedListBackdrop()
             .navigationTitle(isEditing ? "Edit Category" : "New Category")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

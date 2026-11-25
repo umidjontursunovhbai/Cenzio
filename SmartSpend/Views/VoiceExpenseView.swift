@@ -29,6 +29,7 @@ struct VoiceExpenseView: View {
     var body: some View {
         NavigationStack {
             Form {
+                Group {
                 Section {
 
                     VStack(spacing: 10) {
@@ -40,7 +41,7 @@ struct VoiceExpenseView: View {
                         } label: {
                             Image(systemName: speech.isRecording ? "stop.fill" : "mic.fill")
                                 .font(.system(size: 26, weight: .medium))
-                                .foregroundStyle(.white)
+                                .foregroundStyle(speech.isRecording ? Color.white : iOSDesignSystem.onAccent)
                                 .frame(width: 68, height: 68)
                                 .background(speech.isRecording ? Color.red : Color.accentColor, in: Circle())
                         }
@@ -129,7 +130,10 @@ struct VoiceExpenseView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
+                }
+                .expenseDarkRowBackground()
             }
+            .expenseDarkFormBackdrop()
             .navigationTitle(voiceText("Add by voice", "Добавить голосом"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

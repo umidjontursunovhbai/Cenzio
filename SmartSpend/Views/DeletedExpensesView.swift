@@ -71,9 +71,11 @@ struct DeletedExpensesView: View {
                     } footer: {
                         Text("exp_deleted_footer".localized)
                     }
+                    .listRowBackground(iOSDesignSystem.elevatedBackground)
                 }
             }
             .listStyle(.insetGrouped)
+            .groupedListBackdrop()
             .searchable(
                 text: $searchText,
                 placement: .navigationBarDrawer(displayMode: .always),

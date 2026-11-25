@@ -77,7 +77,7 @@ struct DashboardView: View {
                 // Keeps the last card scrollable above the entry bar.
                 .padding(.bottom, 72)
             }
-            .background(iOSDesignSystem.appBackground)
+            .appBackdrop()
             .expenseEntryBar(ExpenseEntryBar(accessibilityPrefix: "dashboard", isRecording: voice.isRecording, isProcessing: voice.isProcessing, onAdd: {
                 showingAddExpense = true
             }, onVoice: {
@@ -234,7 +234,7 @@ struct DashboardView: View {
             }
 
             Rectangle()
-                .fill(Color(.separator).opacity(0.5))
+                .fill(DashTone.hairline)
                 .frame(height: 1)
 
             HStack(alignment: .top, spacing: 10) {
@@ -276,7 +276,7 @@ struct DashboardView: View {
                     .foregroundStyle(Color.accentColor)
                     .padding(12)
                     .frame(minHeight: 44)
-                    .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: iOSDesignSystem.Radius.medium, style: .continuous))
+                    .background(DashTone.well, in: RoundedRectangle(cornerRadius: iOSDesignSystem.Radius.medium, style: .continuous))
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -291,7 +291,7 @@ struct DashboardView: View {
     }
 
     private var metricDivider: some View {
-        Rectangle().fill(Color(.separator).opacity(0.6)).frame(width: 1, height: 34)
+        Rectangle().fill(DashTone.metricDivider).frame(width: 1, height: 34)
     }
 
     private func heroMetric(title: String, value: String, color: Color = .primary) -> some View {
@@ -337,7 +337,7 @@ struct DashboardView: View {
                     }
                     if free > 0 {
                         Capsule()
-                            .fill(Color(.systemGray5))
+                            .fill(DashTone.trackStrong)
                     }
                 }
             }
@@ -350,7 +350,7 @@ struct DashboardView: View {
                 if snapshot.upcomingRecurring > 0 {
                     legendDot("dash_legend_bills".localized, value: compactMoney(snapshot.upcomingRecurring), color: Color.orange.opacity(0.75))
                 }
-                legendDot("dash_legend_free".localized, value: compactMoney(max(snapshot.availableAfterBills, 0)), color: Color(.systemGray4))
+                legendDot("dash_legend_free".localized, value: compactMoney(max(snapshot.availableAfterBills, 0)), color: DashTone.mutedSeries)
                 Spacer(minLength: 0)
             }
         }
@@ -427,7 +427,7 @@ struct DashboardView: View {
                         y: .value("Amount", point.amount),
                         series: .value("Month", "previous")
                     )
-                    .foregroundStyle(Color(.systemGray3))
+                    .foregroundStyle(DashTone.mutedLine)
                     .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4, 4]))
                     .interpolationMethod(.monotone)
                 }
@@ -450,7 +450,7 @@ struct DashboardView: View {
                 }
                 if let selectedPaceDay {
                     RuleMark(x: .value("Day", selectedPaceDay))
-                        .foregroundStyle(Color(.systemGray3))
+                        .foregroundStyle(DashTone.mutedLine)
                         .lineStyle(StrokeStyle(lineWidth: 1))
                 } else if let today = overview.monthCumulative.last {
                     PointMark(x: .value("Day", today.day), y: .value("Amount", today.amount))
@@ -483,7 +483,7 @@ struct DashboardView: View {
             HStack(spacing: 14) {
                 chartLegendItem("dashboard_this_month".localized, color: Color.accentColor, dashed: false)
                 if !overview.previousMonthCumulative.isEmpty {
-                    chartLegendItem("dashboard_last_month".localized, color: Color(.systemGray3), dashed: true)
+                    chartLegendItem("dashboard_last_month".localized, color: DashTone.mutedLine, dashed: true)
                 }
                 if income > 0 {
                     chartLegendItem("dash_even_pace".localized, color: Color(.systemGreen).opacity(0.7), dashed: true)
@@ -566,7 +566,7 @@ struct DashboardView: View {
 
             VStack(alignment: .leading, spacing: 10) {
                 weekBar(title: "dash_this_week".localized, amount: thisWeek, scale: scale, color: Color.accentColor)
-                weekBar(title: "dash_last_week_same_days".localized, amount: lastWeek, scale: scale, color: Color(.systemGray3))
+                weekBar(title: "dash_last_week_same_days".localized, amount: lastWeek, scale: scale, color: DashTone.mutedLine)
             }
         }
         .dashboardCard()
@@ -606,7 +606,7 @@ struct DashboardView: View {
             }
             GeometryReader { proxy in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(Color(.systemGray6))
+                    Capsule().fill(DashTone.track)
                     Capsule()
                         .fill(color)
                         .frame(width: amount > 0 ? max(8, proxy.size.width * amount / scale) : 0)
@@ -638,7 +638,7 @@ struct DashboardView: View {
                 }
                 if otherAmount > 0 {
                     BarMark(x: .value("Amount", otherAmount), y: .value("Month", "total"))
-                        .foregroundStyle(Color(.systemGray4))
+                        .foregroundStyle(DashTone.mutedSeries)
                 }
             }
             .chartXAxis(.hidden)
@@ -728,7 +728,7 @@ struct DashboardView: View {
 
                     GeometryReader { proxy in
                         ZStack(alignment: .leading) {
-                            Capsule().fill(Color(.systemGray6))
+                            Capsule().fill(DashTone.track)
                             Capsule()
                                 .fill(barColor)
                                 .frame(width: max(proxy.size.width * min(progress, 1), 4))
@@ -869,7 +869,7 @@ struct DashboardView: View {
                         width: .ratio(0.6)
                     )
                     .cornerRadius(6)
-                    .foregroundStyle(item.weekday == peak?.weekday ? Color.accentColor : Color(.systemGray4))
+                    .foregroundStyle(item.weekday == peak?.weekday ? Color.accentColor : DashTone.mutedSeries)
                 }
             }
             .chartXScale(domain: items.map { symbols[$0.weekday - 1] })
@@ -934,7 +934,7 @@ struct DashboardView: View {
                         width: .ratio(0.55)
                     )
                     .cornerRadius(6)
-                    .foregroundStyle(item.month == currentMonth ? Color.accentColor : Color(.systemGray4))
+                    .foregroundStyle(item.month == currentMonth ? Color.accentColor : DashTone.mutedSeries)
                     .annotation(position: .top, spacing: 4) {
                         if item.amount > 0 {
                             Text(compactMoney(item.amount))
@@ -945,7 +945,7 @@ struct DashboardView: View {
                 }
                 if average > 0 {
                     RuleMark(y: .value("Average", average))
-                        .foregroundStyle(Color(.systemGray2))
+                        .foregroundStyle(DashTone.ruleLine)
                         .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
                 }
             }
@@ -1009,7 +1009,7 @@ struct DashboardView: View {
                 HeroIcon("chart-bar", size: 30)
                     .foregroundStyle(.secondary)
                     .frame(width: 60, height: 60)
-                    .background(Color(.tertiarySystemFill), in: Circle())
+                    .background(DashTone.well, in: Circle())
                 VStack(spacing: 4) {
                     Text((overview.recentExpenses.isEmpty ? "no_expenses_yet" : "dash_no_expenses_month").localized)
                         .font(.headline)
@@ -1024,7 +1024,7 @@ struct DashboardView: View {
                     Text("add_expense".localized)
                 }
                 .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(iOSDesignSystem.onAccent)
                 .padding(.horizontal, 18)
                 .frame(minHeight: 44)
                 .background(Color.accentColor, in: Capsule())
@@ -1047,7 +1047,7 @@ struct DashboardView: View {
                     .font(.subheadline.weight(.semibold))
                     .padding(.horizontal, 12)
                     .frame(minHeight: 36)
-                    .liquidGlassSurface(Capsule())
+                    .modifier(InCardCapsule())
                     .frame(minHeight: iOSDesignSystem.Size.minimumTapTarget)
                     .contentShape(Rectangle())
                     .liquidGlassButtonStyle()
@@ -1074,6 +1074,97 @@ private extension View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(iOSDesignSystem.Spacing.screenMargin)
             .liquidGlassCard()
+    }
+}
+
+/// Dark-mode tones for this file. Every light value is the original system
+/// color, so light mode is unchanged; dark values are white at low alpha so
+/// tracks, muted series and wells read on black glass instead of going gray.
+private enum DashTone {
+    private static func dynamic(_ light: @escaping @Sendable () -> UIColor, dark alpha: CGFloat) -> Color {
+        Color(UIColor { traits in
+            traits.userInterfaceStyle == .dark ? UIColor.white.withAlphaComponent(alpha) : light()
+        })
+    }
+
+    /// `Color(.separator).opacity(x)`: scales the separator's own alpha.
+    private static func separatorScaled(_ traits: UITraitCollection, _ factor: CGFloat) -> UIColor {
+        let base = UIColor.separator.resolvedColor(with: traits)
+        return base.withAlphaComponent(base.cgColor.alpha * factor)
+    }
+
+    /// Empty part of a progress track.
+    static let track = dynamic({ .systemGray6 }, dark: 0.08)
+    /// Track that must stay visible next to colored segments.
+    static let trackStrong = dynamic({ .systemGray5 }, dark: 0.12)
+    /// Non-highlighted bars and "other" segments.
+    static let mutedSeries = dynamic({ .systemGray4 }, dark: 0.26)
+    /// Comparison lines (last month, last week, selection rule).
+    static let mutedLine = dynamic({ .systemGray3 }, dark: 0.40)
+    /// Average rule line.
+    static let ruleLine = dynamic({ .systemGray2 }, dark: 0.50)
+    /// Hairline dividers inside a card.
+    static let hairline = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor.white.withAlphaComponent(0.10)
+            : separatorScaled(traits, 0.5)
+    })
+    static let metricDivider = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor.white.withAlphaComponent(0.12)
+            : separatorScaled(traits, 0.6)
+    })
+    /// Quiet well inside a glass card (hint rows, empty-state icon).
+    static let well = dynamic({ .tertiarySystemFill }, dark: 0.06)
+    /// Unselected chip / small control fill.
+    static let chip = dynamic({ .systemGray6 }, dark: 0.07)
+    static let chipStroke = dynamic({ .systemGray4 }, dark: 0.10)
+    /// Grouped screen background: unchanged in light, pure black in dark.
+    static let groupedBackground = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark ? .black : .systemGroupedBackground
+    })
+}
+
+/// Card that is native Liquid Glass in dark mode and keeps its original fill in light mode.
+private struct DarkGlassCard<Light: ShapeStyle>: ViewModifier {
+    let radius: CGFloat
+    var style: RoundedCornerStyle = .continuous
+    let light: Light
+    @Environment(\.colorScheme) private var colorScheme
+
+    func body(content: Content) -> some View {
+        if colorScheme == .dark {
+            content.liquidGlassCard(cornerRadius: radius)
+        } else {
+            content.background(light, in: RoundedRectangle(cornerRadius: radius, style: style))
+        }
+    }
+}
+
+/// Capsule for a control that sits inside a glass card. Glass is never nested
+/// in dark mode, so it becomes a quiet inset fill there; light mode keeps its glass capsule.
+private struct InCardCapsule: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+
+    func body(content: Content) -> some View {
+        if colorScheme == .dark {
+            content.background(iOSDesignSystem.insetFill, in: Capsule())
+        } else {
+            content.liquidGlassSurface(Capsule())
+        }
+    }
+}
+
+/// Black backdrop with top glow in dark mode; the original grouped gray in light mode.
+private struct GroupedBackdrop: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+
+    func body(content: Content) -> some View {
+        if colorScheme == .dark {
+            content.appBackdrop()
+        } else {
+            content.background(Color(.systemGroupedBackground))
+        }
     }
 }
 
@@ -1355,7 +1446,7 @@ struct BudgetDetailsView: View {
                 .padding(.horizontal)
                 .padding(.vertical, 16)
             }
-            .background(Color(.systemGroupedBackground))
+            .modifier(GroupedBackdrop())
             .navigationTitle("budget_details".localized)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -1407,10 +1498,10 @@ struct BudgetDetailsView: View {
                 }
                 .padding(.vertical, 12)
                 .padding(.horizontal, 16)
-                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12))
+                .background(DashTone.chip, in: RoundedRectangle(cornerRadius: 12))
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color(.systemGray4), lineWidth: 1)
+                        .stroke(DashTone.chipStroke, lineWidth: 1)
                 )
             }
             
@@ -1426,12 +1517,12 @@ struct BudgetDetailsView: View {
                         HStack(spacing: 8) {
                             HeroIcon(systemName: period.icon)
                                 .font(.title3)
-                                .foregroundStyle(dataManager.selectedTimePeriod == period ? .white : .primary)
+                                .foregroundStyle(dataManager.selectedTimePeriod == period ? iOSDesignSystem.onAccent : .primary)
                             
                             Text(period.localizedName)
                                 .font(.subheadline)
                                 .fontWeight(.medium)
-                                .foregroundStyle(dataManager.selectedTimePeriod == period ? .white : .primary)
+                                .foregroundStyle(dataManager.selectedTimePeriod == period ? iOSDesignSystem.onAccent : .primary)
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
@@ -1439,13 +1530,13 @@ struct BudgetDetailsView: View {
                         .background(
                             dataManager.selectedTimePeriod == period ? 
                             Color.accentColor : 
-                            Color(.systemGray6),
+                            DashTone.chip,
                             in: RoundedRectangle(cornerRadius: 12)
                         )
                         .overlay(
                             RoundedRectangle(cornerRadius: 12)
                                 .stroke(
-                                    dataManager.selectedTimePeriod == period ? Color.clear : Color(.systemGray4),
+                                    dataManager.selectedTimePeriod == period ? Color.clear : DashTone.chipStroke,
                                     lineWidth: 1
                                 )
                         )
@@ -1457,7 +1548,7 @@ struct BudgetDetailsView: View {
         }
         .padding(.vertical, 16)
         .padding(.horizontal, 16)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .modifier(DarkGlassCard(radius: 16, style: .circular, light: .regularMaterial))
     }
     
     private var budgetOverviewCard: some View {
@@ -1512,7 +1603,7 @@ struct BudgetDetailsView: View {
         }
         .padding(.vertical, 20)
         .padding(.horizontal, 16)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .modifier(DarkGlassCard(radius: 16, style: .circular, light: .regularMaterial))
     }
     
     private var categoryBreakdownCard: some View {
@@ -1540,7 +1631,7 @@ struct BudgetDetailsView: View {
         }
         .padding(.vertical, 20)
         .padding(.horizontal, 16)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .modifier(DarkGlassCard(radius: 16, style: .circular, light: .regularMaterial))
     }
     
     private func formatDate(_ date: Date) -> String {
@@ -1578,7 +1669,7 @@ struct SpendingTrendsView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .modifier(DarkGlassCard(radius: 12, light: Color(.secondarySystemGroupedBackground)))
     }
 }
 
@@ -1674,7 +1765,7 @@ struct SalaryHeaderView: View {
         }
         .padding(.vertical, 20)
         .padding(.horizontal, 16)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .modifier(DarkGlassCard(radius: 16, style: .circular, light: .regularMaterial))
         .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 4)
     }
     
@@ -1710,7 +1801,7 @@ struct BudgetOverviewView: View {
                 // Budget ring
                 ZStack {
                     Circle()
-                        .stroke(Color(.systemGray5), lineWidth: 9)
+                        .stroke(DashTone.trackStrong, lineWidth: 9)
                     Circle()
                         .trim(from: 0, to: progressPercentage)
                         .stroke(ringColor, style: StrokeStyle(lineWidth: 9, lineCap: .round))
@@ -1738,7 +1829,7 @@ struct BudgetOverviewView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .modifier(DarkGlassCard(radius: 12, light: Color(.secondarySystemGroupedBackground)))
     }
 
     private func statRow(title: String, amount: Double, color: Color) -> some View {
@@ -1857,7 +1948,7 @@ struct CategoryBreakdownView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .modifier(DarkGlassCard(radius: 12, light: Color(.secondarySystemGroupedBackground)))
     }
 }
 
@@ -1897,7 +1988,7 @@ struct CustomMonthPickerView: View {
                                 Text("from".localized)
                                     .font(.system(size: 14, weight: .medium))
                             }
-                            .foregroundColor(selectionStep == .firstDate ? .white : Color.accentColor)
+                            .foregroundColor(selectionStep == .firstDate ? iOSDesignSystem.onAccent : Color.accentColor)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 8)
                             .background(
@@ -1916,7 +2007,7 @@ struct CustomMonthPickerView: View {
                                 Text("to".localized)
                                     .font(.system(size: 14, weight: .medium))
                             }
-                            .foregroundColor(selectionStep == .secondDate ? .white : Color.accentColor)
+                            .foregroundColor(selectionStep == .secondDate ? iOSDesignSystem.onAccent : Color.accentColor)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 8)
                             .background(
@@ -1929,7 +2020,7 @@ struct CustomMonthPickerView: View {
                 }
                 .padding(.top, 16)
                 .padding(.bottom, 24)
-                .background(Color(.systemGroupedBackground))
+                .background(DashTone.groupedBackground)
                 
                 // Calendar View
                 VStack(spacing: 20) {
@@ -1940,7 +2031,7 @@ struct CustomMonthPickerView: View {
                                 .font(.system(size: 16, weight: .medium))
                                 .foregroundColor(Color.accentColor)
                                 .frame(width: 36, height: 36)
-                                .background(Color(.systemGray6))
+                                .background(DashTone.chip)
                                 .clipShape(Circle())
                         }
                         
@@ -1957,7 +2048,7 @@ struct CustomMonthPickerView: View {
                                 .font(.system(size: 16, weight: .medium))
                                 .foregroundColor(Color.accentColor)
                                 .frame(width: 36, height: 36)
-                                .background(Color(.systemGray6))
+                                .background(DashTone.chip)
                                 .clipShape(Circle())
                         }
                     }

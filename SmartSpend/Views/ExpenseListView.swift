@@ -26,6 +26,8 @@ struct ExpenseListView: View {
     @State private var selection: Set<UUID> = []
     @State private var undoBatch: UndoBatch?
 
+    @Environment(\.colorScheme) private var colorScheme
+
     private static let initialPageSize = 40
     private static let pageSize = 60
 
@@ -50,7 +52,7 @@ struct ExpenseListView: View {
 
                 content
             }
-            .background(iOSDesignSystem.appBackground)
+            .appBackdrop()
             .expenseEntryBar(ExpenseEntryBar(accessibilityPrefix: "expenses", isRecording: voice.isRecording, isProcessing: voice.isProcessing, onAdd: {
                 showingAddExpense = true
             }, onVoice: {
@@ -252,7 +254,7 @@ struct ExpenseListView: View {
                 .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(Color.accentColor)
                 .frame(width: iOSDesignSystem.Size.minimumTapTarget, height: iOSDesignSystem.Size.minimumTapTarget)
-                .liquidGlassSurface(Circle())
+                .liquidGlassSurface(Circle(), interactive: true)
                 .contentShape(Circle())
         }
         .accessibilityLabel("exp_more_actions".localized)
@@ -310,10 +312,14 @@ struct ExpenseListView: View {
                     Image(systemName: "xmark").font(.caption2.weight(.bold))
                 }
             }
-            .foregroundStyle(isOn ? Color.white : Color.primary)
+            .foregroundStyle(isOn ? iOSDesignSystem.onAccent : Color.primary)
             .padding(.horizontal, 14)
             .frame(height: 34)
-            .background(isOn ? Color.accentColor : Color(.tertiarySystemFill), in: Capsule())
+            .background {
+                if isOn { Capsule().fill(Color.accentColor) }
+            }
+            // Off chips float as glass on black; light mode keeps its gray capsule.
+            .expenseDarkGlass(Capsule(), light: isOn ? Color.accentColor : Color(.tertiarySystemFill), interactive: !isOn)
             .frame(minHeight: iOSDesignSystem.Size.minimumTapTarget)
             .contentShape(Rectangle())
         }
@@ -423,7 +429,7 @@ struct ExpenseListView: View {
             )
         }
         .buttonStyle(.plain)
-        .listRowBackground(isSelecting && isSelected ? Color.accentColor.opacity(0.12) : Self.rowBackground)
+        .listRowBackground(isSelecting && isSelected ? selectedRowBackground : rowBackground)
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             if !isSelecting {
                 Button(role: .destructive) {
@@ -465,11 +471,14 @@ struct ExpenseListView: View {
         }
     }
 
-    private static let rowBackground = Color(UIColor { traits in
-        traits.userInterfaceStyle == .dark
-            ? UIColor(red: 0.13, green: 0.135, blue: 0.15, alpha: 1)
-            : UIColor.secondarySystemBackground
-    })
+    /// Near-black plates on the black backdrop in dark mode; unchanged in light mode.
+    private var rowBackground: Color {
+        colorScheme == .dark ? iOSDesignSystem.elevatedBackground : Color(.secondarySystemBackground)
+    }
+
+    private var selectedRowBackground: Color {
+        colorScheme == .dark ? iOSDesignSystem.selectionFill : Color.accentColor.opacity(0.12)
+    }
 
     private var loadMoreRow: some View {
         HStack(spacing: iOSDesignSystem.Spacing.small) {
@@ -616,7 +625,8 @@ struct CalendarPickerView: View {
     @Binding var selectedEndDate: Date
     @Binding var selectedPeriod: ExpensePeriod
     @Environment(\.dismiss) private var dismiss
-    
+    @Environment(\.colorScheme) private var colorScheme
+
     @State private var currentMonth: Date = Date()
     @State private var selectionStep: SelectionStep = .startDate
     @State private var tempStartDate: Date = Date()
@@ -630,9 +640,6 @@ struct CalendarPickerView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                iOSDesignSystem.appBackground
-                    .ignoresSafeArea()
-
                 ScrollView {
                     VStack(spacing: iOSDesignSystem.Spacing.large) {
                         headerSection
@@ -644,6 +651,7 @@ struct CalendarPickerView: View {
                 }
                 .scrollIndicators(.hidden)
             }
+            .appBackdrop()
             .navigationTitle("custom_date_range".localized)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -777,7 +785,7 @@ struct CalendarPickerView: View {
         .frame(maxWidth: .infinity)
         .background(
             RoundedRectangle(cornerRadius: iOSDesignSystem.Radius.medium, style: .continuous)
-                .fill(Color(.tertiarySystemFill))
+                .fill(colorScheme == .dark ? iOSDesignSystem.insetFill : Color(.tertiarySystemFill))
         )
     }
 
@@ -836,7 +844,8 @@ struct CalendarPickerView: View {
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(Color.accentColor)
                     .iOSMinimumTapTarget()
-                    .liquidGlassSurface(Circle())
+                    .expenseNestedControlSurface(Circle())
+                    .contentShape(Circle())
             }
             
             Spacer()
@@ -852,7 +861,8 @@ struct CalendarPickerView: View {
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(Color.accentColor)
                     .iOSMinimumTapTarget()
-                    .liquidGlassSurface(Circle())
+                    .expenseNestedControlSurface(Circle())
+                    .contentShape(Circle())
             }
         }
     }
@@ -992,7 +1002,8 @@ struct CalendarDayView: View {
     let state: DayState
     let isCurrentMonth: Bool
     let action: () -> Void
-    
+    @Environment(\.colorScheme) private var colorScheme
+
     var body: some View {
         Button(action: action) {
             ZStack {
@@ -1008,7 +1019,7 @@ struct CalendarDayView: View {
                     Circle()
                         .fill(Color.accentColor)
                         .frame(width: 36, height: 36)
-                        .shadow(color: Color.accentColor.opacity(0.22), radius: 5, x: 0, y: 2)
+                        .shadow(color: colorScheme == .dark ? .clear : Color.accentColor.opacity(0.22), radius: 5, x: 0, y: 2)
                 }
                 
                 Text("\(Calendar.current.component(.day, from: date))")
@@ -1033,7 +1044,7 @@ struct CalendarDayView: View {
     
     private var textColor: Color {
         if showsSelection {
-            return .white
+            return iOSDesignSystem.onAccent
         } else if isCurrentMonth {
             return Color(.label)
         } else {
@@ -1090,6 +1101,7 @@ struct ExpenseFilterSheet: View {
     var body: some View {
         NavigationStack {
             List {
+                Group {
                 Section("time_period".localized) {
                     ForEach(ExpensePeriod.quickPeriods, id: \.self) { period in
                         checkRow(isOn: draftPeriod == period) {
@@ -1153,8 +1165,11 @@ struct ExpenseFilterSheet: View {
                 } footer: {
                     Text("filter_category_hint".localized)
                 }
+                }
+                .expenseDarkRowBackground()
             }
             .listStyle(.insetGrouped)
+            .expenseDarkFormBackdrop()
             .navigationTitle("filter".localized)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

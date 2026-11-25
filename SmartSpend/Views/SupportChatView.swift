@@ -3,6 +3,13 @@ import SwiftUI
 struct SupportChatView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var dataManager = DataManager.shared
+    @Environment(\.colorScheme) private var colorScheme
+
+    /// Dark mode: opaque near-black plates on the black backdrop (rows cannot be
+    /// glass, one glass layer per row would be too heavy). Light keeps system cells.
+    private var rowBackground: Color? {
+        colorScheme == .dark ? iOSDesignSystem.elevatedBackground : nil
+    }
 
     var body: some View {
         NavigationStack {
@@ -24,12 +31,13 @@ struct SupportChatView: View {
                                 systemImage: isUp ? "arrow.up.right" : "arrow.down.right"
                             )
                             .font(.subheadline)
-                            .foregroundStyle(isUp ? Color.green : Color.red)
+                            .foregroundStyle(isUp ? Color(.systemRed) : Color(.systemGreen))
                         }
                     }
                 } header: {
                     Text("This Month")
                 }
+                .listRowBackground(rowBackground)
 
                 // Insights
                 Section("Insights") {
@@ -51,8 +59,15 @@ struct SupportChatView: View {
                         .padding(.vertical, 2)
                     }
                 }
+                .listRowBackground(rowBackground)
             }
             .listStyle(.insetGrouped)
+            .scrollContentBackground(colorScheme == .dark ? .hidden : .automatic)
+            .background {
+                if colorScheme == .dark {
+                    AppBackdrop().ignoresSafeArea()
+                }
+            }
             .navigationTitle("Insights")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
@@ -129,7 +144,7 @@ struct SupportChatView: View {
                 results.append(SpendingInsight(
                     id: "good_trend",
                     icon: "arrow.down.circle.fill",
-                    iconColor: .red,
+                    iconColor: .green,
                     title: "Spending down \(String(format: "%.0f%%", abs(change)))",
                     detail: "You're spending significantly less than last month.",
                     type: .info
@@ -138,7 +153,7 @@ struct SupportChatView: View {
                 results.append(SpendingInsight(
                     id: "up_trend",
                     icon: "arrow.up.circle.fill",
-                    iconColor: .green,
+                    iconColor: .red,
                     title: "Spending up \(String(format: "%.0f%%", change)) this month",
                     detail: "You're spending considerably more than last month.",
                     type: .info

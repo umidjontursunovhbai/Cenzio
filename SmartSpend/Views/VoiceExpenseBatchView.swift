@@ -63,6 +63,7 @@ struct VoiceExpenseBatchView: View {
     var body: some View {
         NavigationStack {
             Form {
+                Group {
                 ForEach($rows) { $row in
                     let index = rows.firstIndex { $0.id == row.id } ?? 0
                     Section {
@@ -96,7 +97,10 @@ struct VoiceExpenseBatchView: View {
                 } footer: {
                     Text(voiceText("Nothing is saved until you tap Save all.", "Ничего не сохраняется, пока вы не нажмёте «Сохранить все»."))
                 }
+                }
+                .expenseDarkRowBackground()
             }
+            .expenseDarkFormBackdrop()
             .scrollDismissesKeyboard(.interactively)
             .scrollIndicators(.hidden)
             .navigationTitle(voiceText("\(rows.count) expenses", "Расходов: \(rows.count)"))

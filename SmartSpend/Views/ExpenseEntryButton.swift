@@ -5,6 +5,7 @@ import UIKit
 /// a plus for the manual form, placed within thumb reach above the tab bar.
 struct ExpenseEntryBar: View {
     @Environment(\.floatingTabBarClearance) private var tabBarClearance
+    @Environment(\.colorScheme) private var colorScheme
     @ObservedObject private var flags = FeatureFlags.shared
     var accessibilityPrefix: String
     var isRecording = false
@@ -35,7 +36,7 @@ struct ExpenseEntryBar: View {
                 .background {
                     if isRecording { Circle().fill(Color(.systemRed)) }
                 }
-                .liquidGlassSurface(Circle())
+                .liquidGlassSurface(Circle(), interactive: true)
                 .contentShape(Circle())
             }
             .buttonStyle(.plain)
@@ -50,10 +51,11 @@ struct ExpenseEntryBar: View {
                     .resizable()
                     .scaledToFit()
                     .frame(width: 24, height: 24)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(iOSDesignSystem.onAccent)
                     .frame(width: 56, height: 56)
                     .background(Circle().fill(Color.accentColor))
-                    .shadow(color: Color.accentColor.opacity(0.3), radius: 10, x: 0, y: 5)
+                    // A glow reads as smudge on black; dark mode keeps the solid disc only.
+                    .shadow(color: colorScheme == .dark ? .clear : Color.accentColor.opacity(0.3), radius: 10, x: 0, y: 5)
                     .contentShape(Circle())
             }
             .buttonStyle(.plain)
@@ -77,5 +79,84 @@ extension View {
         overlay(alignment: .bottomTrailing) {
             if !hidden { bar }
         }
+    }
+}
+
+// MARK: - Dark-only surfaces for the expense screens
+// Light mode keeps its existing look exactly; dark mode moves to black + Liquid Glass.
+
+/// Native glass in dark mode; the given fill in light mode.
+private struct ExpenseDarkGlass<S: Shape, Light: ShapeStyle>: ViewModifier {
+    let shape: S
+    let light: Light
+    let interactive: Bool
+    @Environment(\.colorScheme) private var colorScheme
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if colorScheme == .dark {
+            content.liquidGlassSurface(shape, interactive: interactive)
+        } else {
+            content.background(light, in: shape)
+        }
+    }
+}
+
+/// A control that sits inside a glass card: a quiet well in dark mode (glass never
+/// nests in glass), the existing glass control in light mode.
+private struct ExpenseNestedControlSurface<S: Shape>: ViewModifier {
+    let shape: S
+    @Environment(\.colorScheme) private var colorScheme
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if colorScheme == .dark {
+            content.background(iOSDesignSystem.insetFill, in: shape)
+        } else {
+            content.liquidGlassSurface(shape)
+        }
+    }
+}
+
+/// Forms and grouped lists: true black behind the rows in dark mode.
+private struct ExpenseDarkFormBackdrop: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if colorScheme == .dark {
+            content
+                .scrollContentBackground(.hidden)
+                .appBackdrop()
+        } else {
+            content
+        }
+    }
+}
+
+/// Near-black row plates in dark mode; the system row background in light mode.
+private struct ExpenseDarkRowBackground: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+
+    func body(content: Content) -> some View {
+        content.listRowBackground(colorScheme == .dark ? iOSDesignSystem.elevatedBackground : nil)
+    }
+}
+
+extension View {
+    func expenseDarkGlass<S: Shape, Light: ShapeStyle>(_ shape: S, light: Light, interactive: Bool = false) -> some View {
+        modifier(ExpenseDarkGlass(shape: shape, light: light, interactive: interactive))
+    }
+
+    func expenseNestedControlSurface<S: Shape>(_ shape: S) -> some View {
+        modifier(ExpenseNestedControlSurface(shape: shape))
+    }
+
+    func expenseDarkFormBackdrop() -> some View {
+        modifier(ExpenseDarkFormBackdrop())
+    }
+
+    func expenseDarkRowBackground() -> some View {
+        modifier(ExpenseDarkRowBackground())
     }
 }

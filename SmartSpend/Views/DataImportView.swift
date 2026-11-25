@@ -84,6 +84,7 @@ struct DataImportView: View {
                 }
             }
             }
+            .appBackdrop()
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -151,7 +152,7 @@ struct DataImportView: View {
                     HeroIcon("x-mark", size: 16)
                         .foregroundStyle(.secondary)
                         .frame(width: 30, height: 30)
-                        .background(Color(.systemGray6), in: Circle())
+                        .background(iOSDesignSystem.settingsWellFill, in: Circle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("close".localized)
@@ -212,7 +213,7 @@ struct DataImportView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding()
-            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 8))
+            .background(iOSDesignSystem.settingsWellFill, in: RoundedRectangle(cornerRadius: 8))
         }
     }
     
@@ -242,7 +243,7 @@ struct DataImportView: View {
                 .foregroundStyle(.blue)
             }
             .padding()
-            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 8))
+            .background(iOSDesignSystem.settingsWellFill, in: RoundedRectangle(cornerRadius: 8))
         }
     }
     
@@ -300,12 +301,12 @@ struct DataImportView: View {
                     }
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
-                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 4))
+                    .background(iOSDesignSystem.settingsWellFill, in: RoundedRectangle(cornerRadius: 4))
                 }
             }
         }
         .padding()
-        .background(Color(.systemGray6).opacity(0.5), in: RoundedRectangle(cornerRadius: 12))
+        .background(iOSDesignSystem.settingsWellFill.opacity(0.5), in: RoundedRectangle(cornerRadius: 12))
     }
     
     private var importButton: some View {
@@ -330,7 +331,7 @@ struct DataImportView: View {
                 isImporting ? Color.gray : Color.accentColor,
                 in: RoundedRectangle(cornerRadius: 12)
             )
-            .foregroundStyle(.white)
+            .foregroundStyle(isImporting ? Color.white : iOSDesignSystem.onAccent)
         }
         .disabled(isImporting)
     }
@@ -533,7 +534,7 @@ struct CSVFormatInfoView: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.tertiarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(iOSDesignSystem.settingsNestedPlate, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(color.opacity(0.25), lineWidth: 1)

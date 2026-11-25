@@ -93,6 +93,8 @@ struct MonthlySalaryView: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 12)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .appBackdrop()
             .navigationTitle("monthly_salary_title".localized)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -144,6 +146,7 @@ struct MonthlySalaryView: View {
 
 private struct SalaryNumberPad: View {
     @Binding var amount: String
+    @Environment(\.colorScheme) private var colorScheme
 
     private let rows: [[String]] = [
         ["1", "2", "3"],
@@ -170,7 +173,7 @@ private struct SalaryNumberPad: View {
                             }
                             .frame(maxWidth: .infinity)
                             .frame(height: 50)
-                            .background(Color(.systemGray5), in: RoundedRectangle(cornerRadius: 10))
+                            .modifier(SalaryKeySurface(isDark: colorScheme == .dark))
                             .foregroundStyle(.primary)
                         }
                         .buttonStyle(.plain)
@@ -199,5 +202,21 @@ private struct SalaryNumberPad: View {
         }
 
         amount = AmountInputFormatter.formatEditingText(amount)
+    }
+}
+
+/// Keys are interactive Liquid Glass on black in dark mode; light keeps the gray keys.
+private struct SalaryKeySurface: ViewModifier {
+    let isDark: Bool
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+        if isDark {
+            content
+                .liquidGlassSurface(shape, interactive: true)
+                .contentShape(shape)
+        } else {
+            content.background(Color(.systemGray5), in: RoundedRectangle(cornerRadius: 10))
+        }
     }
 }

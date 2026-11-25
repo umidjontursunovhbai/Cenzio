@@ -2,6 +2,7 @@ import SwiftUI
 
 struct RecurringExpensesView: View {
     @ObservedObject private var dataManager = DataManager.shared
+    @Environment(\.colorScheme) private var colorScheme
 
     @State private var showingAddRecurring = false
     @State private var selectedRecurring: RecurringExpense?
@@ -75,7 +76,7 @@ struct RecurringExpensesView: View {
                     recurringContent
                 }
             }
-            .background(iOSDesignSystem.appBackground)
+            .appBackdrop()
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(.hidden, for: .navigationBar)
@@ -176,7 +177,6 @@ struct RecurringExpensesView: View {
             .padding(.bottom, iOSDesignSystem.Spacing.screenMargin)
         }
         .scrollIndicators(.hidden)
-        .background(iOSDesignSystem.appBackground)
     }
 
     private var filterControl: some View {
@@ -210,11 +210,13 @@ struct RecurringExpensesView: View {
                     .frame(minHeight: iOSDesignSystem.Size.minimumTapTarget)
                     .background {
                         if filter == item {
+                            // On dark glass a tint of the near-white accent reads as mud;
+                            // the shared selection fill gives a clean lifted segment.
                             Capsule()
-                                .fill(Color.accentColor.opacity(0.075))
+                                .fill(colorScheme == .dark ? iOSDesignSystem.selectionFill : Color.accentColor.opacity(0.075))
                                 .overlay(
                                     Capsule()
-                                        .stroke(Color.accentColor.opacity(0.13), lineWidth: 1)
+                                        .stroke(colorScheme == .dark ? iOSDesignSystem.layerStroke : Color.accentColor.opacity(0.13), lineWidth: 1)
                                 )
                         }
                     }
@@ -224,7 +226,7 @@ struct RecurringExpensesView: View {
             }
         }
         .padding(4)
-        .liquidGlassSurface(Capsule())
+        .liquidGlassSurface(Capsule(), interactive: true)
     }
 
     private var recurringList: some View {
@@ -442,7 +444,7 @@ private struct RecurringSummaryCard: View {
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 9)
                     .frame(minHeight: 24)
-                    .background(Color(.tertiarySystemFill), in: Capsule())
+                    .background(iOSDesignSystem.insetFill, in: Capsule())
             }
 
             Text(CurrencyFormatter.format(monthlyTotal, currency: currency))
@@ -540,16 +542,17 @@ private struct RecurringAttentionCard: View {
                 .buttonStyle(.plain)
         }
         .padding(12)
-        .background(iOSDesignSystem.elevatedBackground, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .liquidGlassCard()
         .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(tint.opacity(0.16), lineWidth: 1)
+            RoundedRectangle(cornerRadius: iOSDesignSystem.Radius.card, style: .continuous)
+                .stroke(tint.opacity(0.22), lineWidth: 1)
+                .allowsHitTesting(false)
         )
-        .shadow(color: tint.opacity(0.06), radius: 10, x: 0, y: 4)
     }
 }
 
 private struct RecurringExpenseCard: View {
+    @Environment(\.colorScheme) private var colorScheme
     let recurringExpense: RecurringExpense
     let categoryInfo: RecurringCategoryInfo
     let currency: Currency
@@ -652,12 +655,15 @@ private struct RecurringExpenseCard: View {
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .stroke(
-                    isSelected ? Color.accentColor.opacity(0.48) : Color(.separator).opacity(0.14),
+                    isSelected
+                        ? Color.accentColor.opacity(colorScheme == .dark ? 0.7 : 0.48)
+                        : (colorScheme == .dark ? iOSDesignSystem.layerStroke : Color(.separator).opacity(0.14)),
                     lineWidth: isSelected ? 1.5 : 1
                 )
         )
-        .shadow(color: categoryInfo.color.opacity(0.035), radius: 12, x: 0, y: 6)
-        .shadow(color: Color.black.opacity(0.025), radius: 3, x: 0, y: 1)
+        // Shadows read as dirt on black: light mode only.
+        .shadow(color: colorScheme == .dark ? .clear : categoryInfo.color.opacity(0.035), radius: 12, x: 0, y: 6)
+        .shadow(color: colorScheme == .dark ? .clear : Color.black.opacity(0.025), radius: 3, x: 0, y: 1)
         .scaleEffect(isSelected ? 0.985 : 1)
         .animation(.snappy(duration: 0.2), value: isSelected)
         .accessibilityElement(children: .combine)
@@ -675,7 +681,7 @@ private struct RecurringExpenseCard: View {
                     .frame(width: 24, height: 24)
 
                 HeroIcon("check", size: 12)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(iOSDesignSystem.onAccent)
             }
         }
     }
@@ -756,7 +762,7 @@ struct EmptyRecurringExpensesView: View {
                 .foregroundStyle(Color.accentColor)
                 .frame(maxWidth: .infinity)
                 .frame(minHeight: 50)
-                .liquidGlassSurface(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .liquidGlassSurface(RoundedRectangle(cornerRadius: 16, style: .continuous), interactive: true)
             }
             .buttonStyle(.plain)
             .frame(maxWidth: 320)
@@ -766,7 +772,6 @@ struct EmptyRecurringExpensesView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, 28)
         .padding(.bottom, iOSDesignSystem.Spacing.large)
-        .background(iOSDesignSystem.appBackground)
     }
 }
 

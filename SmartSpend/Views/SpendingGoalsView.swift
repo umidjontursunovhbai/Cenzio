@@ -43,7 +43,9 @@ struct SpendingGoalsView: View {
                         }
                         .frame(minHeight: iOSDesignSystem.Size.minimumTapTarget)
                         .padding(.horizontal, iOSDesignSystem.Spacing.screenMargin)
-                        .liquidGlassSurface(RoundedRectangle(cornerRadius: iOSDesignSystem.Radius.small, style: .continuous))
+                        // Inside the glass card: a quiet well, not a second glass layer.
+                        .background(iOSDesignSystem.insetFill, in: RoundedRectangle(cornerRadius: iOSDesignSystem.Radius.small, style: .continuous))
+                        .contentShape(RoundedRectangle(cornerRadius: iOSDesignSystem.Radius.small, style: .continuous))
                     }
                     .liquidGlassButtonStyle()
                 }
@@ -52,7 +54,7 @@ struct SpendingGoalsView: View {
         .padding(.vertical, iOSDesignSystem.Spacing.large)
         .padding(.horizontal, iOSDesignSystem.Spacing.screenMargin)
         .liquidGlassCard()
-        .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 4)
+        .shadow(color: iOSDesignSystem.cardShadow, radius: 8, x: 0, y: 4)
         .sheet(isPresented: $showingBudgetSettings) {
             BudgetSettingsView()
         }

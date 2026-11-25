@@ -34,6 +34,7 @@ struct EditExpenseView: View {
     var body: some View {
         NavigationStack {
             Form {
+                Group {
                 Section {
                     TextField("exp_title_placeholder".localized, text: $title, axis: .vertical)
                         .lineLimit(1...3)
@@ -74,7 +75,10 @@ struct EditExpenseView: View {
                         Text("exp_delete_footer".localized)
                     }
                 }
+                }
+                .expenseDarkRowBackground()
             }
+            .expenseDarkFormBackdrop()
             .navigationTitle("exp_edit_title".localized)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct PrivacyPolicyView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
 
     private let effectiveDate = "October 27, 2026"
 
@@ -88,7 +89,14 @@ struct PrivacyPolicyView: View {
                 .padding(.top, 18)
                 .padding(.bottom, 36)
             }
-            .background(Color(.systemGroupedBackground))
+            .background {
+                // Black backdrop in dark mode; light keeps the grouped gray.
+                if colorScheme == .dark {
+                    AppBackdrop().ignoresSafeArea()
+                } else {
+                    Color(.systemGroupedBackground).ignoresSafeArea()
+                }
+            }
             .navigationTitle("privacy_policy".localized)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

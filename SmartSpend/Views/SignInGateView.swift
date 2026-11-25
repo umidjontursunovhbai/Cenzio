@@ -6,12 +6,11 @@ import UIKit
 struct SignInGateView: View {
     @ObservedObject var store: AppleAccountStore = .shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
     @State private var appeared = false
 
     var body: some View {
         ZStack {
-            Color(.systemBackground).ignoresSafeArea()
-
             VStack(spacing: 0) {
                 Spacer(minLength: 40)
 
@@ -33,6 +32,8 @@ struct SignInGateView: View {
             .padding(.bottom, 16)
             .frame(maxWidth: 480)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .appBackdrop()
         .onAppear {
             withAnimation(reduceMotion ? .easeOut(duration: 0.2) : .spring(response: 0.6, dampingFraction: 0.85)) {
                 appeared = true
@@ -97,7 +98,9 @@ struct SignInGateView: View {
             } onCompletion: { result in
                 store.handle(result)
             }
-            .signInWithAppleButtonStyle(.black)
+            // White on the black backdrop, black on the light one.
+            .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
+            .id(colorScheme)
             .frame(maxWidth: .infinity)
             .frame(height: 52)
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -142,7 +145,7 @@ private struct AppIconImage: View {
                 Color.accentColor
                 Image(systemName: "creditcard.fill")
                     .font(.system(size: 38, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(iOSDesignSystem.onAccent)
             }
         }
     }

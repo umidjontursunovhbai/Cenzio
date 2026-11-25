@@ -64,6 +64,7 @@ struct CurrencySelectionView: View {
                                 )
                             }
                         }
+                        .listRowBackground(iOSDesignSystem.elevatedBackground)
                     }
                 } else {
                     ForEach(searchResults, id: \.self) { currency in
@@ -73,9 +74,11 @@ struct CurrencySelectionView: View {
                             onTap: { select(currency) }
                         )
                     }
+                    .listRowBackground(iOSDesignSystem.elevatedBackground)
                 }
             }
             .listStyle(.insetGrouped)
+            .groupedListBackdrop()
             .navigationTitle("currency".localized)
             .navigationBarTitleDisplayMode(.inline)
             .searchable(
