@@ -85,7 +85,7 @@ private struct AppRootView: View {
                 ContentView()
             } else {
                 if account.state == .checking {
-                    Color(.systemBackground).ignoresSafeArea()
+                    iOSDesignSystem.appBackground.ignoresSafeArea()
                 } else if account.showsWelcome {
                     SignInGateView(store: account)
                         .transition(.opacity)

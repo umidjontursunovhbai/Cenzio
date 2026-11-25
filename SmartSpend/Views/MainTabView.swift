@@ -96,6 +96,7 @@ private struct CompactTabBar: View {
 
     @Binding var selection: Int
     let bottomInset: CGFloat
+    @Namespace private var pill
 
     private let items: [(image: String, key: String, id: String)] = [
         ("hero-home", "dashboard", "tab.dashboard"),
@@ -120,8 +121,11 @@ private struct CompactTabBar: View {
                         .foregroundStyle(isSelected ? Color.primary : Color.secondary)
                         .frame(width: 76, height: 44)
                         .background {
+                            // One pill that slides between tabs on top of the glass bar.
                             if isSelected {
-                                Capsule().fill(Color(.systemGray5))
+                                Capsule()
+                                    .fill(iOSDesignSystem.selectionFill)
+                                    .matchedGeometryEffect(id: "selection", in: pill)
                             }
                         }
                         .contentShape(Capsule())
@@ -133,7 +137,7 @@ private struct CompactTabBar: View {
             }
         }
         .padding(6)
-        .liquidGlassSurface(Capsule())
+        .liquidGlassSurface(Capsule(), interactive: true)
         .padding(.bottom, Self.bottomOffset(bottomInset: bottomInset))
         .animation(.snappy(duration: 0.2), value: selection)
     }

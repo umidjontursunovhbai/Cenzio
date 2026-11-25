@@ -1,30 +1,53 @@
 import SwiftUI
 
 enum iOSDesignSystem {
+    // MARK: Color tokens
+    // Light mode keeps its original values. Dark mode is true black with
+    // Liquid Glass layers on top: surfaces get depth from glass, a hairline
+    // rim and a faint top glow, never from gray fills.
+
     static let appBackground = Color(UIColor { traits in
-        if traits.userInterfaceStyle == .dark {
-            return UIColor(red: 0.075, green: 0.078, blue: 0.088, alpha: 1)
-        } else {
-            return UIColor.systemBackground
-        }
+        traits.userInterfaceStyle == .dark ? .black : .systemBackground
     })
 
+    /// Opaque plate for surfaces that cannot be glass (and the pre-iOS 26 fallback).
     static let elevatedBackground = Color(UIColor { traits in
-        if traits.userInterfaceStyle == .dark {
-            return UIColor(red: 0.13, green: 0.135, blue: 0.15, alpha: 1)
-        } else {
-            return UIColor.white
-        }
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.075, green: 0.075, blue: 0.08, alpha: 1)
+            : UIColor.white
     })
 
+    /// Rim of a glass layer.
     static let layerStroke = Color(UIColor { traits in
-        traits.userInterfaceStyle == .dark ? UIColor.white.withAlphaComponent(0.08) : UIColor.black.withAlphaComponent(0.055)
+        traits.userInterfaceStyle == .dark ? UIColor.white.withAlphaComponent(0.10) : UIColor.black.withAlphaComponent(0.055)
     })
+    /// Inner top highlight of a glass layer.
     static let layerHighlight = Color(UIColor { traits in
-        traits.userInterfaceStyle == .dark ? UIColor.white.withAlphaComponent(0.06) : UIColor.white.withAlphaComponent(0.82)
+        traits.userInterfaceStyle == .dark ? UIColor.white.withAlphaComponent(0.05) : UIColor.white.withAlphaComponent(0.82)
     })
-    static let cardShadow = Color.black.opacity(0.055)
-    static let controlShadow = Color.black.opacity(0.08)
+    /// Shadows read as dirt on black, so they vanish in dark mode.
+    static let cardShadow = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark ? .clear : UIColor.black.withAlphaComponent(0.055)
+    })
+    static let controlShadow = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark ? .clear : UIColor.black.withAlphaComponent(0.08)
+    })
+
+    /// Text or glyph drawn on an `accentColor` fill. The accent is near-black in
+    /// light mode and near-white in dark mode, so this flips with it.
+    static let onAccent = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark ? .black : .white
+    })
+
+    /// Fill for a selected pill or segment sitting on glass.
+    static let selectionFill = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark ? UIColor.white.withAlphaComponent(0.14) : UIColor.systemGray5
+    })
+
+    /// Quiet fill for rows, chips and wells inside a glass card.
+    static let insetFill = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark ? UIColor.white.withAlphaComponent(0.06) : UIColor.secondarySystemFill
+    })
 
     enum Size {
         static let minimumTapTarget: CGFloat = 44
@@ -57,50 +80,22 @@ extension View {
               minHeight: iOSDesignSystem.Size.minimumTapTarget)
     }
 
-    @ViewBuilder
+    /// Card-sized glass layer (sections, summary cards).
     func liquidGlassCard(cornerRadius: CGFloat = iOSDesignSystem.Radius.card) -> some View {
-        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-
-        if #available(iOS 26.0, *) {
-            self
-                .background(.ultraThinMaterial, in: shape)
-                .background(iOSDesignSystem.elevatedBackground.opacity(0.78), in: shape)
-                .glassEffect(.regular, in: shape)
-                .overlay(shape.stroke(iOSDesignSystem.layerHighlight, lineWidth: 0.8))
-                .overlay(shape.stroke(iOSDesignSystem.layerStroke, lineWidth: 1))
-                .shadow(color: iOSDesignSystem.cardShadow, radius: 14, x: 0, y: 7)
-                .shadow(color: .black.opacity(0.04), radius: 2, x: 0, y: 1)
-        } else {
-            self
-                .background(.ultraThinMaterial, in: shape)
-                .background(iOSDesignSystem.elevatedBackground.opacity(0.88), in: shape)
-                .overlay(shape.stroke(iOSDesignSystem.layerHighlight, lineWidth: 0.8))
-                .overlay(shape.stroke(iOSDesignSystem.layerStroke, lineWidth: 1))
-                .shadow(color: iOSDesignSystem.cardShadow, radius: 14, x: 0, y: 7)
-                .shadow(color: .black.opacity(0.04), radius: 2, x: 0, y: 1)
-        }
+        modifier(LiquidGlassLayer(shape: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous),
+                                  kind: .card, interactive: false))
     }
 
-    @ViewBuilder
-    func liquidGlassSurface<S: Shape>(_ shape: S) -> some View {
-        if #available(iOS 26.0, *) {
-            self
-                .background(.ultraThinMaterial, in: shape)
-                .background(iOSDesignSystem.elevatedBackground.opacity(0.58), in: shape)
-                .glassEffect(.regular, in: shape)
-                .overlay(shape.stroke(iOSDesignSystem.layerHighlight, lineWidth: 0.8))
-                .overlay(shape.stroke(iOSDesignSystem.layerStroke, lineWidth: 1))
-                .shadow(color: iOSDesignSystem.controlShadow, radius: 12, x: 0, y: 6)
-                .shadow(color: .black.opacity(0.04), radius: 2, x: 0, y: 1)
-        } else {
-            self
-                .background(.thinMaterial, in: shape)
-                .background(iOSDesignSystem.elevatedBackground.opacity(0.9), in: shape)
-                .overlay(shape.stroke(iOSDesignSystem.layerHighlight, lineWidth: 0.8))
-                .overlay(shape.stroke(iOSDesignSystem.layerStroke, lineWidth: 1))
-                .shadow(color: iOSDesignSystem.controlShadow, radius: 10, x: 0, y: 5)
-                .shadow(color: .black.opacity(0.04), radius: 2, x: 0, y: 1)
-        }
+    /// Control-sized glass layer (buttons, capsules, the tab bar). Pass
+    /// `interactive: true` for tappable controls so iOS 26 glass reacts to touch.
+    func liquidGlassSurface<S: Shape>(_ shape: S, interactive: Bool = false) -> some View {
+        modifier(LiquidGlassLayer(shape: shape, kind: .control, interactive: interactive))
+    }
+
+    /// The screen background: black with a faint top glow in dark mode, so the
+    /// glass above it has light to bend. Use instead of `appBackground.ignoresSafeArea()`.
+    func appBackdrop() -> some View {
+        background { AppBackdrop().ignoresSafeArea() }
     }
 
     @ViewBuilder
@@ -126,7 +121,7 @@ struct ActionIconButton: View {
             HeroIcon(icon, size: 25)
                 .foregroundStyle(iconColor)
                 .frame(width: iOSDesignSystem.Size.minimumTapTarget, height: iOSDesignSystem.Size.minimumTapTarget)
-                .liquidGlassSurface(Circle())
+                .liquidGlassSurface(Circle(), interactive: true)
                 .contentShape(Circle())
                 .opacity(isDisabled ? 0.38 : 1)
         }
@@ -224,11 +219,69 @@ struct AppSearchField: View {
         }
         .padding(.horizontal, 16)
         .frame(height: 50)
-        .background(Color(.secondarySystemGroupedBackground), in: Capsule())
-        .overlay(
-            Capsule()
-                .stroke(Color(.separator).opacity(0.22), lineWidth: 1)
-        )
+        .liquidGlassSurface(Capsule())
         .padding(.horizontal, 24)
+    }
+}
+
+/// Black backdrop with one soft light source at the top (dark mode only).
+struct AppBackdrop: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        ZStack {
+            iOSDesignSystem.appBackground
+            if colorScheme == .dark {
+                RadialGradient(
+                    colors: [Color.white.opacity(0.10), Color.white.opacity(0.025), .clear],
+                    center: UnitPoint(x: 0.5, y: -0.08),
+                    startRadius: 0,
+                    endRadius: 520
+                )
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+            }
+        }
+    }
+}
+
+/// One glass recipe for the whole app.
+/// - iOS 26, dark: native Liquid Glass with a hairline rim; no fills, no shadows.
+/// - iOS 26, light: the original frosted look (unchanged).
+/// - iOS 18: system material fallback.
+private struct LiquidGlassLayer<S: Shape>: ViewModifier {
+    enum Kind { case card, control }
+
+    let shape: S
+    let kind: Kind
+    let interactive: Bool
+    @Environment(\.colorScheme) private var colorScheme
+
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            if colorScheme == .dark {
+                content
+                    .glassEffect(interactive ? .regular.interactive() : .regular, in: shape)
+                    .overlay(shape.stroke(iOSDesignSystem.layerStroke, lineWidth: 0.75).allowsHitTesting(false))
+            } else {
+                content
+                    .background(.ultraThinMaterial, in: shape)
+                    .background(iOSDesignSystem.elevatedBackground.opacity(kind == .card ? 0.78 : 0.58), in: shape)
+                    .glassEffect(interactive ? .regular.interactive() : .regular, in: shape)
+                    .overlay(shape.stroke(iOSDesignSystem.layerHighlight, lineWidth: 0.8))
+                    .overlay(shape.stroke(iOSDesignSystem.layerStroke, lineWidth: 1))
+                    .shadow(color: kind == .card ? iOSDesignSystem.cardShadow : iOSDesignSystem.controlShadow,
+                            radius: kind == .card ? 14 : 12, x: 0, y: kind == .card ? 7 : 6)
+                    .shadow(color: .black.opacity(0.04), radius: 2, x: 0, y: 1)
+            }
+        } else {
+            content
+                .background(kind == .card ? Material.ultraThinMaterial : Material.thinMaterial, in: shape)
+                .background(iOSDesignSystem.elevatedBackground.opacity(colorScheme == .dark ? 0.55 : (kind == .card ? 0.88 : 0.9)), in: shape)
+                .overlay(shape.stroke(iOSDesignSystem.layerHighlight, lineWidth: 0.8))
+                .overlay(shape.stroke(iOSDesignSystem.layerStroke, lineWidth: 1))
+                .shadow(color: kind == .card ? iOSDesignSystem.cardShadow : iOSDesignSystem.controlShadow,
+                        radius: kind == .card ? 14 : 10, x: 0, y: kind == .card ? 7 : 5)
+        }
     }
 }
