@@ -152,9 +152,9 @@ private struct CompactTabBar: View {
         min(max(x, center(of: 0)), center(of: items.count - 1))
     }
 
-    /// Bouncy, liquid settle; a plain fade-speed ease when Reduce Motion is on.
+    /// Critically damped settle (no overshoot on fast taps); a plain fade-speed ease when Reduce Motion is on.
     private var settle: Animation {
-        reduceMotion ? .easeOut(duration: 0.15) : .spring(response: 0.42, dampingFraction: 0.62)
+        reduceMotion ? .easeOut(duration: 0.15) : .spring(response: 0.3, dampingFraction: 1)
     }
     private var follow: Animation {
         reduceMotion ? .linear(duration: 0) : .interactiveSpring(response: 0.22, dampingFraction: 0.78)
