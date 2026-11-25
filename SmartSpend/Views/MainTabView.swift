@@ -96,7 +96,17 @@ private struct CompactTabBar: View {
 
     @Binding var selection: Int
     let bottomInset: CGFloat
-    @Namespace private var pill
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Lens center while a finger is down; nil when the lens rests on the selected tab.
+    @State private var dragX: CGFloat?
+    @State private var dragVelocity: CGFloat = 0
+    /// Tab under the lens, for the selection haptic while dragging.
+    @State private var hoverIndex: Int?
+
+    private let itemWidth: CGFloat = 76
+    private let itemHeight: CGFloat = 44
+    private let itemSpacing: CGFloat = 4
 
     private let items: [(image: String, key: String, id: String)] = [
         ("hero-home", "dashboard", "tab.dashboard"),
@@ -105,41 +115,108 @@ private struct CompactTabBar: View {
         ("hero-cog-6-tooth", "settings", "tab.settings")
     ]
 
+    private var isPressed: Bool { dragX != nil }
+
+    private func center(of index: Int) -> CGFloat {
+        CGFloat(index) * (itemWidth + itemSpacing) + itemWidth / 2
+    }
+
+    private func index(at x: CGFloat) -> Int {
+        let raw = Int((x / (itemWidth + itemSpacing)).rounded(.down))
+        return min(max(raw, 0), items.count - 1)
+    }
+
+    private func clampedCenter(_ x: CGFloat) -> CGFloat {
+        min(max(x, center(of: 0)), center(of: items.count - 1))
+    }
+
+    /// Bouncy, liquid settle; a plain fade-speed ease when Reduce Motion is on.
+    private var settle: Animation {
+        reduceMotion ? .easeOut(duration: 0.15) : .spring(response: 0.42, dampingFraction: 0.62)
+    }
+    private var follow: Animation {
+        reduceMotion ? .linear(duration: 0) : .interactiveSpring(response: 0.22, dampingFraction: 0.78)
+    }
+
     var body: some View {
-        HStack(spacing: 4) {
-            ForEach(items.indices, id: \.self) { index in
-                let item = items[index]
-                let isSelected = selection == index
-                Button {
-                    selection = index
-                } label: {
+        let lensX = dragX ?? center(of: selection)
+        let litIndex = index(at: lensX)
+        // The lens swells while held and stretches along the drag, like a drop of liquid.
+        let stretch = reduceMotion ? 0 : min(abs(dragVelocity) / 2600, 0.28)
+        let lensScale = CGSize(
+            width: (isPressed && !reduceMotion ? 1.12 : 1) + stretch,
+            height: (isPressed && !reduceMotion ? 1.16 : 1) - stretch * 0.35
+        )
+
+        ZStack(alignment: .leading) {
+            lens
+                .frame(width: itemWidth, height: itemHeight)
+                .scaleEffect(lensScale)
+                .offset(x: lensX - itemWidth / 2)
+
+            HStack(spacing: itemSpacing) {
+                ForEach(items.indices, id: \.self) { index in
+                    let item = items[index]
+                    let isLit = litIndex == index
                     Image(item.image)
                         .renderingMode(.template)
                         .resizable()
                         .scaledToFit()
                         .frame(width: 24, height: 24)
-                        .foregroundStyle(isSelected ? Color.primary : Color.primary.opacity(0.5))
-                        .frame(width: 76, height: 44)
-                        .background {
-                            // One pill that slides between tabs on top of the glass bar.
-                            if isSelected {
-                                Capsule()
-                                    .fill(iOSDesignSystem.selectionFill)
-                                    .matchedGeometryEffect(id: "selection", in: pill)
-                            }
-                        }
+                        .scaleEffect(isLit && isPressed && !reduceMotion ? 1.12 : 1)
+                        .foregroundStyle(isLit ? Color.primary : Color.primary.opacity(0.5))
+                        .frame(width: itemWidth, height: itemHeight)
                         .contentShape(Capsule())
+                        .accessibilityElement()
+                        .accessibilityLabel(item.key.localized)
+                        .accessibilityIdentifier(item.id)
+                        .accessibilityAddTraits(selection == index ? [.isButton, .isSelected] : .isButton)
+                        .accessibilityAction { selection = index }
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(item.key.localized)
-                .accessibilityIdentifier(item.id)
-                .accessibilityAddTraits(isSelected ? .isSelected : [])
             }
         }
+        .coordinateSpace(name: "compactTabBar")
+        .contentShape(Capsule())
+        // One gesture for tap and drag: press anywhere, slide the lens across the
+        // tabs, release to switch to the tab under it.
+        .gesture(
+            DragGesture(minimumDistance: 0, coordinateSpace: .named("compactTabBar"))
+                .onChanged { value in
+                    let x = clampedCenter(value.location.x)
+                    withAnimation(dragX == nil ? settle : follow) {
+                        dragX = x
+                        dragVelocity = value.velocity.width
+                    }
+                    hoverIndex = index(at: x)
+                }
+                .onEnded { value in
+                    let target = index(at: clampedCenter(value.location.x))
+                    withAnimation(settle) {
+                        selection = target
+                        dragX = nil
+                        dragVelocity = 0
+                    }
+                    hoverIndex = nil
+                }
+        )
+        .sensoryFeedback(.selection, trigger: hoverIndex) { _, new in new != nil }
         .padding(6)
-        .liquidGlassSurface(Capsule(), interactive: true)
+        .liquidGlassSurface(Capsule())
         .padding(.bottom, Self.bottomOffset(bottomInset: bottomInset))
-        .animation(.snappy(duration: 0.2), value: selection)
+    }
+
+    /// The moving selection lens: a soft fill plus a clear Liquid Glass layer on
+    /// iOS 26 so it bends the icons and bar beneath it as it slides.
+    @ViewBuilder
+    private var lens: some View {
+        if #available(iOS 26.0, *) {
+            Capsule()
+                .fill(iOSDesignSystem.selectionFill)
+                .glassEffect(.clear.interactive(), in: Capsule())
+        } else {
+            Capsule()
+                .fill(iOSDesignSystem.selectionFill)
+        }
     }
 }
 
