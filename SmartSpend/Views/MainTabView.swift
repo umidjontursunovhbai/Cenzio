@@ -10,19 +10,22 @@ struct MainTabView: View {
     @State private var bottomInset: CGFloat = 34
 
     var body: some View {
-        let clearance = CompactTabBar.clearance(bottomInset: bottomInset)
+        // iOS 26: the system tab bar, which has Apple's real Liquid Glass lens
+        // (press, drag, water-drop refraction). Older iOS keeps the compact bar.
+        let clearance = Self.usesNativeTabBar ? 0 : CompactTabBar.clearance(bottomInset: bottomInset)
+        let tabBarVisibility: Visibility = Self.usesNativeTabBar ? .visible : .hidden
         TabView(selection: $tabManager.selectedTab) {
-            Tab("dashboard", image: "hero-home", value: 0) {
-                DashboardView().toolbar(.hidden, for: .tabBar).reservesCompactTabBarSpace(clearance)
+            Tab("dashboard".localized, image: "hero-home", value: 0) {
+                DashboardView().toolbar(tabBarVisibility, for: .tabBar).reservesCompactTabBarSpace(clearance)
             }
-            Tab("expenses", image: "hero-list-bullet", value: 1) {
-                ExpenseListView().toolbar(.hidden, for: .tabBar).reservesCompactTabBarSpace(clearance)
+            Tab("expenses".localized, image: "hero-list-bullet", value: 1) {
+                ExpenseListView().toolbar(tabBarVisibility, for: .tabBar).reservesCompactTabBarSpace(clearance)
             }
-            Tab("recurring", image: "hero-arrow-path", value: 2) {
-                RecurringExpensesView().toolbar(.hidden, for: .tabBar).reservesCompactTabBarSpace(clearance)
+            Tab("recurring".localized, image: "hero-arrow-path", value: 2) {
+                RecurringExpensesView().toolbar(tabBarVisibility, for: .tabBar).reservesCompactTabBarSpace(clearance)
             }
-            Tab("settings", image: "hero-cog-6-tooth", value: 3) {
-                SettingsView().toolbar(.hidden, for: .tabBar).reservesCompactTabBarSpace(clearance)
+            Tab("settings".localized, image: "hero-cog-6-tooth", value: 3) {
+                SettingsView().toolbar(tabBarVisibility, for: .tabBar).reservesCompactTabBarSpace(clearance)
             }
         }
         .tint(Color.accentColor)
@@ -34,8 +37,10 @@ struct MainTabView: View {
             }
         }
         .overlay(alignment: .bottom) {
-            CompactTabBar(selection: $tabManager.selectedTab, bottomInset: bottomInset)
-                .ignoresSafeArea(.keyboard)
+            if !Self.usesNativeTabBar {
+                CompactTabBar(selection: $tabManager.selectedTab, bottomInset: bottomInset)
+                    .ignoresSafeArea(.keyboard)
+            }
         }
         .sheet(isPresented: $showingAddExpense) {
             AddExpenseView()
@@ -55,6 +60,11 @@ struct MainTabView: View {
                 checkAddExpenseIntent()
             }
         }
+    }
+
+    private static var usesNativeTabBar: Bool {
+        if #available(iOS 26.0, *) { return true }
+        return false
     }
 
     private func checkAddExpenseIntent() {

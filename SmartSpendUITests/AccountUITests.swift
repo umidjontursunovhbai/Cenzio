@@ -7,7 +7,7 @@ final class AccountUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchEnvironment["SMARTSPEND_UI_TEST_SKIP_SIGNIN"] = "1"
         app.launch()
-        let settings = app.buttons["tab.settings"]
+        let settings = app.tabBars.buttons["Settings"].exists ? app.tabBars.buttons["Settings"] : app.buttons["tab.settings"]
         XCTAssertTrue(settings.waitForExistence(timeout: 10))
         settings.tap()
         // Settings shows the account card only when signed in; sign-in itself lives on the launch screen.
