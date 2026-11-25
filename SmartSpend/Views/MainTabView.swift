@@ -15,17 +15,29 @@ struct MainTabView: View {
         let clearance = Self.usesNativeTabBar ? 0 : CompactTabBar.clearance(bottomInset: bottomInset)
         let tabBarVisibility: Visibility = Self.usesNativeTabBar ? .visible : .hidden
         TabView(selection: $tabManager.selectedTab) {
-            Tab("dashboard".localized, image: "hero-home", value: 0) {
+            Tab(value: 0) {
                 DashboardView().toolbar(tabBarVisibility, for: .tabBar).reservesCompactTabBarSpace(clearance)
+            } label: {
+                // Icon only; the title stays as the VoiceOver label.
+                Image("hero-home", label: Text("dashboard".localized))
             }
-            Tab("expenses".localized, image: "hero-list-bullet", value: 1) {
+            Tab(value: 1) {
                 ExpenseListView().toolbar(tabBarVisibility, for: .tabBar).reservesCompactTabBarSpace(clearance)
+            } label: {
+                // Icon only; the title stays as the VoiceOver label.
+                Image("hero-list-bullet", label: Text("expenses".localized))
             }
-            Tab("recurring".localized, image: "hero-arrow-path", value: 2) {
+            Tab(value: 2) {
                 RecurringExpensesView().toolbar(tabBarVisibility, for: .tabBar).reservesCompactTabBarSpace(clearance)
+            } label: {
+                // Icon only; the title stays as the VoiceOver label.
+                Image("hero-arrow-path", label: Text("recurring".localized))
             }
-            Tab("settings".localized, image: "hero-cog-6-tooth", value: 3) {
+            Tab(value: 3) {
                 SettingsView().toolbar(tabBarVisibility, for: .tabBar).reservesCompactTabBarSpace(clearance)
+            } label: {
+                // Icon only; the title stays as the VoiceOver label.
+                Image("hero-cog-6-tooth", label: Text("settings".localized))
             }
         }
         .tint(Color.accentColor)
