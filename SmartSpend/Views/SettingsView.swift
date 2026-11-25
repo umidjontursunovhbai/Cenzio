@@ -16,11 +16,13 @@ struct SettingsView: View {
     @State private var showingPrivacyPolicy = false
     @State private var showingAlert = false
     @AppStorage(AppearanceMode.storageKey) private var appearance = AppearanceMode.system
+    @Environment(\.colorScheme) private var colorScheme
 
     private enum Metrics {
         static let horizontalMargin: CGFloat = 24
         static let sectionSpacing: CGFloat = 28
         static let cardRadius: CGFloat = 20
+        static let heroRadius: CGFloat = 26
         static let rowMinHeight: CGFloat = 52
         static let tileSize: CGFloat = 30
         static let tileGlyph: CGFloat = 17
@@ -105,25 +107,7 @@ struct SettingsView: View {
                     iCloudSyncSection
                 }
 
-                settingsSection("settings_section_money".localized) {
-                    salaryRow
-                    sectionDivider
-                    Button {
-                        showingCurrencySelection = true
-                    } label: {
-                        rowLabel(
-                            icon: "credit-card",
-                            title: "currency".localized,
-                            trailing: dataManager.user.currency.rawValue
-                        )
-                    }
-                    .buttonStyle(SettingsPressStyle())
-                    sectionDivider
-                    // Budget Goals owns its NavigationStack and Done button, so present it like Dashboard does.
-                    settingsButtonRow(icon: "flag", title: "budget_goals".localized) {
-                        showingBudgetGoals = true
-                    }
-                }
+                moneyCard
 
                 settingsSection("settings_section_preferences".localized) {
                     Menu {
@@ -135,6 +119,7 @@ struct SettingsView: View {
                     } label: {
                         rowLabel(
                             icon: "paint-brush",
+                            tint: .indigo,
                             title: "appearance".localized,
                             trailing: appearance.title,
                             showsChevron: false
@@ -146,32 +131,33 @@ struct SettingsView: View {
                     sectionDivider
 
                     NavigationLink(destination: CategoryManagementView()) {
-                        rowLabel(icon: "tag", title: "categories".localized)
+                        rowLabel(icon: "tag", tint: .orange, title: "categories".localized)
                     }
                     .buttonStyle(SettingsPressStyle())
                 }
 
                 settingsSection("data_management".localized) {
-                    settingsButtonRow(icon: "arrow-down-tray", title: "import_data".localized) {
+                    settingsButtonRow(icon: "arrow-down-tray", tint: .cyan, title: "import_data".localized) {
                         showingDataImport = true
                     }
                     sectionDivider
-                    settingsButtonRow(icon: "arrow-up-tray", title: "export_data".localized) {
+                    settingsButtonRow(icon: "arrow-up-tray", tint: .teal, title: "export_data".localized) {
                         showingDataExport = true
                     }
                     sectionDivider
-                    settingsButtonRow(icon: "archive-box", title: "deleted_expenses".localized) {
+                    settingsButtonRow(icon: "archive-box", tint: Color(.systemGray), title: "deleted_expenses".localized) {
                         showingDeletedExpenses = true
                     }
                 }
 
                 settingsSection("support".localized) {
-                    settingsButtonRow(icon: "hand-raised", title: "privacy_policy".localized) {
+                    settingsButtonRow(icon: "hand-raised", tint: .purple, title: "privacy_policy".localized) {
                         showingPrivacyPolicy = true
                     }
                     sectionDivider
                     settingsButtonRow(
                         icon: "envelope",
+                        tint: .blue,
                         title: "email_us".localized,
                         showsChevron: false
                     ) {
@@ -239,17 +225,24 @@ struct SettingsView: View {
 
     private func avatar(for name: String?) -> some View {
         ZStack {
-            Circle().fill(Color.accentColor)
+            Circle().fill(
+                LinearGradient(
+                    colors: [Color.indigo, Color.blue],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
             if let initial = name?.trimmingCharacters(in: .whitespaces).first {
                 Text(String(initial).uppercased())
                     .font(.system(size: 22, weight: .semibold, design: .rounded))
-                    .foregroundStyle(iOSDesignSystem.onAccent)
+                    .foregroundStyle(.white)
             } else {
                 Image(systemName: "person.fill")
                     .font(.system(size: 22, weight: .medium))
-                    .foregroundStyle(iOSDesignSystem.onAccent)
+                    .foregroundStyle(.white)
             }
         }
+        .overlay(Circle().stroke(Color.white.opacity(0.18), lineWidth: 1))
         .frame(width: 52, height: 52)
         .accessibilityHidden(true)
     }
@@ -300,36 +293,115 @@ struct SettingsView: View {
 
     // MARK: - Money
 
-    private var salaryRow: some View {
-        Button {
-            showingMonthlySalary = true
-        } label: {
-            HStack(alignment: .center, spacing: Metrics.rowSpacing) {
-                iconTile("banknotes")
+    /// The one card with its own light: salary up top, currency and budget
+    /// goals as chips below it. A soft green glow sits inside the glass so the
+    /// screen has a warm focal point instead of a stack of identical black rows.
+    private var moneyCard: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                showingMonthlySalary = true
+            } label: {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 10) {
+                        iconTile("banknotes", tint: .green)
+                        Text("settings_salary_this_month".localized)
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.secondary)
+                        Spacer(minLength: 8)
+                        chevron
+                    }
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("settings_salary_this_month".localized)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
                     Text(currentMonthSalaryText)
-                        .font(.system(.title2, design: .rounded, weight: .bold))
+                        .font(.system(size: 34, weight: .bold, design: .rounded))
                         .foregroundStyle(currentMonthSalary > 0 ? Color.primary : Color(.systemOrange))
                         .monospacedDigit()
                         .lineLimit(1)
-                        .minimumScaleFactor(0.6)
+                        .minimumScaleFactor(0.5)
                 }
-
-                Spacer(minLength: 8)
-
-                chevron
+                .padding(.horizontal, Metrics.rowPadding + 2)
+                .padding(.top, 18)
+                .padding(.bottom, 14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
-            .padding(.horizontal, Metrics.rowPadding)
-            .padding(.vertical, 16)
-            .frame(maxWidth: .infinity, minHeight: 80, alignment: .leading)
-            .contentShape(Rectangle())
+            .buttonStyle(SettingsPressStyle())
+            .accessibilityIdentifier("settings.salary")
+
+            HStack(spacing: 10) {
+                moneyChip(
+                    icon: "credit-card",
+                    tint: .blue,
+                    title: "currency".localized,
+                    value: dataManager.user.currency.rawValue
+                ) {
+                    showingCurrencySelection = true
+                }
+                // Budget Goals owns its NavigationStack and Done button, so present it like Dashboard does.
+                moneyChip(
+                    icon: "flag",
+                    tint: .orange,
+                    title: "budget_goals".localized,
+                    value: nil
+                ) {
+                    showingBudgetGoals = true
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 12)
         }
-        .buttonStyle(SettingsPressStyle())
-        .accessibilityIdentifier("settings.salary")
+        .background(alignment: .topLeading) {
+            RadialGradient(
+                colors: [Color.green.opacity(colorScheme == .dark ? 0.26 : 0.14), .clear],
+                center: UnitPoint(x: 0.05, y: 0.0),
+                startRadius: 0,
+                endRadius: 280
+            )
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
+        .clipShape(heroShape)
+        .liquidGlassCard(cornerRadius: Metrics.heroRadius)
+    }
+
+    private func moneyChip(
+        icon: String,
+        tint: Color,
+        title: String,
+        value: String?,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                HeroIcon(icon, size: 16)
+                    .foregroundStyle(tint)
+                    .accessibilityHidden(true)
+                Text(title)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                Spacer(minLength: 4)
+                if let value {
+                    Text(value)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+            }
+            .padding(.horizontal, 12)
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .background(iOSDesignSystem.insetFill, in: chipShape)
+            .contentShape(chipShape)
+        }
+        .buttonStyle(ChipPressStyle())
+    }
+
+    private var chipShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: 14, style: .continuous)
+    }
+
+    private var heroShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: Metrics.heroRadius, style: .continuous)
     }
 
     // MARK: - Building blocks
@@ -367,36 +439,41 @@ struct SettingsView: View {
             .foregroundStyle(.tertiary)
     }
 
-    /// One tint for every row: a soft accent plate with an accent glyph. Color is
-    /// kept for meaning (red only on the destructive row), not to tell rows apart.
-    private func iconTile(_ icon: String, tint: Color = .accentColor) -> some View {
-        HeroIcon(icon, size: Metrics.tileGlyph)
-            .foregroundStyle(tint)
+    /// A solid system-hue tile with a white glyph, like the iOS Settings app.
+    /// Each row keeps its own hue so the eye finds it by color; on black glass
+    /// these tiles are the screen's color.
+    private func iconTile(_ icon: String, tint: Color) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
+        return HeroIcon(icon, size: Metrics.tileGlyph)
+            .foregroundStyle(.white)
             .frame(width: Metrics.tileSize, height: Metrics.tileSize)
-            .background(tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .background(tint.gradient, in: shape)
+            .overlay(shape.stroke(Color.white.opacity(0.14), lineWidth: 0.5))
             .accessibilityHidden(true)
     }
 
     private func settingsButtonRow(
         icon: String,
+        tint: Color,
         title: String,
         showsChevron: Bool = true,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            rowLabel(icon: icon, title: title, showsChevron: showsChevron)
+            rowLabel(icon: icon, tint: tint, title: title, showsChevron: showsChevron)
         }
         .buttonStyle(SettingsPressStyle())
     }
 
     private func rowLabel(
         icon: String,
+        tint: Color,
         title: String,
         trailing: String? = nil,
         showsChevron: Bool = true
     ) -> some View {
         HStack(spacing: Metrics.rowSpacing) {
-            iconTile(icon)
+            iconTile(icon, tint: tint)
 
             Text(title)
                 .font(.body)
@@ -446,6 +523,7 @@ struct SettingsView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(SettingsPressStyle())
+            .background(Color(.systemRed).opacity(colorScheme == .dark ? 0.10 : 0.06))
             .clipShape(cardShape)
             .liquidGlassCard(cornerRadius: Metrics.cardRadius)
 
@@ -463,7 +541,18 @@ struct SettingsView: View {
 private struct SettingsPressStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .background(configuration.isPressed ? Color(.systemFill).opacity(0.6) : Color.clear)
+            .background(configuration.isPressed ? Color.primary.opacity(0.08) : Color.clear)
+    }
+}
+
+/// Chips dim and shrink a touch while pressed; they sit on their own fill,
+/// so a background highlight would not read.
+private struct ChipPressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? 0.7 : 1)
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
     }
 }
 
