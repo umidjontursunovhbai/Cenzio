@@ -6,6 +6,7 @@
 //
 
 import AppIntents
+import Siren
 import SwiftUI
 import UIKit
 
@@ -28,6 +29,19 @@ struct SmartSpendApp: App {
 
 /// Registers for the silent CloudKit pushes that tell iCloud sync another device changed data.
 final class SmartSpendAppDelegate: NSObject, UIApplicationDelegate {
+    /// Shows an "update available" alert when the App Store has a newer version than this one.
+    /// Siren reads the public App Store lookup for this bundle ID; no release step is needed.
+    private func startUpdatePrompt() {
+        guard ProcessInfo.processInfo.environment["SMARTSPEND_UI_TEST_SKIP_SIGNIN"] != "1" else { return }
+        let siren = Siren.shared
+        siren.apiManager = APIManager(countryCode: Locale.current.region?.identifier)
+        siren.rulesManager = RulesManager(
+            globalRules: Rules(promptFrequency: .daily, forAlertType: .option),
+            showAlertAfterCurrentVersionHasBeenReleasedForDays: 0
+        )
+        siren.wail()
+    }
+
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         // No rubber-band overscroll: lists stop at their ends instead of springing past and back.
@@ -37,6 +51,7 @@ final class SmartSpendAppDelegate: NSObject, UIApplicationDelegate {
         UIScrollView.appearance().showsHorizontalScrollIndicator = false
         CloudSyncController.shared.start()
         application.registerForRemoteNotifications()
+        startUpdatePrompt()
         return true
     }
 

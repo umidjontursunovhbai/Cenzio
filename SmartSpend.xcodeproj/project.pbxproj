@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		5E1A00012F00000000000003 /* Siren in Frameworks */ = {isa = PBXBuildFile; productRef = 5E1A00012F00000000000002 /* Siren */; };
 		C66B61292FAC6F6600C81E92 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9E6DB8DB2E5A06A500476BE0 /* WidgetKit.framework */; };
 		C66B612A2FAC6F6600C81E92 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9E6DB8DD2E5A06A500476BE0 /* SwiftUI.framework */; };
 		C66B61392FAC6F6700C81E92 /* WidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C66B61282FAC6F6600C81E92 /* WidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -126,6 +127,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				5E1A00012F00000000000003 /* Siren in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -209,6 +211,7 @@
 			);
 			name = SmartSpend;
 			packageProductDependencies = (
+				5E1A00012F00000000000002 /* Siren */,
 			);
 			productName = SmartSpend;
 			productReference = 9E6DB8622E59C60700476BE0 /* SmartSpend.app */;
@@ -320,6 +323,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				9E95B4102ECC8CE4003E1678 /* XCRemoteSwiftPackageReference "swift-async-algorithms" */,
+				5E1A00012F00000000000001 /* XCRemoteSwiftPackageReference "Siren" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 9E6DB8632E59C60700476BE0 /* Products */;
@@ -803,7 +807,23 @@
 				minimumVersion = 1.0.4;
 			};
 		};
+		5E1A00012F00000000000001 /* XCRemoteSwiftPackageReference "Siren" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/ArtSabintsev/Siren.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 7.0.3;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		5E1A00012F00000000000002 /* Siren */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 5E1A00012F00000000000001 /* XCRemoteSwiftPackageReference "Siren" */;
+			productName = Siren;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 9E6DB85A2E59C60700476BE0 /* Project object */;
 }
