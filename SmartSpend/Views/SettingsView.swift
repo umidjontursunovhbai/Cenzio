@@ -493,13 +493,13 @@ private struct GroupedListBackdrop: ViewModifier {
 extension iOSDesignSystem {
     /// Quiet well/chip fill: light keeps systemGray6, dark is a faint white on black.
     static let settingsWellFill = Color(UIColor { traits in
-        traits.userInterfaceStyle == .dark ? UIColor.white.withAlphaComponent(0.06) : UIColor.systemGray6
+        traits.userInterfaceStyle == .dark ? UIColor.white.withAlphaComponent(0.05) : UIColor.systemGray6
     })
 
     /// Nested card plate: light keeps the tertiary grouped gray, dark is the near-black plate.
     static let settingsNestedPlate = Color(UIColor { traits in
         traits.userInterfaceStyle == .dark
-            ? UIColor(red: 0.075, green: 0.075, blue: 0.08, alpha: 1)
+            ? UIColor(white: 0.02, alpha: 1)
             : UIColor.tertiarySystemGroupedBackground
     })
 }

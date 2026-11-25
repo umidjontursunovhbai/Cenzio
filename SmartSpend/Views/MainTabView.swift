@@ -118,7 +118,7 @@ private struct CompactTabBar: View {
                         .resizable()
                         .scaledToFit()
                         .frame(width: 24, height: 24)
-                        .foregroundStyle(isSelected ? Color.primary : Color.secondary)
+                        .foregroundStyle(isSelected ? Color.primary : Color.primary.opacity(0.5))
                         .frame(width: 76, height: 44)
                         .background {
                             // One pill that slides between tabs on top of the glass bar.
