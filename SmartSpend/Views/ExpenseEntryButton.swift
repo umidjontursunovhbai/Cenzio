@@ -5,6 +5,7 @@ import UIKit
 /// a plus for the manual form, placed within thumb reach above the tab bar.
 struct ExpenseEntryBar: View {
     @Environment(\.floatingTabBarClearance) private var tabBarClearance
+    @ObservedObject private var flags = FeatureFlags.shared
     var accessibilityPrefix: String
     var isRecording = false
     var isProcessing = false
@@ -14,6 +15,8 @@ struct ExpenseEntryBar: View {
 
     var body: some View {
         HStack(spacing: 12) {
+            // Keep the button while a recording is in flight so it can still be stopped.
+            if flags.voiceEnabled || isRecording || isProcessing {
             Button {
                 guard !isProcessing else { return }
                 UIImpactFeedbackGenerator(style: isRecording ? .light : .heavy).impactOccurred()
@@ -39,6 +42,7 @@ struct ExpenseEntryBar: View {
             .disabled(isProcessing)
             .accessibilityIdentifier("\(accessibilityPrefix).voice-expense")
             .accessibilityLabel(isRecording ? voiceText("Stop recording", "Остановить запись") : isProcessing ? voiceText("Preparing expense", "Подготовка расхода") : voiceText("Add expense by voice", "Добавить расход голосом"))
+            }
 
             Button(action: onAdd) {
                 Image("hero-plus")
