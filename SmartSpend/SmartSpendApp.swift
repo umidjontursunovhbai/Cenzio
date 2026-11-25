@@ -84,10 +84,12 @@ private struct AppRootView: View {
         .onAppear { appearance.apply() }
         .onChange(of: appearance) { _, mode in mode.apply() }
         .task {
+            FeatureFlags.shared.refresh()
             guard !Self.skipsSignIn else { return }
             await account.refreshCredentialState()
         }
         .onChange(of: scenePhase) { _, phase in
+            if phase == .active { FeatureFlags.shared.refresh() }
             guard phase == .active, !Self.skipsSignIn else { return }
             CloudSyncController.shared.sceneDidBecomeActive()
             Task { await account.refreshCredentialState() }
