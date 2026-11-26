@@ -57,6 +57,8 @@ struct AddExpenseView: View {
     private enum Field: Hashable { case title, amount }
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var typeSize
     @ObservedObject private var dataManager = DataManager.shared
 
     @State private var title = ""
@@ -72,6 +74,8 @@ struct AddExpenseView: View {
     @State private var needsDateConfirmation = false
     @State private var isSaving = false
     @State private var saveError: String?
+    /// Set on save: today's window lights in the mini city and the shopper turns.
+    @State private var saved = false
     @FocusState private var focusedField: Field?
     private let prefill: VoiceExpensePrefill?
     private let onSaved: (() -> Void)?
@@ -212,9 +216,10 @@ struct AddExpenseView: View {
                         }
                     }
                 } header: {
-                    Text("expense_details".localized)
+                    StreetSectionHeader(title: "expense_details".localized, figure: .cyclist)
                 }
             }
+            .safeAreaInset(edge: .bottom, spacing: 0) { saveBar }
             .scrollDismissesKeyboard(.interactively)
             .scrollIndicators(.hidden)
             .navigationTitle("add_expense".localized)
@@ -226,15 +231,6 @@ struct AddExpenseView: View {
                     }
                     .foregroundStyle(.tint)
                     .accessibilityIdentifier("expense.cancel")
-                }
-
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("save".localized) {
-                        saveExpense()
-                    }
-                    .disabled(!canSave)
-                    .fontWeight(.semibold)
-                    .accessibilityIdentifier("expense.save")
                 }
 
                 ToolbarItemGroup(placement: .keyboard) {
@@ -270,6 +266,41 @@ struct AddExpenseView: View {
                 }
             }
         }
+    }
+
+    /// The mini city (hidden while typing and at accessibility text sizes) and the Save capsule
+    /// with the shopper standing on it.
+    private var saveBar: some View {
+        VStack(spacing: 0) {
+            if focusedField == nil && !typeSize.isAccessibilitySize {
+                SkylineBandView(litDays: savedLitDays, today: calendar.component(.day, from: Date()),
+                                parkedTaxi: true, glow: saved ? 1 : 0)
+                    .frame(height: 100)
+                    .transition(.opacity)
+            }
+            Button("save".localized, action: saveExpense)
+                .buttonStyle(PrimaryCapsuleButtonStyle())
+                // stays bright during the save moment; saveExpense ignores repeat taps
+                .disabled(!canSave && !saved)
+                .kerbFigure(.shopper, inset: 40, height: 26, turned: saved)
+                .accessibilityIdentifier("expense.save")
+                .padding(.horizontal, 28)
+                .padding(.top, focusedField == nil ? 0 : 30)
+                .padding(.bottom, 10)
+        }
+        .background(Color(.systemGroupedBackground))
+    }
+
+    private let calendar = Calendar.current
+
+    /// Days of this month with expenses, plus today once this expense is saved.
+    private var savedLitDays: Set<Int> {
+        let now = Date()
+        var days = Set(dataManager.expenses
+            .filter { calendar.isDate($0.date, equalTo: now, toGranularity: .month) }
+            .map { calendar.component(.day, from: $0.date) })
+        if saved { days.insert(calendar.component(.day, from: now)) }
+        return days
     }
 
     private func handleTitleNewlines(_ newValue: String) {
@@ -333,8 +364,12 @@ struct AddExpenseView: View {
             dataManager.addExpense(expense)
         }
         focusedField = nil
-        onSaved?()
-        dismiss()
+        // The onboarding promise: one more window lights, then the sheet closes.
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.5)) { saved = true }
+        DispatchQueue.main.asyncAfter(deadline: .now() + (reduceMotion ? 0.3 : 0.7)) {
+            onSaved?()
+            dismiss()
+        }
     }
 
     private func formatAmountInput(old: String, new: String) {

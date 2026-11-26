@@ -12,6 +12,8 @@ enum CityPage: String, CaseIterable {
 struct NightCityView: View {
     let page: CityPage
     var reduceMotion = false
+    /// Onboarding tags and labels over the city. Settings shows the bare city.
+    var showsOverlay = true
 
     @State private var change = CityChange.initial
 
@@ -25,7 +27,9 @@ struct NightCityView: View {
                     Canvas(rendersAsynchronously: false) { ctx, size in
                         frame.draw(in: ctx, sx: sx, sy: sy)
                     }
-                    CityOverlay(frame: frame, sx: sx, sy: sy)
+                    if showsOverlay {
+                        CityOverlay(frame: frame, sx: sx, sy: sy)
+                    }
                 }
             }
         }
@@ -531,74 +535,14 @@ extension CityFrame {
         }
     }
 
-    struct Pose {
-        var walk = false, ph = 0.0, dir = 1.0, alpha = 1.0, eat = false, bags = false
+    typealias Pose = StreetCast.Pose
+
+    private func person(_ ctx: inout GraphicsContext, _ x: Double, _ y: Double, _ o: Pose) {
+        StreetCast.person(ctx, x, y, o, color: ink, reduce: reduce)
     }
 
-    private func person(_ base: inout GraphicsContext, _ x: Double, _ y: Double, _ o: Pose) {
-        var ctx = base
-        ctx.translateBy(x: x, y: y)
-        ctx.scaleBy(x: o.dir < 0 ? -1.2 : 1.2, y: 1.2)
-        ctx.opacity = max(0, o.alpha)
-        let ph = reduce ? 0 : o.ph
-        let sw = o.walk ? sin(ph) * 0.5 : 0
-        func line(_ a: CGPoint, _ b: CGPoint, _ w: Double, _ color: Color = ink) {
-            var p = Path(); p.move(to: a); p.addLine(to: b)
-            ctx.stroke(p, with: .color(color), style: StrokeStyle(lineWidth: w, lineCap: .round))
-        }
-        for a in [sw, -sw] { line(CGPoint(x: 0, y: -10), CGPoint(x: sin(a) * 10, y: -10 + cos(a) * 10), 2.6) }
-        line(CGPoint(x: 0, y: -11), CGPoint(x: 0, y: -18.5), 4.6)
-        ctx.fill(circle(0.6, -22.4, 3), with: .color(ink))
-        if o.eat {
-            let k = (sin(ph * 0.45) + 1) / 2
-            let hx = 3.2 + k * 0.8, hy = -12 - k * 8
-            line(CGPoint(x: 0.5, y: -17.5), CGPoint(x: hx, y: hy), 2)
-            var bun = ctx
-            bun.translateBy(x: hx + 1.6, y: hy - 0.5)
-            bun.rotate(by: .radians(-0.4))
-            bun.fill(Path(ellipseIn: ellipse(0, 0, 2.4, 1.6)), with: .color(Color(red: 217 / 255, green: 154 / 255, blue: 74 / 255)))
-            line(CGPoint(x: 0, y: -17.5), CGPoint(x: -sin(sw) * 6, y: -11), 2)
-        } else if o.bags {
-            for (bx, c) in [(2.5, Color(red: 180 / 255, green: 138 / 255, blue: 90 / 255)), (-2.0, Color(red: 143 / 255, green: 108 / 255, blue: 69 / 255))] {
-                line(CGPoint(x: 0, y: -17.5), CGPoint(x: bx, y: -11), 2)
-                ctx.fill(rect(bx - 3, -11, 6, 7), with: .color(c))
-                var handle = Path()
-                handle.addArc(center: CGPoint(x: bx, y: -11), radius: 1.8, startAngle: .radians(.pi), endAngle: .radians(0), clockwise: false)
-                ctx.stroke(handle, with: .color(c), lineWidth: 1)
-            }
-        } else {
-            for a in [-sw, sw] { line(CGPoint(x: 0, y: -17.5), CGPoint(x: sin(a) * 6, y: -11), 2) }
-        }
-    }
-
-    private func taxi(_ base: inout GraphicsContext, _ x: Double, _ y: Double) {
-        var ctx = base
-        ctx.translateBy(x: x, y: y)
-        var beam = Path()
-        beam.move(to: CGPoint(x: 44, y: -9)); beam.addLine(to: CGPoint(x: 110, y: -16))
-        beam.addLine(to: CGPoint(x: 110, y: 0)); beam.addLine(to: CGPoint(x: 44, y: -5)); beam.closeSubpath()
-        let beamColor = Color(red: 1, green: 220 / 255, blue: 150 / 255)
-        ctx.fill(beam, with: .linearGradient(Gradient(colors: [beamColor.opacity(0.35), beamColor.opacity(0)]),
-                                             startPoint: CGPoint(x: 44, y: 0), endPoint: CGPoint(x: 110, y: 0)))
-        let yellow = Color(red: 242 / 255, green: 194 / 255, blue: 48 / 255)
-        ctx.fill(Path(roundedRect: CGRect(x: 0, y: -13, width: 46, height: 9), cornerRadius: 3), with: .color(yellow))
-        var cabin = Path()
-        cabin.move(to: CGPoint(x: 10, y: -13)); cabin.addLine(to: CGPoint(x: 15, y: -20))
-        cabin.addLine(to: CGPoint(x: 31, y: -20)); cabin.addLine(to: CGPoint(x: 37, y: -13)); cabin.closeSubpath()
-        ctx.fill(cabin, with: .color(yellow))
-        let glass = Color(red: 26 / 255, green: 36 / 255, blue: 64 / 255)
-        var w1 = Path()
-        w1.move(to: CGPoint(x: 13, y: -13.5)); w1.addLine(to: CGPoint(x: 16.5, y: -18.5))
-        w1.addLine(to: CGPoint(x: 22.5, y: -18.5)); w1.addLine(to: CGPoint(x: 22.5, y: -13.5)); w1.closeSubpath()
-        var w2 = Path()
-        w2.move(to: CGPoint(x: 24, y: -13.5)); w2.addLine(to: CGPoint(x: 24, y: -18.5))
-        w2.addLine(to: CGPoint(x: 30, y: -18.5)); w2.addLine(to: CGPoint(x: 34, y: -13.5)); w2.closeSubpath()
-        ctx.fill(w1, with: .color(glass)); ctx.fill(w2, with: .color(glass))
-        ctx.fill(rect(19, -23, 9, 3), with: .color(Color(red: 1, green: 241 / 255, blue: 196 / 255)))
-        ctx.fill(rect(43, -11, 3, 2.4), with: .color(Color(red: 1, green: 246 / 255, blue: 216 / 255)))
-        ctx.fill(rect(0, -11, 2, 2.4), with: .color(Color(red: 1, green: 92 / 255, blue: 72 / 255)))
-        ctx.fill(circle(10, -3.5, 3.6), with: .color(ink))
-        ctx.fill(circle(36, -3.5, 3.6), with: .color(ink))
+    private func taxi(_ ctx: inout GraphicsContext, _ x: Double, _ y: Double) {
+        StreetCast.taxi(ctx, x, y, wheel: ink)
     }
 
     /// A wall screen on tower 5 plays a "movie"; a viewer on a bench watches with popcorn.

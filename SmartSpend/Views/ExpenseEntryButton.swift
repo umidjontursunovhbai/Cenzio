@@ -5,8 +5,11 @@ import UIKit
 /// a plus for the manual form, placed within thumb reach above the tab bar.
 struct ExpenseEntryBar: View {
     @Environment(\.floatingTabBarClearance) private var tabBarClearance
+    @Environment(\.colorScheme) private var colorScheme
     @ObservedObject private var flags = FeatureFlags.shared
     var accessibilityPrefix: String
+    /// A street figure standing on the Add button (dashboard only).
+    var figure: StreetFigure?
     var isRecording = false
     var isProcessing = false
     var onAdd: () -> Void
@@ -50,12 +53,13 @@ struct ExpenseEntryBar: View {
                     .resizable()
                     .scaledToFit()
                     .frame(width: 24, height: 24)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(colorScheme == .dark ? NightTheme.ink : .white)
                     .frame(width: 56, height: 56)
-                    .background(Circle().fill(Color.accentColor))
-                    .shadow(color: Color.accentColor.opacity(0.3), radius: 10, x: 0, y: 5)
+                    .background(Circle().fill(NightTheme.figure(colorScheme)))
+                    .shadow(color: .black.opacity(0.25), radius: 10, x: 0, y: 5)
                     .contentShape(Circle())
             }
+            .modifier(OptionalKerbFigure(figure: figure))
             .buttonStyle(.plain)
             .disabled(isRecording || isProcessing)
             .accessibilityIdentifier("\(accessibilityPrefix).add-expense")
@@ -76,6 +80,19 @@ extension View {
     func expenseEntryBar(_ bar: ExpenseEntryBar, hidden: Bool = false) -> some View {
         overlay(alignment: .bottomTrailing) {
             if !hidden { bar }
+        }
+    }
+}
+
+/// Adds `kerbFigure` only when a figure is given.
+private struct OptionalKerbFigure: ViewModifier {
+    let figure: StreetFigure?
+
+    func body(content: Content) -> some View {
+        if let figure {
+            content.kerbFigure(figure, alignment: .center, inset: 0, height: 26)
+        } else {
+            content
         }
     }
 }

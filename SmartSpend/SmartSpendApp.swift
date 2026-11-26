@@ -14,6 +14,10 @@ import UIKit
 struct SmartSpendApp: App {
     @UIApplicationDelegateAdaptor(SmartSpendAppDelegate.self) private var appDelegate
 
+    init() {
+        NightTheme.applyNavigationTitleFont()
+    }
+
     var body: some Scene {
         WindowGroup {
             AppRootView()

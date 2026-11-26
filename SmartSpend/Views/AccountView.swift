@@ -9,11 +9,10 @@ enum AppleAccountDisplay {
         nonEmpty(account?.fullName) ?? nonEmpty(account?.email) ?? "account_apple_id".localized
     }
 
-    /// Email when it adds information beyond the title, otherwise "Signed in with Apple".
-    static func subtitle(for account: AppleAccount?) -> String {
-        guard let account else { return "account_not_signed_in".localized }
-        if let email = nonEmpty(account.email), email != title(for: account) { return email }
-        return "account_signed_in_with_apple".localized
+    /// Email under the name, only when it adds information beyond the title.
+    static func detail(for account: AppleAccount?) -> String? {
+        guard let email = nonEmpty(account?.email), email != title(for: account) else { return nil }
+        return email
     }
 
     private static func nonEmpty(_ value: String?) -> String? {
@@ -31,85 +30,67 @@ struct AccountView: View {
     @State private var deleteError: String?
     @Environment(\.dismiss) private var dismiss
 
+    @Environment(\.colorScheme) private var colorScheme
+
     var body: some View {
         List {
-            Section {
-                HStack(spacing: 14) {
-                    Image(systemName: "apple.logo")
-                        .font(.system(size: 22, weight: .medium))
-                        .foregroundStyle(.white)
-                        .frame(width: 44, height: 44)
-                        .background(Color.primary, in: Circle())
-                        .accessibilityHidden(true)
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(AppleAccountDisplay.title(for: store.account))
-                            .font(.headline)
-                            .accessibilityIdentifier("account.name")
-                        Text(store.account == nil ? "account_not_signed_in".localized : "account_signed_in_with_apple".localized)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .accessibilityIdentifier("account.provider")
-                    }
-                }
-                .padding(.vertical, 4)
-                .accessibilityElement(children: .combine)
+            profileHeader
 
-                if let name = store.account?.fullName, !name.isEmpty {
-                    LabeledContent("account_name".localized, value: name)
-                }
-                if let email = store.account?.email, !email.isEmpty {
-                    LabeledContent("account_email".localized, value: email)
-                }
-            } footer: {
-                Text("account_local_data_footer".localized)
-            }
-
-            if store.account != nil {
-                Section {
-                    Button("account_sign_out".localized, role: .destructive) { confirmingSignOut = true }
+            Group {
+                if store.account != nil {
+                    Section {
+                        Button(role: .destructive) { confirmingSignOut = true } label: {
+                            Text("account_sign_out".localized).frame(maxWidth: .infinity)
+                        }
                         .accessibilityIdentifier("account.signOut")
-                } footer: {
-                    Text("account_manage_apple_id_footer".localized)
-                }
+                    } footer: {
+                        Text("account_local_data_footer".localized)
+                    }
 
-                Section {
-                    Button(role: .destructive) { confirmingDelete = true } label: {
-                        HStack {
-                            Text("account_delete".localized)
-                            if isDeleting {
-                                Spacer()
-                                ProgressView()
+                    Section {
+                        Button(role: .destructive) { confirmingDelete = true } label: {
+                            HStack(spacing: 8) {
+                                Text("account_delete".localized)
+                                if isDeleting { ProgressView() }
                             }
+                            .frame(maxWidth: .infinity)
+                        }
+                        .disabled(isDeleting)
+                        .accessibilityIdentifier("account.delete")
+                    } footer: {
+                        Text("account_delete_footer".localized)
+                    }
+                } else {
+                    Section {
+                        SignInWithAppleButton(.signIn) { request in
+                            request.requestedScopes = [.fullName, .email]
+                        } onCompletion: { result in
+                            store.handle(result)
+                        }
+                        // Apple's rule: white button on dark backgrounds, black on light.
+                        .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
+                        .frame(height: 52)
+                        .clipShape(Capsule())
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                        .accessibilityIdentifier("account.signIn")
+                    } footer: {
+                        if let message = store.errorMessage {
+                            Text(message).foregroundStyle(.red)
+                        } else {
+                            Text("account_sign_in_footer".localized)
                         }
                     }
-                    .disabled(isDeleting)
-                    .accessibilityIdentifier("account.delete")
-                } footer: {
-                    Text("account_delete_footer".localized)
-                }
-            } else {
-                Section {
-                    SignInWithAppleButton(.signIn) { request in
-                        request.requestedScopes = [.fullName, .email]
-                    } onCompletion: { result in
-                        store.handle(result)
-                    }
-                    .signInWithAppleButtonStyle(.black)
-                    .frame(height: 48)
-                    .listRowInsets(EdgeInsets())
-                    .accessibilityIdentifier("account.signIn")
-                } footer: {
-                    if let message = store.errorMessage {
-                        Text(message).foregroundStyle(.red)
-                    } else {
-                        Text("account_sign_in_footer".localized)
-                    }
                 }
             }
+            .listRowBackground(Rectangle().fill(.ultraThinMaterial))
         }
         .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .background { cityBackground }
         .navigationTitle("account_title".localized)
         .navigationBarTitleDisplayMode(.inline)
+        .tint(colorScheme == .dark ? .white : OnboardingPalette.ink)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button("done".localized) { dismiss() }
@@ -134,6 +115,77 @@ struct AccountView: View {
         .alert("account_delete".localized, isPresented: Binding(get: { deleteError != nil }, set: { if !$0 { deleteError = nil } })) {
             Button("ok".localized) { deleteError = nil }
         } message: { Text(deleteError ?? "") }
+    }
+
+    /// Large centered avatar, name and email, like the Apple ID page. No row background.
+    private var profileHeader: some View {
+        let account = store.account
+        let detail = AppleAccountDisplay.detail(for: account)
+        return Section {
+            VStack(spacing: 4) {
+                avatar(for: account)
+                    .padding(.bottom, 8)
+                Text(account == nil ? "account_not_signed_in".localized : AppleAccountDisplay.title(for: account))
+                    .font(.custom("Big Shoulders Display", size: 30, relativeTo: .title).weight(.heavy))
+                    .foregroundStyle(colorScheme == .dark ? OnboardingPalette.fg : OnboardingPalette.ink)
+                    .multilineTextAlignment(.center)
+                    .accessibilityIdentifier("account.name")
+                if let detail {
+                    Text(detail)
+                        .font(.subheadline)
+                        .foregroundStyle(colorScheme == .dark ? OnboardingPalette.silver : .secondary)
+                        .multilineTextAlignment(.center)
+                        .accessibilityIdentifier("account.email")
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.top, 4)
+            .accessibilityElement(children: .combine)
+            .listRowBackground(Color.clear)
+            .listRowInsets(EdgeInsets())
+        }
+    }
+
+    /// White circle with the first letter of the name (or email); a person glyph when
+    /// there is neither. Signed out: a quiet tile instead of the white circle.
+    private func avatar(for account: AppleAccount?) -> some View {
+        let source = account?.fullName.flatMap { $0.isEmpty ? nil : $0 } ?? account?.email
+        let initial = source?.trimmingCharacters(in: .whitespaces).first
+        return ZStack {
+            if account == nil {
+                Circle().fill(Color.primary.opacity(0.12))
+                Image(systemName: "person.fill")
+                    .font(.system(size: 34, weight: .medium))
+                    .foregroundStyle(.secondary)
+            } else {
+                Circle().fill(.white)
+                    .overlay(Circle().strokeBorder(Color.black.opacity(colorScheme == .dark ? 0 : 0.12), lineWidth: 1))
+                if let initial {
+                    Text(String(initial).uppercased())
+                        .font(OnboardingPalette.display(42))
+                        .foregroundStyle(OnboardingPalette.ink)
+                } else {
+                    Image(systemName: "person.fill")
+                        .font(.system(size: 34, weight: .medium))
+                        .foregroundStyle(OnboardingPalette.ink)
+                }
+            }
+        }
+        .frame(width: 84, height: 84)
+        .accessibilityHidden(true)
+    }
+
+    /// Same still, blurred city as Settings: night in dark mode, day in light mode.
+    private var cityBackground: some View {
+        ZStack(alignment: .bottom) {
+            Color(.systemBackground)
+            NightCityView(page: colorScheme == .dark ? .smart : .privacy, reduceMotion: true, showsOverlay: false)
+                .aspectRatio(City.W / City.H, contentMode: .fill)
+                .blur(radius: 14)
+                .opacity(colorScheme == .dark ? 0.8 : 0.55)
+        }
+        .ignoresSafeArea()
+        .accessibilityHidden(true)
     }
 
     private func authenticateAndDelete() {
