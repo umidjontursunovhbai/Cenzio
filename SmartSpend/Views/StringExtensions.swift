@@ -553,7 +553,6 @@ extension String {
             "appearance_light": "Light",
             "appearance_dark": "Dark",
             "account_apple_id": "Apple ID",
-            "account_signed_in_with_apple": "Signed in with Apple",
             "account_not_signed_in": "Not signed in",
             "account_name": "Name",
             "account_email": "Email",
@@ -568,7 +567,6 @@ extension String {
             "account_delete_confirm_message": "All expenses, categories, budgets and settings will be deleted from this iPhone and from iCloud on all your devices. This can't be undone.",
             "account_delete_auth_reason": "Confirm deleting your Cenzio account",
             "account_delete_failed": "Your account couldn't be deleted because iCloud is unreachable. Nothing was deleted. Check your connection and try again.",
-            "account_manage_apple_id_footer": "To stop using your Apple ID with Cenzio, open the Settings app, tap your name, then Sign-In & Security > Sign in with Apple.",
 
             // iCloud sync
             "icloud_sync_status_no_account": "Sign in to iCloud",
