@@ -2739,6 +2739,347 @@
           }
         }
       }
+    },
+    "onboarding_add_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yozing, ayting yoki chekni skanerlang. Qolganini Cenzio to‘ldiradi."
+          }
+        }
+      }
+    },
+    "onboarding_add_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bir soniyada qo‘shing"
+          }
+        }
+      }
+    },
+    "onboarding_back": {
+      "extractionState": "manual",
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Orqaga"
+          }
+        }
+      }
+    },
+    "onboarding_budget_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oylik byudjet qo‘ying. Tahlil nima o‘zgarganini va nega ekanini ko‘rsatadi."
+          }
+        }
+      }
+    },
+    "onboarding_budget_left": {
+      "extractionState": "manual",
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "oylik byudjet qoldi"
+          }
+        }
+      }
+    },
+    "onboarding_budget_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pul qayerga ketishini ko‘ring"
+          }
+        }
+      }
+    },
+    "onboarding_chip_food": {
+      "extractionState": "manual",
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ovqat"
+          }
+        }
+      }
+    },
+    "onboarding_chip_fun": {
+      "extractionState": "manual",
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ko‘ngilochar"
+          }
+        }
+      }
+    },
+    "onboarding_daily_limit": {
+      "extractionState": "manual",
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kunlik limit"
+          }
+        }
+      }
+    },
+    "onboarding_next": {
+      "extractionState": "manual",
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keyingi"
+          }
+        }
+      }
+    },
+    "onboarding_private_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reklama yo‘q, kuzatuv yo‘q. Qurilmalar o‘rtasida sinxronlash uchun kiring."
+          }
+        }
+      }
+    },
+    "onboarding_private_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Faqat siz ko‘rasiz"
+          }
+        }
+      }
+    },
+    "onboarding_sign_food": {
+      "extractionState": "manual",
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ovqat"
+          }
+        }
+      }
+    },
+    "onboarding_sign_health": {
+      "extractionState": "manual",
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sog‘liq"
+          }
+        }
+      }
+    },
+    "onboarding_sign_transport": {
+      "extractionState": "manual",
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transport"
+          }
+        }
+      }
+    },
+    "onboarding_smart_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Taxminan 10 ta xarajatdan keyin Cenzio kategoriyani o‘zi tanlaydi."
+          }
+        }
+      }
+    },
+    "onboarding_smart_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sizni o‘rganadigan kategoriyalar"
+          }
+        }
+      }
+    },
+    "onboarding_tag_cinema": {
+      "extractionState": "manual",
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kino"
+          }
+        }
+      }
+    },
+    "onboarding_tag_coffee": {
+      "extractionState": "manual",
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qahva"
+          }
+        }
+      }
+    },
+    "onboarding_tag_expense": {
+      "extractionState": "manual",
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xarajat"
+          }
+        }
+      }
+    },
+    "onboarding_tag_expense_added": {
+      "extractionState": "manual",
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xarajat qo‘shildi"
+          }
+        }
+      }
+    },
+    "onboarding_tag_groceries": {
+      "extractionState": "manual",
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oziq-ovqat"
+          }
+        }
+      }
+    },
+    "onboarding_tag_icloud": {
+      "extractionState": "manual",
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "va o‘zingizning iCloud"
+          }
+        }
+      }
+    },
+    "onboarding_tag_iphone": {
+      "extractionState": "manual",
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shu iPhone"
+          }
+        }
+      }
+    },
+    "onboarding_tag_lunch": {
+      "extractionState": "manual",
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tushlik"
+          }
+        }
+      }
+    },
+    "onboarding_tag_taxi": {
+      "extractionState": "manual",
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Taksi"
+          }
+        }
+      }
+    },
+    "onboarding_tag_taxi_work": {
+      "extractionState": "manual",
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ishga taksi"
+          }
+        }
+      }
+    },
+    "onboarding_voice_body": {
+      "extractionState": "manual",
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bitta gap, uchta xarajat. Cenzio ularni o‘zi ajratadi."
+          }
+        }
+      }
+    },
+    "onboarding_voice_line": {
+      "extractionState": "manual",
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "qahva, taksi va tushlik"
+          }
+        }
+      }
+    },
+    "onboarding_voice_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bir nechtasini birdan ayting"
+          }
+        }
+      }
+    },
+    "onboarding_welcome_line": {
+      "extractionState": "manual",
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pulingiz qayerga ketayotganini biling."
+          }
+        }
+      }
     }
   },
   "version": "1.0"
