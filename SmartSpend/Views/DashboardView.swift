@@ -47,7 +47,13 @@ struct DashboardView: View {
                     .allowsHitTesting(!voice.isVisible || voice.prefill != nil)
                     .accessibilityHidden(voice.isVisible && voice.prefill == nil)
 
+                    SkylineBandView(litDays: litDays, today: calendar.component(.day, from: Date()))
+                        .frame(height: 150)
+                        .padding(.horizontal, -iOSDesignSystem.Spacing.screenMargin)
+                        .padding(.vertical, -10)
+
                     heroCard
+                        .kerbFigure(.snacker, alignment: .leading, inset: 22, height: 24)
                         .accessibilityElement(children: .contain)
                         .accessibilityIdentifier("dashboard.overview")
 
@@ -78,7 +84,7 @@ struct DashboardView: View {
                 .padding(.bottom, 72)
             }
             .background(iOSDesignSystem.appBackground)
-            .expenseEntryBar(ExpenseEntryBar(accessibilityPrefix: "dashboard", isRecording: voice.isRecording, isProcessing: voice.isProcessing, onAdd: {
+            .expenseEntryBar(ExpenseEntryBar(accessibilityPrefix: "dashboard", figure: .walker, isRecording: voice.isRecording, isProcessing: voice.isProcessing, onAdd: {
                 showingAddExpense = true
             }, onVoice: {
                 voice.start()
@@ -129,6 +135,11 @@ struct DashboardView: View {
 
     private var currency: Currency { dataManager.user.currency }
     private var hasMonthSpending: Bool { overview.monthTotal > 0 }
+
+    /// Days of this month with at least one expense: the lit windows of the skyline band.
+    private var litDays: Set<Int> {
+        Set(overview.monthExpenses.map { calendar.component(.day, from: $0.date) })
+    }
 
     private func money(_ amount: Double) -> String {
         CurrencyFormatter.format(amount, currency: currency)
@@ -213,7 +224,7 @@ struct DashboardView: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(money(income > 0 ? abs(snapshot.availableAfterBills) : overview.monthTotal))
-                    .font(.system(size: 40, weight: .bold, design: .rounded))
+                    .font(NightTheme.display(48))
                     .monospacedDigit()
                     .foregroundStyle(isOver ? Color(.systemRed) : .primary)
                     .lineLimit(1)

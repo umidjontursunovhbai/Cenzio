@@ -12,6 +12,244 @@
         }
       }
     },
+    "account_apple_id": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple ID"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple ID"
+          }
+        }
+      }
+    },
+    "account_delete": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete Account"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Akkauntni o'chirish"
+          }
+        }
+      }
+    },
+    "account_delete_auth_reason": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Confirm deleting your Cenzio account"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cenzio akkauntini o'chirishni tasdiqlang"
+          }
+        }
+      }
+    },
+    "account_delete_confirm_message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All expenses, categories, budgets and settings will be deleted from this iPhone and from iCloud on all your devices. This can't be undone."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Barcha xarajatlar, kategoriyalar, byudjet va sozlamalar shu iPhone'dan va hamma qurilmalardagi iCloud'dan o'chadi. Qaytarib bo'lmaydi."
+          }
+        }
+      }
+    },
+    "account_delete_confirm_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete your account?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Akkauntni o'chirasizmi?"
+          }
+        }
+      }
+    },
+    "account_delete_failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your account couldn't be deleted because iCloud is unreachable. Nothing was deleted. Check your connection and try again."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iCloud bilan aloqa yo'qligi sababli akkaunt o'chmadi. Hech narsa o'chirilmadi. Internetni tekshirib, qayta urinib ko'ring."
+          }
+        }
+      }
+    },
+    "account_delete_footer": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deletes your Cenzio account and all your data on this iPhone and in iCloud, on every device. This can't be undone."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Akkaunt va barcha ma'lumotlar shu iPhone'dan va iCloud'dan, hamma qurilmalarda o'chadi. Qaytarib bo'lmaydi."
+          }
+        }
+      }
+    },
+    "account_local_data_footer": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your expenses are stored on this iPhone and in your own iCloud. Signing out doesn't delete them."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xarajatlaringiz shu iPhone'da va sizning iCloud'ingizda saqlanadi. Chiqish ularni o'chirmaydi."
+          }
+        }
+      }
+    },
+    "account_not_signed_in": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not signed in"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kirilmagan"
+          }
+        }
+      }
+    },
+    "account_sign_in_footer": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Signing in is optional. Cenzio works the same without an account."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kirish ixtiyoriy. Cenzio akkauntsiz ham xuddi shunday ishlaydi."
+          }
+        }
+      }
+    },
+    "account_sign_out": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign Out"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chiqish"
+          }
+        }
+      }
+    },
+    "account_sign_out_confirm_message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your expenses stay on this iPhone, and you can keep using Cenzio without an account."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Xarajatlar shu iPhone'da qoladi. Cenzio'dan akkauntsiz ham foydalanish mumkin."
+          }
+        }
+      }
+    },
+    "account_sign_out_confirm_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign out of Cenzio?"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cenzio'dan chiqasizmi?"
+          }
+        }
+      }
+    },
+    "account_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Account"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Akkaunt"
+          }
+        }
+      }
+    },
     "active": {
       "extractionState": "manual",
       "localizations": {
@@ -144,6 +382,17 @@
         }
       }
     },
+    "appearance": {
+      "extractionState": "manual",
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ko‘rinish"
+          }
+        }
+      }
+    },
     "apply_category_to_all_message": {
       "extractionState": "manual",
       "localizations": {
@@ -217,6 +466,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Budget Goals"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Byudjet maqsadlari"
           }
         }
       }
@@ -306,6 +561,12 @@
             "state": "translated",
             "value": "Categories"
           }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kategoriyalar"
+          }
         }
       }
     },
@@ -382,6 +643,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "Are you sure you want to delete all expenses, patterns, and salary data? This action cannot be undone."
+          }
+        }
+      }
+    },
+    "clear_data_footer": {
+      "extractionState": "manual",
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nimani o‘chirishni tanlang. Face ID yoki parol buni tasdiqlaydi."
+          }
+        }
+      }
+    },
+    "clear_data_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ma’lumotlarni tozalash"
           }
         }
       }
@@ -613,6 +896,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Currency"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Valyuta"
           }
         }
       }
@@ -932,6 +1221,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Email Support"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bizga yozing"
           }
         }
       }
@@ -1406,6 +1701,12 @@
             "state": "translated",
             "value": "Language"
           }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Til"
+          }
         }
       }
     },
@@ -1493,6 +1794,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Monthly Salary"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oylik maosh"
           }
         }
       }
@@ -1670,6 +1977,12 @@
             "state": "translated",
             "value": "Not Set"
           }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Belgilanmagan"
+          }
         }
       }
     },
@@ -1779,6 +2092,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Privacy Policy"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Maxfiylik siyosati"
           }
         }
       }
@@ -2164,6 +2483,199 @@
           "stringUnit": {
             "state": "translated",
             "value": "Settings"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sozlamalar"
+          }
+        }
+      }
+    },
+    "settings_app": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "App"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ilova"
+          }
+        }
+      }
+    },
+    "settings_export": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Export"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eksport"
+          }
+        }
+      }
+    },
+    "settings_help": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Help"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yordam"
+          }
+        }
+      }
+    },
+    "settings_import": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import"
+          }
+        }
+      }
+    },
+    "settings_money": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Money"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pul"
+          }
+        }
+      }
+    },
+    "settings_privacy_line": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your data stays on this iPhone and in your iCloud."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ma’lumotlaringiz shu iPhone’da va iCloud’ingizda qoladi."
+          }
+        }
+      }
+    },
+    "settings_rate": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rate Cenzio"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cenzio’ni baholash"
+          }
+        }
+      }
+    },
+    "settings_recently_deleted": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recently deleted"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yaqinda o‘chirilganlar"
+          }
+        }
+      }
+    },
+    "settings_synced": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Synced with iCloud"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iCloud bilan sinxronlangan"
+          }
+        }
+      }
+    },
+    "settings_syncing": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Syncing with iCloud…"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iCloud bilan sinxronlanmoqda…"
+          }
+        }
+      }
+    },
+    "settings_your_data": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your data"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ma’lumotlaringiz"
           }
         }
       }
