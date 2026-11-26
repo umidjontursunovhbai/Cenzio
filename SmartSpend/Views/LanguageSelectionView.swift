@@ -25,9 +25,12 @@ struct LanguageSelectionView: View {
                 Section {
                     Text("app_interface_language".localized)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(NightTheme.secondaryLabel)
                 }
+                .listRowBackground(NightTheme.glassFill)
             }
+            .scrollContentBackground(.hidden)
+            .background(NightGround())
             .navigationTitle("language".localized)
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
@@ -40,6 +43,7 @@ struct LanguageSelectionView: View {
                 }
             }
         }
+        .tint(NightTheme.accent)
     }
     
     private var cancelButton: some View {
@@ -74,7 +78,7 @@ struct LanguageRowView: View {
                     
                     Text(language.englishName)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(NightTheme.secondaryLabel)
                 }
                 
                 Spacer()
@@ -88,6 +92,8 @@ struct LanguageRowView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .listRowBackground(NightTheme.glassFill)
+        .listRowSeparatorTint(NightTheme.hair)
     }
 }
 
