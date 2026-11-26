@@ -10,6 +10,8 @@ struct SkylineBandView: View {
     let today: Int
     /// Parked taxi (add expense sheet) instead of one drive across.
     var parkedTaxi = false
+    /// The dashboard shows the city without the taxi (owner, 2026-11-26).
+    var showsTaxi = true
     /// Strength of the glow around today's window, 0...1. Animatable.
     var glow: Double = 1
 
@@ -25,7 +27,7 @@ struct SkylineBandView: View {
         GeometryReader { geo in
             ZStack(alignment: .bottomLeading) {
                 SkylineBandCanvas(lit: litDays, today: today, day: colorScheme != .dark, glow: glow)
-                if !typeSize.isAccessibilitySize {
+                if showsTaxi, !typeSize.isAccessibilitySize {
                     // taxi wheels sit on the street line (its box reaches 1 unit below the wheels)
                     StreetFigureView(figure: .taxi, height: 24, walksIn: false)
                         .offset(x: taxiX, y: -(Self.street - 1))

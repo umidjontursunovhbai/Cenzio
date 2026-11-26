@@ -125,3 +125,130 @@ struct StreetSectionHeader: View {
         .accessibilityAddTraits(.isHeader)
     }
 }
+
+// MARK: - Dashboard surfaces (night street)
+
+extension NightTheme {
+    private static func dynamic(dark: UIColor, light: UIColor) -> Color {
+        Color(UIColor { $0.userInterfaceStyle == .dark ? dark : light })
+    }
+
+    /// Secondary text: silver at night, the system secondary label by day.
+    static let secondaryLabel = dynamic(dark: UIColor(silver), light: .secondaryLabel)
+    /// UI accent: white at night, ink by day.
+    static let accent = dynamic(dark: UIColor(fg), light: UIColor(ink))
+    /// White glass group fill and its edge.
+    static let glassFill = dynamic(dark: UIColor(white: 1, alpha: 0.07), light: .secondarySystemGroupedBackground)
+    static let glassLine = dynamic(dark: UIColor(white: 1, alpha: 0.10), light: UIColor(white: 0, alpha: 0.06))
+    /// Hairline between rows and around the metric trio.
+    static let hair = dynamic(dark: UIColor(fg).withAlphaComponent(0.14), light: .separator)
+    /// Tile behind a row icon and empty meter tracks.
+    static let iconFill = dynamic(dark: UIColor(white: 1, alpha: 0.09), light: UIColor(white: 0, alpha: 0.05))
+    static let track = dynamic(dark: UIColor(white: 1, alpha: 0.08), light: UIColor(white: 0, alpha: 0.07))
+
+    /// Distance from the top of a Big Shoulders text line to its cap line, so a figure can
+    /// stand on the letters.
+    static func capDrop(_ size: CGFloat, weight: UIFont.Weight = .heavy) -> CGFloat {
+        let descriptor = UIFontDescriptor(fontAttributes: [
+            .family: displayFamily,
+            .traits: [UIFontDescriptor.TraitKey.weight: weight],
+        ])
+        let font = UIFont(descriptor: descriptor, size: size)
+        return max(0, font.ascender - font.capHeight)
+    }
+}
+
+/// Page ground: a navy glow fading to ink at night, the grouped system background by day.
+struct NightGround: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        if colorScheme == .dark {
+            ZStack {
+                LinearGradient(stops: [
+                    .init(color: Color(red: 11 / 255, green: 16 / 255, blue: 32 / 255), location: 0),
+                    .init(color: NightTheme.ink, location: 0.4),
+                ], startPoint: .top, endPoint: .bottom)
+                RadialGradient(colors: [Color(red: 40 / 255, green: 52 / 255, blue: 84 / 255).opacity(0.55), .clear],
+                               center: .top, startRadius: 0, endRadius: 420)
+            }
+            .ignoresSafeArea()
+        } else {
+            Color(.systemGroupedBackground).ignoresSafeArea()
+        }
+    }
+}
+
+extension View {
+    /// A white glass group (dashboard sections): 22 pt corners, hairline edge.
+    func nightGroup() -> some View {
+        let shape = RoundedRectangle(cornerRadius: 22, style: .continuous)
+        return frame(maxWidth: .infinity, alignment: .leading)
+            .background(NightTheme.glassFill, in: shape)
+            .overlay(shape.stroke(NightTheme.glassLine, lineWidth: 1))
+    }
+
+    /// A street figure standing on the cap line of this Big Shoulders text, just past its
+    /// trailing end. Hidden at accessibility text sizes.
+    func capFigure(_ figure: StreetFigure?, fontSize: CGFloat, relativeTo style: Font.TextStyle,
+                   weight: UIFont.Weight = .heavy, height: CGFloat = 22, gap: CGFloat = 8) -> some View {
+        modifier(CapFigureModifier(figure: figure, fontSize: fontSize, style: style, weight: weight, height: height, gap: gap))
+    }
+}
+
+private struct CapFigureModifier: ViewModifier {
+    let figure: StreetFigure?
+    let weight: UIFont.Weight
+    let height: CGFloat
+    let gap: CGFloat
+    @ScaledMetric private var size: CGFloat
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    init(figure: StreetFigure?, fontSize: CGFloat, style: Font.TextStyle, weight: UIFont.Weight, height: CGFloat, gap: CGFloat) {
+        self.figure = figure
+        self.weight = weight
+        self.height = height
+        self.gap = gap
+        _size = ScaledMetric(wrappedValue: fontSize, relativeTo: style)
+    }
+
+    func body(content: Content) -> some View {
+        content.overlay(alignment: .topTrailing) {
+            if let figure, !typeSize.isAccessibilitySize {
+                StreetFigureView(figure: figure, height: height)
+                    .alignmentGuide(.top) { $0[.bottom] - NightTheme.capDrop(size, weight: weight) }
+                    .alignmentGuide(.trailing) { $0[.leading] - gap }
+            }
+        }
+    }
+}
+
+/// Dashboard section heading: Big Shoulders 600, 21 pt, with an optional figure on its
+/// letters and an optional trailing text action.
+struct NightSectionHeader: View {
+    let title: String
+    var figure: StreetFigure?
+    var actionTitle: String?
+    var action: (() -> Void)?
+
+    var body: some View {
+        HStack(alignment: .lastTextBaseline, spacing: 8) {
+            Text(title)
+                .font(NightTheme.display(21, weight: .semibold, relativeTo: .title3))
+                .foregroundStyle(.primary)
+                .lineLimit(2)
+                .capFigure(figure, fontSize: 21, relativeTo: .title3, weight: .semibold, height: 22, gap: 6)
+                .accessibilityAddTraits(.isHeader)
+            Spacer(minLength: 8)
+            if let actionTitle, let action {
+                Button(actionTitle, action: action)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(NightTheme.secondaryLabel)
+                    .frame(minHeight: iOSDesignSystem.Size.minimumTapTarget)
+                    .contentShape(Rectangle())
+                    .buttonStyle(.plain)
+            }
+        }
+        .textCase(nil)
+    }
+}
