@@ -22,7 +22,6 @@ struct SettingsView: View {
     @State private var showingPrivacyPolicy = false
     @State private var showingClearData = false
     @AppStorage(AppearanceMode.storageKey) private var appearance = AppearanceMode.system
-    @State private var scrolling = false
 
     private var currency: Currency { dataManager.user.currency }
     private var salary: Double { dataManager.getCurrentMonthSalary() }
@@ -43,8 +42,6 @@ struct SettingsView: View {
                 versionFooter
             }
             .listStyle(.insetGrouped)
-            .onScrollPhaseChange { _, phase in scrolling = phase != .idle }
-            .environment(\.streetMotionPaused, scrolling)
             .scrollContentBackground(.hidden)
             .background { cityBackground }
             .navigationTitle("settings".localized)
@@ -284,7 +281,7 @@ struct SettingsView: View {
                 }
             }
         } header: {
-            StreetSectionHeader(title: "settings_your_data".localized, figure: .snacker, loops: true)
+            StreetSectionHeader(title: "settings_your_data".localized, figure: .snacker, loops: true, reach: 0.30)
         }
     }
 
@@ -330,10 +327,7 @@ struct SettingsView: View {
     private var versionFooter: some View {
         Section {
         } footer: {
-            VStack(spacing: 4) {
-                Text("Cenzio \(appVersion)")
-                Text("settings_privacy_line".localized)
-            }
+            Text("Cenzio \(appVersion)")
             .font(.footnote)
             .foregroundStyle(.secondary)
             .multilineTextAlignment(.center)

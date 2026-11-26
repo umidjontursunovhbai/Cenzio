@@ -237,7 +237,7 @@ struct StreetFigureView: View {
 // MARK: - Figures that keep moving (Settings)
 
 extension EnvironmentValues {
-    /// True while the screen scrolls: looping figures hold still so scrolling stays smooth.
+    /// Set by a screen to hold looping figures still (not used while scrolling: owner wants them moving).
     @Entry var streetMotionPaused = false
 }
 
@@ -254,13 +254,15 @@ private final class StreetClock {
     }
 }
 
-/// A street figure that keeps moving in a lane as wide as its frame: the cyclist rides
-/// across and comes back in from the left, the snacker eats in place, people pace back
-/// and forth. 24 frames a second, and it holds still while scrolling, when off screen,
-/// in the background, in Low Power Mode and with Reduce Motion. Decoration only.
+/// A street figure that keeps moving: it goes right until `reach` (a share of the screen
+/// width, measured from the screen's left edge) and turns back to the start of its lane.
+/// 24 frames a second, and it holds still when off screen, in the background, in Low
+/// Power Mode and with Reduce Motion. It keeps moving while the list scrolls. Decoration only.
 struct StreetLoopView: View {
     let figure: StreetFigure
     var height: CGFloat = 22
+    /// How far right it goes, as a share of the screen width (cyclist 0.55, walkers 0.30).
+    var reach: CGFloat = 0.55
     var color: Color?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -279,7 +281,10 @@ struct StreetLoopView: View {
         let scale = height / box.height
         let ink = color ?? NightTheme.figure(colorScheme)
         GeometryReader { geo in
-            let lane = geo.size.width
+            // the lane may end at `reach` of the screen; list inset ~20 pt on the right
+            let frame = geo.frame(in: .global)
+            let screen = frame.maxX + 20
+            let lane = min(geo.size.width, max(0, screen * reach - frame.minX))
             TimelineView(.animation(minimumInterval: 1.0 / 24, paused: paused)) { tl in
                 let t = paused ? clock.t : clock.tick(tl.date)
                 Canvas { ctx, _ in
@@ -287,6 +292,10 @@ struct StreetLoopView: View {
                     let w = box.width * scale
                     let (x, dir) = position(t: t, lane: lane, width: w)
                     c.translateBy(x: x, y: 0)
+                    if dir < 0 && figure == .cyclist {
+                        c.translateBy(x: w, y: 0)
+                        c.scaleBy(x: -1, y: 1)
+                    }
                     c.scaleBy(x: scale, y: scale)
                     c.translateBy(x: -box.minX, y: -box.minY)
                     draw(c, color: ink, t: t, dir: dir)
@@ -307,19 +316,16 @@ struct StreetLoopView: View {
     /// Left edge of the drawing in the lane, and the facing direction.
     private func position(t: Double, lane: CGFloat, width: CGFloat) -> (CGFloat, Double) {
         let room = max(0, lane - width)
+        let speed: Double
         switch figure {
-        case .cyclist, .taxi:
-            if still { return (room, 1) }
-            let span = lane + width
-            return (CGFloat((t * 26).truncatingRemainder(dividingBy: span)) - width, 1)
-        case .walker, .shopper:
-            guard !still, room > 4 else { return (room, 1) }
-            let period = 2 * room / 18
-            let u = t.truncatingRemainder(dividingBy: period) / period
-            return u < 0.5 ? (room * u * 2, 1) : (room * (1 - (u - 0.5) * 2), -1)
-        case .snacker, .lamp:
-            return (0, 1)
+        case .cyclist, .taxi: speed = 26
+        case .walker, .shopper, .snacker: speed = 14
+        case .lamp: return (0, 1)
         }
+        guard !still, room > 4 else { return (0, 1) }
+        let period = 2 * room / speed
+        let u = t.truncatingRemainder(dividingBy: period) / period
+        return u < 0.5 ? (room * u * 2, 1) : (room * (1 - (u - 0.5) * 2), -1)
     }
 
     private func draw(_ ctx: GraphicsContext, color: Color, t: Double, dir: Double) {
@@ -329,7 +335,7 @@ struct StreetLoopView: View {
         case .shopper:
             StreetCast.person(ctx, 0, 0, .init(walk: !still, ph: t * 6.5, dir: dir, bags: true, scale: 1), color: color, reduce: still)
         case .snacker:
-            StreetCast.person(ctx, 0, 0, .init(ph: still ? 3.5 : t * 4, eat: true, scale: 1), color: color, reduce: false)
+            StreetCast.person(ctx, 0, 0, .init(walk: !still, ph: still ? 3.5 : t * 6, dir: dir, eat: true, scale: 1), color: color, reduce: false)
         case .cyclist:
             StreetCast.cyclist(ctx, color: color, ph: still ? nil : t * 6)
         case .lamp:
