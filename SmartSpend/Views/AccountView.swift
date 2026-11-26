@@ -237,7 +237,7 @@ struct AccountView: View {
     /// Same still, blurred city as Settings: night in dark mode, day in light mode.
     private var cityBackground: some View {
         ZStack(alignment: .bottom) {
-            Color(.systemBackground)
+            colorScheme == .dark ? NightTheme.navy : Color(.systemBackground)
             NightCityView(page: colorScheme == .dark ? .smart : .privacy, reduceMotion: true, showsOverlay: false)
                 .aspectRatio(City.W / City.H, contentMode: .fill)
                 .blur(radius: 14)

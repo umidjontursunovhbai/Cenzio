@@ -5,6 +5,8 @@ import UIKit
 /// mode and ink in light mode; warm colors live only inside the drawn city and figures.
 enum NightTheme {
     static let ink = Color(red: 5 / 255, green: 7 / 255, blue: 13 / 255)
+    /// Dark blue ground of Settings and Account at night (owner, 2026-11-27).
+    static let navy = Color(red: 10 / 255, green: 22 / 255, blue: 52 / 255)
     static let fg = Color(red: 238 / 255, green: 241 / 255, blue: 246 / 255)
     static let silver = Color(red: 201 / 255, green: 211 / 255, blue: 224 / 255)
     static let body = Color(red: 195 / 255, green: 203 / 255, blue: 218 / 255)

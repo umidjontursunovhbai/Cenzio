@@ -64,14 +64,14 @@ struct SettingsView: View {
 
     /// The onboarding city, still and blurred, fixed behind the list: night in dark
     /// mode, day in light mode. It never animates, so it does not compete with the rows.
-    /// Dark mode: the dashboard's ink ground with a faint blurred night city (owner, 2026-11-26). Light mode: the blurred day city.
+    /// Dark mode: a dark blue ground with a faint blurred night city (owner, 2026-11-27). Light mode: the blurred day city.
     @ViewBuilder
     private var cityBackground: some View {
         if colorScheme == .dark {
-            // the dashboard's ink ground with a faint blurred city in it, so the glass rows have
+            // the dark blue ground with a faint blurred city in it, so the glass rows have
             // color to blur (on plain ink the material reads flat gray)
             ZStack(alignment: .bottom) {
-                NightTheme.ink
+                NightTheme.navy
                 NightCityView(page: .smart, reduceMotion: true, showsOverlay: false)
                     .aspectRatio(City.W / City.H, contentMode: .fill)
                     .blur(radius: 18)
