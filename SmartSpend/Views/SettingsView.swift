@@ -22,6 +22,7 @@ struct SettingsView: View {
     @State private var showingPrivacyPolicy = false
     @State private var showingClearData = false
     @AppStorage(AppearanceMode.storageKey) private var appearance = AppearanceMode.system
+    @State private var scrolling = false
 
     private var currency: Currency { dataManager.user.currency }
     private var salary: Double { dataManager.getCurrentMonthSalary() }
@@ -38,9 +39,12 @@ struct SettingsView: View {
                 helpSection
                 }
                 .listRowBackground(Rectangle().fill(.ultraThinMaterial))
+                .listRowSeparator(.hidden)
                 versionFooter
             }
             .listStyle(.insetGrouped)
+            .onScrollPhaseChange { _, phase in scrolling = phase != .idle }
+            .environment(\.streetMotionPaused, scrolling)
             .scrollContentBackground(.hidden)
             .background { cityBackground }
             .navigationTitle("settings".localized)
@@ -101,12 +105,11 @@ struct SettingsView: View {
         }
     }
 
-    /// A walker and a street lamp standing on the account card's top edge, under the title.
+    /// A street lamp standing on the account card's top edge, under the title.
     private var accountFigures: some View {
         HStack(alignment: .bottom, spacing: 6) {
             Spacer(minLength: 0)
             if !typeSize.isAccessibilitySize {
-                StreetFigureView(figure: .walker, height: 26)
                 StreetFigureView(figure: .lamp, height: 40)
             }
         }
@@ -118,7 +121,12 @@ struct SettingsView: View {
     private func avatar(for name: String?) -> some View {
         ZStack {
             Circle().fill(.white)
-            if let initial = name?.trimmingCharacters(in: .whitespaces).first {
+            if let photo = ProfilePhoto.image(from: dataManager.user.photo) {
+                Image(uiImage: photo)
+                    .resizable()
+                    .scaledToFill()
+                    .clipShape(Circle())
+            } else if let initial = name?.trimmingCharacters(in: .whitespaces).first {
                 Text(String(initial).uppercased())
                     .font(OnboardingPalette.display(26))
                     .foregroundStyle(OnboardingPalette.ink)
@@ -136,35 +144,89 @@ struct SettingsView: View {
 
     private var moneySection: some View {
         Section {
+            moneySummary
+
             Button { showingMonthlySalary = true } label: {
                 SettingsRow(symbol: "wallet.bifold", title: "monthly_salary".localized) {
-                    if salary > 0 {
-                        Text(salary.formatted(.number.precision(.fractionLength(0...2))))
-                            .monospacedDigit()
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Text("not_set".localized).foregroundStyle(.secondary)
-                    }
+                    Text(salary > 0 ? CurrencyFormatter.formatFull(salary, currency: currency) : "not_set".localized)
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
                 }
             }
             .accessibilityIdentifier("settings.salary")
 
-            Button { showingCurrencySelection = true } label: {
-                SettingsRow(symbol: "banknote", title: "currency".localized) {
-                    Text(currency.rawValue).foregroundStyle(.secondary)
+            Button { showingBudgetGoals = true } label: {
+                SettingsRow(symbol: "chart.pie", title: "settings_budgets".localized) {
+                    let active = dataManager.categoryBudgets.filter(\.isEnabled).count
+                    if active > 0 {
+                        Text(String(format: "settings_active_count".localized, active))
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
 
-            Button { showingBudgetGoals = true } label: {
-                SettingsRow(symbol: "flag", title: "budget_goals".localized)
+            NavigationLink(destination: CategoryManagementView()) {
+                SettingsRow(symbol: "tag", title: "categories".localized, showsChevron: false) {
+                    if !dataManager.userCategories.isEmpty {
+                        Text("\(dataManager.userCategories.count)")
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
 
-            NavigationLink(destination: CategoryManagementView()) {
-                SettingsRow(symbol: "tag", title: "categories".localized, showsChevron: false)
+            Button { showingCurrencySelection = true } label: {
+                SettingsRow(symbol: "dollarsign.circle", title: "currency".localized) {
+                    Text(currency.rawValue).foregroundStyle(.secondary)
+                }
             }
         } header: {
-            StreetSectionHeader(title: "settings_money".localized, figure: .shopper)
+            StreetSectionHeader(title: "settings_money".localized, figure: .cyclist, loops: true)
         }
+    }
+
+    /// This month at a glance: what is left of the income, a bar, and spent / income.
+    /// Without an income it shows what was spent and asks for the income.
+    private var moneySummary: some View {
+        let spent = dataManager.getCurrentMonthExpensesTotal()
+        let left = salary - spent
+        return Button { showingMonthlySalary = true } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                Text((salary > 0 ? "settings_left_this_month" : "settings_spent_this_month").localized)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                Text(CurrencyFormatter.formatFull(salary > 0 ? left : spent, currency: currency))
+                    .font(NightTheme.display(34))
+                    .monospacedDigit()
+                    .foregroundStyle(left < 0 && salary > 0 ? Color(.systemRed) : .primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                if salary > 0 {
+                    ProgressView(value: min(1, max(0, spent / salary)))
+                        .tint(.primary)
+                    HStack {
+                        Text(String(format: "settings_spent_amount".localized, CurrencyFormatter.formatFull(spent, currency: currency)))
+                        Spacer(minLength: 8)
+                        Text(String(format: "settings_income_amount".localized, CurrencyFormatter.formatFull(salary, currency: currency)))
+                    }
+                    .font(.caption)
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                } else {
+                    Text("settings_set_income_hint".localized)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("settings.moneySummary")
     }
 
     // MARK: - App
@@ -188,12 +250,12 @@ struct SettingsView: View {
                     Text(mode.title).tag(mode)
                 }
             } label: {
-                SettingsRow(symbol: "moon", title: "appearance".localized, showsChevron: false)
+                SettingsRow(symbol: "moon.stars", title: "appearance".localized, showsChevron: false)
             }
             .pickerStyle(.menu)
             .accessibilityIdentifier("settings.appearance")
         } header: {
-            StreetSectionHeader(title: "settings_app".localized, figure: .cyclist)
+            StreetSectionHeader(title: "settings_app".localized)
         }
     }
 
@@ -222,7 +284,7 @@ struct SettingsView: View {
                 }
             }
         } header: {
-            StreetSectionHeader(title: "settings_your_data".localized, figure: .snacker)
+            StreetSectionHeader(title: "settings_your_data".localized, figure: .snacker, loops: true)
         }
     }
 
@@ -283,8 +345,8 @@ struct SettingsView: View {
 
 // MARK: - Row
 
-/// One native row: a quiet gray tile with an SF Symbol, the title, an optional
-/// trailing value, and a chevron for rows that open something.
+/// One native row: a plain SF Symbol (no tile), the title, an optional trailing
+/// value, and a chevron for rows that open something.
 private struct SettingsRow<Trailing: View>: View {
     let symbol: String
     let title: String
@@ -302,10 +364,9 @@ private struct SettingsRow<Trailing: View>: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: symbol)
-                .font(.system(size: 15, weight: .medium))
+                .font(.system(size: 19, weight: .regular))
                 .foregroundStyle(.primary)
-                .frame(width: 29, height: 29)
-                .background(Color.primary.opacity(0.12), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .frame(width: 28, height: 28)
                 .accessibilityHidden(true)
             Text(title)
                 .foregroundStyle(.primary)

@@ -1,5 +1,6 @@
 import AuthenticationServices
 import LocalAuthentication
+import PhotosUI
 import SwiftUI
 
 /// Display rules for the signed-in Apple ID, shared by Settings and the Account screen.
@@ -28,6 +29,9 @@ struct AccountView: View {
     @State private var confirmingDelete = false
     @State private var isDeleting = false
     @State private var deleteError: String?
+    @ObservedObject private var dataManager = DataManager.shared
+    @State private var showingPhotoPicker = false
+    @State private var photoItem: PhotosPickerItem?
     @Environment(\.dismiss) private var dismiss
 
     @Environment(\.colorScheme) private var colorScheme
@@ -115,6 +119,17 @@ struct AccountView: View {
         .alert("account_delete".localized, isPresented: Binding(get: { deleteError != nil }, set: { if !$0 { deleteError = nil } })) {
             Button("ok".localized) { deleteError = nil }
         } message: { Text(deleteError ?? "") }
+        .photosPicker(isPresented: $showingPhotoPicker, selection: $photoItem, matching: .images)
+        .onChange(of: photoItem) { _, item in
+            guard let item else { return }
+            Task {
+                if let data = try? await item.loadTransferable(type: Data.self),
+                   let photo = ProfilePhoto.make(from: data) {
+                    dataManager.updateProfilePhoto(photo)
+                }
+                photoItem = nil
+            }
+        }
     }
 
     /// Large centered avatar, name and email, like the Apple ID page. No row background.
@@ -123,7 +138,7 @@ struct AccountView: View {
         let detail = AppleAccountDisplay.detail(for: account)
         return Section {
             VStack(spacing: 4) {
-                avatar(for: account)
+                photoMenu(for: account)
                     .padding(.bottom, 8)
                 Text(account == nil ? "account_not_signed_in".localized : AppleAccountDisplay.title(for: account))
                     .font(.custom("Big Shoulders Display", size: 30, relativeTo: .title).weight(.heavy))
@@ -140,19 +155,54 @@ struct AccountView: View {
             }
             .frame(maxWidth: .infinity)
             .padding(.top, 4)
-            .accessibilityElement(children: .combine)
+            .accessibilityElement(children: .contain)
             .listRowBackground(Color.clear)
             .listRowInsets(EdgeInsets())
         }
     }
 
-    /// White circle with the first letter of the name (or email); a person glyph when
+    /// The avatar opens a small menu: choose a photo from Photos, or remove it.
+    private func photoMenu(for account: AppleAccount?) -> some View {
+        Menu {
+            Button {
+                showingPhotoPicker = true
+            } label: {
+                Label("account_photo_choose".localized, systemImage: "photo")
+            }
+            if dataManager.user.photo != nil {
+                Button(role: .destructive) {
+                    dataManager.updateProfilePhoto(nil)
+                } label: {
+                    Label("account_photo_remove".localized, systemImage: "trash")
+                }
+            }
+        } label: {
+            avatar(for: account)
+                .overlay(alignment: .bottomTrailing) {
+                    Image(systemName: "camera.fill")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(OnboardingPalette.ink)
+                        .frame(width: 26, height: 26)
+                        .background(Circle().fill(.white))
+                        .overlay(Circle().strokeBorder(Color.black.opacity(0.15), lineWidth: 1))
+                }
+        }
+        .accessibilityLabel("account_photo_choose".localized)
+        .accessibilityIdentifier("account.photo")
+    }
+
+    /// The user's photo when set; otherwise a white circle with the first letter of the name (or email); a person glyph when
     /// there is neither. Signed out: a quiet tile instead of the white circle.
     private func avatar(for account: AppleAccount?) -> some View {
         let source = account?.fullName.flatMap { $0.isEmpty ? nil : $0 } ?? account?.email
         let initial = source?.trimmingCharacters(in: .whitespaces).first
         return ZStack {
-            if account == nil {
+            if let photo = ProfilePhoto.image(from: dataManager.user.photo) {
+                Image(uiImage: photo)
+                    .resizable()
+                    .scaledToFill()
+                    .clipShape(Circle())
+            } else if account == nil {
                 Circle().fill(Color.primary.opacity(0.12))
                 Image(systemName: "person.fill")
                     .font(.system(size: 34, weight: .medium))
