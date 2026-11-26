@@ -49,12 +49,9 @@ struct DashboardView: View {
                         .opacity(voice.isVisible && voice.prefill == nil ? 0 : 1)
                         .accessibilityHidden(voice.isVisible && voice.prefill == nil)
 
-                    skyline
-                        .padding(.top, 6)
-
                     heroStreet
                         .padding(.horizontal, margin)
-                        .padding(.top, 18)
+                        .padding(.top, 28)
                         .accessibilityElement(children: .contain)
                         .accessibilityIdentifier("dashboard.overview")
 
@@ -87,6 +84,13 @@ struct DashboardView: View {
                 }
                 // Keeps the last group scrollable above the entry bar.
                 .padding(.bottom, 96)
+                .background(alignment: .top) {
+                    DashboardSky()
+                        .frame(height: 420)
+                        .offset(y: -120)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
             }
             .background(NightGround())
             .expenseEntryBar(ExpenseEntryBar(accessibilityPrefix: "dashboard", compact: true, isRecording: voice.isRecording, isProcessing: voice.isProcessing, onAdd: {
@@ -141,11 +145,6 @@ struct DashboardView: View {
     private var currency: Currency { dataManager.user.currency }
     private var hasMonthSpending: Bool { overview.monthTotal > 0 }
     private var today: Int { calendar.component(.day, from: Date()) }
-
-    /// Days of this month with at least one expense: the lit windows of the skyline band.
-    private var litDays: Set<Int> {
-        Set(overview.monthExpenses.map { calendar.component(.day, from: $0.date) })
-    }
 
     private func money(_ amount: Double) -> String {
         CurrencyFormatter.format(amount, currency: currency)
@@ -209,7 +208,7 @@ struct DashboardView: View {
         return rows
     }
 
-    // MARK: - Header and skyline
+    // MARK: - Header
 
     private var monthHeader: some View {
         let now = Date()
@@ -223,7 +222,6 @@ struct DashboardView: View {
                 .foregroundStyle(.primary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
-                .capFigure(.cyclist, fontSize: 46, relativeTo: .largeTitle, height: 22, gap: 10)
                 .accessibilityAddTraits(.isHeader)
             Text(String(format: "dash_year_day_format".localized, year, today))
                 .font(.subheadline.weight(.semibold))
@@ -231,12 +229,6 @@ struct DashboardView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
-    }
-
-    /// Only the hazy night sky over the title; no towers, windows or lamps (owner, 2026-11-26).
-    private var skyline: some View {
-        SkylineBandView(litDays: litDays, today: today, showsTaxi: false, showsBuildings: false)
-            .frame(height: 150)
     }
 
     // MARK: - Hero on the street
@@ -999,6 +991,27 @@ struct DashboardView: View {
         let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: Date()),
                                            to: calendar.startOfDay(for: date)).day ?? 0
         return String(format: "due_in_days_format".localized, days)
+    }
+}
+
+/// Soft sky over the title: a lighter blue that eases into the page ground with no edge
+/// (no towers, stars or lamps on the dashboard, owner 2026-11-26).
+private struct DashboardSky: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        let dark = colorScheme == .dark
+        let top = dark ? Color(red: 13 / 255, green: 26 / 255, blue: 62 / 255) : Color(red: 78 / 255, green: 130 / 255, blue: 200 / 255)
+        let glow = dark ? Color(red: 34 / 255, green: 58 / 255, blue: 118 / 255) : Color(red: 150 / 255, green: 185 / 255, blue: 222 / 255)
+        let strength = dark ? 0.7 : 0.4
+        // Many stops on a smoothstep curve, so the fade has no visible band.
+        let stops: [Gradient.Stop] = (0...16).map { i in
+            let t = Double(i) / 16
+            let fade = 1 - t * t * (3 - 2 * t)
+            let color = t < 0.35 ? top.mix(with: glow, by: t / 0.35) : glow
+            return .init(color: color.opacity(strength * fade), location: t)
+        }
+        LinearGradient(stops: stops, startPoint: .top, endPoint: .bottom)
     }
 }
 

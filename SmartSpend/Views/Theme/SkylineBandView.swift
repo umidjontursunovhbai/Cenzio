@@ -10,10 +10,6 @@ struct SkylineBandView: View {
     let today: Int
     /// Parked taxi (add expense sheet) instead of one drive across.
     var parkedTaxi = false
-    /// The dashboard shows the city without the taxi (owner, 2026-11-26).
-    var showsTaxi = true
-    /// Towers, day windows, street and lamps. Off on the dashboard: only the hazy sky stays (owner, 2026-11-26).
-    var showsBuildings = true
     /// Strength of the glow around today's window, 0...1. Animatable.
     var glow: Double = 1
 
@@ -28,15 +24,8 @@ struct SkylineBandView: View {
     var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .bottomLeading) {
-                SkylineBandCanvas(lit: litDays, today: today, day: colorScheme != .dark, glow: glow, buildings: showsBuildings)
-                    // without towers the sky would end in a hard edge at the street line, so it fades out
-                    .mask {
-                        LinearGradient(stops: [.init(color: .black, location: 0),
-                                               .init(color: .black, location: showsBuildings ? 1 : 0.45),
-                                               .init(color: showsBuildings ? .black : .clear, location: 1)],
-                                       startPoint: .top, endPoint: .bottom)
-                    }
-                if showsTaxi, !typeSize.isAccessibilitySize {
+                SkylineBandCanvas(lit: litDays, today: today, day: colorScheme != .dark, glow: glow)
+                if !typeSize.isAccessibilitySize {
                     // taxi wheels sit on the street line (its box reaches 1 unit below the wheels)
                     StreetFigureView(figure: .taxi, height: 24, walksIn: false)
                         .offset(x: taxiX, y: -(Self.street - 1))
@@ -73,7 +62,6 @@ private struct SkylineBandCanvas: View, Animatable {
     let today: Int
     let day: Bool
     var glow: Double
-    var buildings = true
 
     var animatableData: Double {
         get { glow }
@@ -82,7 +70,7 @@ private struct SkylineBandCanvas: View, Animatable {
 
     var body: some View {
         Canvas { ctx, size in
-            SkylineBand.draw(ctx, size: size, lit: lit, today: today, day: day, glow: glow, buildings: buildings)
+            SkylineBand.draw(ctx, size: size, lit: lit, today: today, day: day, glow: glow)
         }
     }
 }
@@ -117,7 +105,7 @@ enum SkylineBand {
         return out.sorted { $0.0 < $1.0 }.map(\.1)
     }
 
-    static func draw(_ base: GraphicsContext, size: CGSize, lit: Set<Int>, today: Int, day: Bool, glow: Double, buildings: Bool = true) {
+    static func draw(_ base: GraphicsContext, size: CGSize, lit: Set<Int>, today: Int, day: Bool, glow: Double) {
         let s = size.width / City.W
         let streetY = size.height - SkylineBandView.street
         let sky = City.sky[day ? "day" : "night"]!
@@ -134,8 +122,6 @@ enum SkylineBand {
             }
             base.fill(stars, with: .color(Color(red: 230 / 255, green: 236 / 255, blue: 1, opacity: 0.6)))
         }
-
-        guard buildings else { return }
 
         var ctx = base
         ctx.translateBy(x: 0, y: streetY)

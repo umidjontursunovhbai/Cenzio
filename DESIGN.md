@@ -51,15 +51,15 @@ Rules:
 
 ## 4b. Dashboard (mockup v8, owner, 2026-11-26)
 
-- The month name ("Noyabr") is the title, Big Shoulders 800 at 46 pt, with a year/day line under it. No avatar.
-- The skyline sits under the title with a small key ("days with spending: N"). No taxi on the dashboard.
+- The month name ("Noyabr") is the title, Big Shoulders 800 at 46 pt, with a year/day line under it. No avatar, no figure on it.
+- No skyline on the dashboard: only a soft sky glow behind the title that eases into the ground with no edge (no towers, windows, stars, lamps, taxi).
 - The money left stands on the street with no card: label + glass chip (vs last month), amount at 60 pt,
   meter (spent solid, bills dashed, free track), legend. Then a trio between hairlines: safe per day, daily average, forecast.
 - Sections are Big Shoulders 600 headings (21 pt) over white glass groups (`nightGroup()`, 22 pt corners).
 - Pace chart: daily spend as small buildings (today has a lit window), running total line with soft fill, last month dashed.
 - Removed by the owner: taxi, avatar, today/this-week cards, the week section, the walker on Add.
 - Add expense is a 44 pt pill beside a 44 pt mic (`ExpenseEntryBar(compact: true)`); other screens keep the round buttons.
-- Three figures: cyclist on the month name, snacker on the amount, shopper on "Where it goes". They stand on the cap line
+- Two figures: snacker on the amount, shopper on "Where it goes". They stand on the cap line
   just past the text end (`capFigure`). Red only when over a budget or the plan.
 
 ## 5. The street cast (small figures)
@@ -73,7 +73,7 @@ Drawn with the same code as onboarding (`person`, `taxi` in NightCityView), move
 | shopper | two bags | Save button, Money header |
 | snacker | eating a bun | Today header, Insights |
 | taxi | yellow, headlight beam | add expense sheet (parked); not on the dashboard |
-| cyclist | bike | dashboard month name |
+| cyclist | bike | not used on the dashboard |
 | lamp | street lamp prop, warm glow | Settings title, next to the walker |
 
 Placement:
