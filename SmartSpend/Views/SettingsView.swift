@@ -37,7 +37,8 @@ struct SettingsView: View {
                 clearDataSection
                 helpSection
                 }
-                .listRowBackground(Rectangle().fill(.ultraThinMaterial))
+                // over the flat dark ground a material reads gray, so dark mode uses the dashboard's clear glass
+                .listRowBackground(Rectangle().fill(colorScheme == .dark ? AnyShapeStyle(NightTheme.glassFill) : AnyShapeStyle(.ultraThinMaterial)))
                 .listRowSeparator(.hidden)
                 versionFooter
             }
