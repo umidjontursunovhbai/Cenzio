@@ -52,7 +52,7 @@ Rules:
 ## 4b. Dashboard (mockup v8, owner, 2026-11-26)
 
 - The month name ("Noyabr") is the title, Big Shoulders 800 at 46 pt, with a year/day line under it. No avatar, no figure on it.
-- No skyline on the dashboard: only a soft sky glow behind the title that eases into the ground with no edge (no towers, windows, stars, lamps, taxi).
+- No skyline and no sky glow on the dashboard: the page is one flat dark ground from top to bottom (no towers, windows, stars, lamps, taxi).
 - The money left stands on the street with no card: label + glass chip (vs last month), amount at 60 pt,
   meter (spent solid, bills dashed, free track), legend. Then a trio between hairlines: safe per day, daily average, forecast.
 - Sections are Big Shoulders 600 headings (21 pt) over white glass groups (`nightGroup()`, 22 pt corners).

@@ -158,24 +158,14 @@ extension NightTheme {
     }
 }
 
-/// Page ground: a navy glow fading to ink at night, the grouped system background by day.
+/// Page ground: one flat ink color at night (no lighter area at the top, owner 2026-11-26),
+/// the grouped system background by day.
 struct NightGround: View {
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        if colorScheme == .dark {
-            ZStack {
-                LinearGradient(stops: [
-                    .init(color: Color(red: 11 / 255, green: 16 / 255, blue: 32 / 255), location: 0),
-                    .init(color: NightTheme.ink, location: 0.4),
-                ], startPoint: .top, endPoint: .bottom)
-                RadialGradient(colors: [Color(red: 40 / 255, green: 52 / 255, blue: 84 / 255).opacity(0.55), .clear],
-                               center: .top, startRadius: 0, endRadius: 420)
-            }
+        (colorScheme == .dark ? NightTheme.ink : Color(.systemGroupedBackground))
             .ignoresSafeArea()
-        } else {
-            Color(.systemGroupedBackground).ignoresSafeArea()
-        }
     }
 }
 
