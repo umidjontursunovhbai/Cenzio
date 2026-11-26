@@ -4705,6 +4705,23 @@
           }
         }
       }
+    },
+    "dash_weekday_avg_day_format": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Average day: %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O'rtacha kun: %@"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

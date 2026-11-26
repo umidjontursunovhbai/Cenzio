@@ -96,6 +96,7 @@ struct DashboardView: View {
 
             }
             .background(NightGround())
+            .overlay(alignment: .top) { topScrollEdgeFade }
             .expenseEntryBar(ExpenseEntryBar(accessibilityPrefix: "dashboard", compact: true, isRecording: voice.isRecording, isProcessing: voice.isProcessing, onAdd: {
                 showingAddExpense = true
             }, onVoice: {
@@ -150,6 +151,19 @@ struct DashboardView: View {
         }
     }
 
+    /// Fades scrolled content out under the status bar: page ground at the top, clear 12 pt below it.
+    private var topScrollEdgeFade: some View {
+        GeometryReader { proxy in
+            let ground = colorScheme == .dark ? NightTheme.ink : Color(.systemGroupedBackground)
+            LinearGradient(colors: [ground, ground.opacity(0)], startPoint: .top, endPoint: .bottom)
+                .frame(height: proxy.safeAreaInsets.top + 12)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .ignoresSafeArea(edges: .top)
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
     private var currency: Currency { dataManager.user.currency }
     private var hasMonthSpending: Bool { overview.monthTotal > 0 }
     private var today: Int { calendar.component(.day, from: Date()) }
@@ -164,6 +178,13 @@ struct DashboardView: View {
 
     private func fullMoney(_ amount: Double) -> String {
         CurrencyFormatter.formatFull(amount, currency: currency)
+    }
+
+    /// `compactMoney` without the currency unit ("5.1M"); other currencies keep their symbol.
+    private func compactNumber(_ amount: Double) -> String {
+        let text = compactMoney(amount)
+        guard currency == .uzs, text.hasSuffix(" so'm") else { return text }
+        return String(text.dropLast(" so'm".count))
     }
 
     // MARK: - Derived data
@@ -465,7 +486,8 @@ struct DashboardView: View {
                          color: snapshot.availableAfterBills <= 0 ? Color(.systemRed) : .primary, first: true)
                 trioDivider
             }
-            trioItem("dash_daily_average".localized, value: money(overview.dailyAverage), first: income <= 0)
+            trioItem("dash_daily_average".localized, value: hasMonthSpending ? money(overview.dailyAverage) : "—",
+                     first: income <= 0)
             trioDivider
             trioItem("dash_forecast".localized, value: hasMonthSpending ? money(overview.projectedMonthTotal) : "—",
                      color: forecastOverIncome ? Color(.systemRed) : .primary)
@@ -957,13 +979,11 @@ struct DashboardView: View {
         let todayWeekday = calendar.component(.weekday, from: Date())
         let maxAverage = max(items.map(\.average).max() ?? 0, 1)
         let mean = items.isEmpty ? 0 : items.map(\.average).reduce(0, +) / Double(items.count)
-        let others = items.filter { $0.weekday != peak?.weekday }
-        let otherAverage = others.isEmpty ? 0 : others.map(\.average).reduce(0, +) / Double(others.count)
         let leadArgs: [String] = peak.map { [calendar.weekdaySymbols[$0.weekday - 1], compactMoney($0.average)] } ?? []
-        let difference = (peak?.average ?? 0) - otherAverage
-        let moreLine = difference > 0 ? String(format: "dash_weekday_more_format".localized, compactMoney(difference)) : ""
+        let averageLine = mean > 0 ? String(format: "dash_weekday_avg_day_format".localized, compactMoney(mean)) : ""
         let on = weekdayShown || reduceMotion
         let barArea: CGFloat = 90
+        let chartHeight: CGFloat = 120
         let meanHeight = barArea * mean / maxAverage
 
         return VStack(alignment: .leading, spacing: 6) {
@@ -977,8 +997,8 @@ struct DashboardView: View {
                         .padding(.horizontal, 16)
                         .padding(.top, 14)
                 }
-                if !moreLine.isEmpty {
-                    Text(moreLine)
+                if !averageLine.isEmpty {
+                    Text(averageLine)
                         .font(.caption)
                         .foregroundStyle(NightTheme.secondaryLabel)
                         .fixedSize(horizontal: false, vertical: true)
@@ -986,59 +1006,53 @@ struct DashboardView: View {
                         .padding(.top, 3)
                 }
 
-                // seven buildings on a street line; the peak one is lighter and its windows light up
+                // seven buildings on a street line; only the peak one is lighter and has windows
                 HStack(alignment: .bottom, spacing: 0) {
                     ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                         let isPeak = item.weekday == peak?.weekday
                         let height = max(barArea * item.average / maxAverage, item.average > 0 ? 3 : 0)
-                        VStack(spacing: 6) {
-                            if isPeak {
-                                Text(compactMoney(item.average))
-                                    .font(.caption2.weight(.semibold))
-                                    .monospacedDigit()
-                                    .foregroundStyle(.primary)
-                                    .lineLimit(1)
-                                    .fixedSize()
-                                    .padding(.horizontal, 7)
-                                    .padding(.vertical, 3)
-                                    .background(Capsule().fill(NightTheme.glassFill))
-                                    .overlay(Capsule().stroke(NightTheme.glassLine, lineWidth: 1))
-                                    .opacity(on ? 1 : 0)
-                                    .animation(reduceMotion ? nil : .easeOut(duration: 0.5).delay(1.3), value: on)
-                            }
-                            RoundedRectangle(cornerRadius: 3, style: .continuous)
-                                .fill(paceBarColor(today: isPeak))
-                                .frame(width: 30, height: height)
-                                .overlay(alignment: .top) {
-                                    buildingWindows(height: height, lit: isPeak, on: on)
+                        RoundedRectangle(cornerRadius: 3, style: .continuous)
+                            .fill(paceBarColor(today: isPeak))
+                            .frame(width: 30, height: height)
+                            .overlay(alignment: .top) {
+                                if isPeak {
+                                    buildingWindows(height: height, lit: true, on: on)
                                 }
-                                .clipped()
-                                .scaleEffect(x: 1, y: on ? 1 : 0.001, anchor: .bottom)
-                                .animation(reduceMotion ? nil : growIn(delay: 0.15 + Double(index) * 0.07), value: on)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .bottom)
+                            }
+                            .clipped()
+                            .scaleEffect(x: 1, y: on ? 1 : 0.001, anchor: .bottom)
+                            .animation(reduceMotion ? nil : growIn(delay: 0.15 + Double(index) * 0.07), value: on)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                            .overlay(alignment: .bottom) {
+                                if isPeak {
+                                    Text(compactMoney(item.average))
+                                        .font(.caption2.weight(.semibold))
+                                        .monospacedDigit()
+                                        .foregroundStyle(.primary)
+                                        .lineLimit(1)
+                                        .fixedSize()
+                                        .padding(.horizontal, 7)
+                                        .padding(.vertical, 3)
+                                        .background(Capsule().fill(NightTheme.glassFill))
+                                        .overlay(Capsule().stroke(NightTheme.glassLine, lineWidth: 1))
+                                        // 6 pt above the building, clamped inside the chart top
+                                        .alignmentGuide(.bottom) { d in
+                                            d[.bottom] + max(min(height + 6, chartHeight - d.height), 0)
+                                        }
+                                        .opacity(on ? 1 : 0)
+                                        .animation(reduceMotion ? nil : .easeOut(duration: 0.5).delay(1.3), value: on)
+                                }
+                            }
                     }
                 }
-                .frame(height: 120, alignment: .bottom)
-                .overlay(alignment: .bottom) {
+                .frame(height: chartHeight, alignment: .bottom)
+                // the average line runs behind the buildings
+                .background(alignment: .bottom) {
                     if mean > 0 {
                         StraightLine()
-                            .stroke(NightTheme.secondaryLabel.opacity(0.5), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                            .stroke(NightTheme.secondaryLabel.opacity(0.35), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
                             .frame(height: 1)
                             .padding(.bottom, max(meanHeight - 0.5, 0))
-                            .opacity(on ? 1 : 0)
-                            .animation(reduceMotion ? nil : .easeOut(duration: 0.4).delay(1.0), value: on)
-                    }
-                }
-                .overlay(alignment: .bottomTrailing) {
-                    if mean > 0 {
-                        Text(String(format: "dash_key_average_format".localized, compactMoney(mean)))
-                            .font(.caption2)
-                            .monospacedDigit()
-                            .foregroundStyle(NightTheme.secondaryLabel)
-                            .lineLimit(1)
-                            .fixedSize()
-                            .padding(.bottom, meanHeight + 3)
                             .opacity(on ? 1 : 0)
                             .animation(reduceMotion ? nil : .easeOut(duration: 0.4).delay(1.0), value: on)
                     }
@@ -1080,7 +1094,7 @@ struct DashboardView: View {
             }
             .nightGroup()
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel([leadArgs.isEmpty ? "" : leadString("dash_weekday_lead_format", leadArgs), moreLine,
+            .accessibilityLabel([leadArgs.isEmpty ? "" : leadString("dash_weekday_lead_format", leadArgs), averageLine,
                                  "dash_weekday_subtitle".localized].filter { !$0.isEmpty }.joined(separator: ". "))
             .onScrollVisibilityChange(threshold: 0.4) { visible in
                 if visible { weekdayShown = true }
@@ -1099,13 +1113,13 @@ struct DashboardView: View {
         let currentName = monthName(history.last?.month ?? Date())
         let leadKey = forecast - average <= 0 ? "dash_month_less_lead_format" : "dash_month_more_lead_format"
         let leadArgs = [currentName, compactMoney(abs(forecast - average))]
-        let hasLead = average > 0
+        // an empty month would read as "less than average", so no lead until something is spent
+        let hasLead = average > 0 && hasMonthSpending
         let on = monthsShown || reduceMotion
         // fixed columns around the track, so the average line can be placed over all rows at once
         let nameWidth: CGFloat = 66
         let amountWidth: CGFloat = 70
         let columnSpacing: CGFloat = 10
-        let averageLabelRoom: CGFloat = average > 0 ? 18 : 0
 
         return VStack(alignment: .leading, spacing: 6) {
             NightSectionHeader(title: "dash_last_six_months".localized)
@@ -1123,7 +1137,7 @@ struct DashboardView: View {
                     ForEach(Array(history.enumerated()), id: \.element.month) { index, item in
                         let isNow = index == history.count - 1
                         HStack(alignment: .center, spacing: columnSpacing) {
-                            Text(monthName(item.month))
+                            Text(monthName(item.month, short: true))
                                 .font(.footnote.weight(.medium))
                                 .foregroundStyle(isNow ? AnyShapeStyle(.primary) : AnyShapeStyle(NightTheme.secondaryLabel))
                                 .lineLimit(1)
@@ -1150,14 +1164,14 @@ struct DashboardView: View {
                             }
                             .frame(height: 10)
                             VStack(alignment: .trailing, spacing: 1) {
-                                Text(compactMoney(item.amount))
+                                Text(compactNumber(item.amount))
                                     .font(.footnote.weight(.semibold))
                                     .monospacedDigit()
                                     .foregroundStyle(isNow ? AnyShapeStyle(.primary) : AnyShapeStyle(NightTheme.secondaryLabel))
                                     .lineLimit(1)
                                     .minimumScaleFactor(0.7)
-                                if isNow {
-                                    Text("\u{2192} " + compactMoney(forecast))
+                                if isNow, forecast > 0, compactNumber(forecast) != compactNumber(item.amount) {
+                                    Text("\u{2192} " + compactNumber(forecast))
                                         .font(.caption2)
                                         .monospacedDigit()
                                         .foregroundStyle(NightTheme.secondaryLabel)
@@ -1178,26 +1192,16 @@ struct DashboardView: View {
                         }
                     }
                 }
-                .padding(.top, averageLabelRoom)
                 .overlay {
                     if average > 0 {
                         GeometryReader { proxy in
                             let trackX = nameWidth + columnSpacing
                             let trackWidth = max(proxy.size.width - trackX - columnSpacing - amountWidth, 0)
                             let x = trackX + trackWidth * average / scale
-                            ZStack(alignment: .topLeading) {
-                                StraightLine(vertical: true)
-                                    .stroke(NightTheme.window.opacity(0.75), style: StrokeStyle(lineWidth: 1.5, dash: [3, 3]))
-                                    .frame(width: 2, height: max(proxy.size.height - averageLabelRoom + 2, 0))
-                                    .position(x: x, y: averageLabelRoom - 2 + (proxy.size.height - averageLabelRoom + 2) / 2)
-                                Text(String(format: "dash_key_average_format".localized, compactMoney(average)))
-                                    .font(.caption2)
-                                    .monospacedDigit()
-                                    .foregroundStyle(NightTheme.window)
-                                    .lineLimit(1)
-                                    .fixedSize()
-                                    .position(x: x, y: (averageLabelRoom - 4) / 2)
-                            }
+                            StraightLine(vertical: true)
+                                .stroke(NightTheme.window.opacity(0.75), style: StrokeStyle(lineWidth: 1.5, dash: [3, 3]))
+                                .frame(width: 2, height: proxy.size.height + 2)
+                                .position(x: x, y: proxy.size.height / 2 - 1)
                         }
                     }
                 }
@@ -1233,8 +1237,11 @@ struct DashboardView: View {
         }
     }
 
-    private func monthName(_ date: Date) -> String {
-        let name = date.formatted(.dateTime.month(.wide))
+    /// Wide month name, capitalised. `short` gives English "Jun"; other languages keep the wide
+    /// name because their short forms read oddly (Uzbek).
+    private func monthName(_ date: Date, short: Bool = false) -> String {
+        let abbreviated = short && Locale.current.language.languageCode == .english
+        let name = date.formatted(.dateTime.month(abbreviated ? .abbreviated : .wide))
         return name.prefix(1).uppercased() + name.dropFirst()
     }
 
