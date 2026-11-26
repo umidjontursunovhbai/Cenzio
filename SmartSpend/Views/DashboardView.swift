@@ -16,6 +16,12 @@ struct DashboardView: View {
     @State private var showingBudgetSettings = false
     @State private var selectedPaceDay: Double?
     @State private var spotlight: Spotlight = .places
+    /// Added to the hero amount until the pay scene's bill lands, then animated to 0.
+    @State private var heroTick: Double = 0
+    /// Bumped on every appear so the pay scene plays again.
+    @State private var payRun = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var typeSize
     @State private var overview = DashboardOverview(
         expenses: DataManager.shared.expenses,
         now: Date()
@@ -115,6 +121,7 @@ struct DashboardView: View {
                 BudgetSettingsView()
             }
             .onAppear(perform: refreshOverview)
+            .onAppear(perform: playPayScene)
             #if DEBUG
             .onAppear {
                 // Explicit UI-test replay: no microphone, no save, synthetic text only.
@@ -268,11 +275,44 @@ struct DashboardView: View {
         return isOver ? "dash_over_plan".localized : "dash_left_until_month_end".localized
     }
 
-    /// The big number in Big Shoulders 60 with a smaller unit; the snacker stands on it.
+    /// The hero amount as it was before today's last expense, minus the current one: the
+    /// pay scene starts from there and ticks down to the real value when the bill lands.
+    private var heroTickStart: Double {
+        guard let last = overview.monthExpenses.filter({ calendar.isDateInToday($0.date) }).max(by: { $0.date < $1.date }) else {
+            return 0
+        }
+        let income = monthlySalary
+        if income <= 0 { return -min(last.amount, overview.monthTotal) }
+        // left to spend grows back by the expense; an over-plan amount shrinks
+        return spendableSnapshot.availableAfterBills < 0 ? -min(last.amount, abs(spendableSnapshot.availableAfterBills)) : last.amount
+    }
+
+    private func playPayScene() {
+        payRun += 1
+        guard !reduceMotion, !typeSize.isAccessibilitySize else {
+            heroTick = 0
+            return
+        }
+        let start = heroTickStart
+        var still = Transaction()
+        still.disablesAnimations = true
+        withTransaction(still) { heroTick = start }
+        guard start != 0 else { return }
+        let run = payRun
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(PayScene.billLands))
+            guard run == payRun else { return }
+            withAnimation(.snappy(duration: 0.5)) { heroTick = 0 }
+        }
+    }
+
+    /// The big number in Big Shoulders 60 with a smaller unit; the pay scene plays beside it.
     private func heroAmount(_ amount: Double, isOver: Bool) -> some View {
         let full = fullMoney(amount)
+        let shown = fullMoney(max(amount + heroTick, 0))
         let unit = " so'm"
-        let number = currency == .uzs && full.hasSuffix(unit) ? String(full.dropLast(unit.count)) : full
+        let number = currency == .uzs && shown.hasSuffix(unit) ? String(shown.dropLast(unit.count)) : shown
+        let showsScene = !typeSize.isAccessibilitySize
 
         return HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(number)
@@ -288,7 +328,17 @@ struct DashboardView: View {
         .foregroundStyle(isOver ? Color(.systemRed) : .primary)
         .lineLimit(1)
         .minimumScaleFactor(0.45)
-        .capFigure(.snacker, fontSize: 60, relativeTo: .largeTitle, height: 22, gap: 10)
+        .overlay(alignment: Alignment(horizontal: .trailing, vertical: .lastTextBaseline)) {
+            if showsScene {
+                PayScene()
+                    .id(payRun)
+                    .alignmentGuide(.trailing) { $0[.leading] - 6 }
+                    .alignmentGuide(.lastTextBaseline) { $0[.bottom] - 1 }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        // room for the scene, so a long amount scales down instead of running under it
+        .padding(.trailing, showsScene ? PayScene.size.width + 6 : 0)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(full)
     }
@@ -985,6 +1035,92 @@ struct DashboardView: View {
         let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: Date()),
                                            to: calendar.startOfDay(for: date)).day ?? 0
         return String(format: "due_in_days_format".localized, days)
+    }
+}
+
+/// A somsa stand beside the hero amount (mockup v11): the buyer walks in, hands a warm bill
+/// to the seller and gets a warm bag back, once each time the dashboard appears (~2.6 s).
+/// Reduce Motion draws the end state. Decoration only.
+struct PayScene: View {
+    static let size = CGSize(width: 96, height: 30)
+    /// When the bill reaches the seller; the amount ticks down then.
+    static let billLands = 1.85
+    private static let duration = 2.6
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var start: Date?
+
+    var body: some View {
+        TimelineView(.animation(paused: reduceMotion || start == nil)) { tl in
+            let t = reduceMotion ? Self.duration : start.map { tl.date.timeIntervalSince($0) } ?? 0
+            Canvas { ctx, _ in draw(ctx, t: min(t, Self.duration)) }
+        }
+        .frame(width: Self.size.width, height: Self.size.height)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+        .onAppear { if start == nil { start = .now } }
+    }
+
+    private static func progress(_ t: Double, from: Double, length: Double) -> Double {
+        min(max((t - from) / length, 0), 1)
+    }
+
+    private func draw(_ ctx: GraphicsContext, t: Double) {
+        let ink = NightTheme.figure(colorScheme)
+        let warm = NightTheme.window
+        let dark = colorScheme == .dark
+        let roof = dark ? NightTheme.silver : Color(red: 127 / 255, green: 138 / 255, blue: 160 / 255)
+        let pole = Color(red: 127 / 255, green: 138 / 255, blue: 160 / 255)
+        let counter = dark ? Color(red: 42 / 255, green: 51 / 255, blue: 80 / 255) : NightTheme.ink.opacity(0.75)
+
+        // stand: striped awning, poles, seller behind the counter
+        ctx.fill(Path(roundedRect: CGRect(x: 64, y: 4, width: 30, height: 4), cornerRadius: 1), with: .color(roof))
+        for x in stride(from: 64.0, to: 94, by: 6) {
+            ctx.fill(Path(CGRect(x: x, y: 7.5, width: 3, height: 1)), with: .color(NightTheme.ink))
+        }
+        ctx.fill(Path(CGRect(x: 66, y: 8, width: 1.6, height: 8)), with: .color(pole))
+        ctx.fill(Path(CGRect(x: 90.4, y: 8, width: 1.6, height: 8)), with: .color(pole))
+        ctx.fill(Path(ellipseIn: CGRect(x: 77.4, y: 8.4, width: 5.2, height: 5.2)), with: .color(ink))
+        ctx.fill(Path(CGRect(x: 77, y: 14, width: 6, height: 4)), with: .color(ink))
+        ctx.fill(Path(roundedRect: CGRect(x: 63, y: 17, width: 32, height: 12), cornerRadius: 1.5), with: .color(counter))
+        ctx.fill(Path(roundedRect: CGRect(x: 70, y: 20, width: 18, height: 2), cornerRadius: 1), with: .color(warm.opacity(0.85)))
+
+        // buyer walk-in progress (the bill travels with the buyer until it is handed over)
+        let w = Self.progress(t, from: 0.4, length: 0.9)
+        let we = 1 - pow(1 - w, 4)
+
+        // bill: in the buyer's hand, slides 18 pt to the seller, gone once it lands
+        let b = Self.progress(t, from: 1.3, length: 0.7)
+        if b < 1 {
+            let dx = (b < 0.75 ? 17 * (b / 0.75) : 17 + (b - 0.75) / 0.25) - 34 * (1 - we)
+            let alpha = (b < 0.75 ? 1 : 1 - (b - 0.75) / 0.25) * we
+            ctx.fill(Path(roundedRect: CGRect(x: 49 + dx, y: 13, width: 6, height: 3.6), cornerRadius: 0.6), with: .color(warm.opacity(alpha)))
+        }
+
+        // bag: on the counter, handed 20 pt to the buyer
+        let g = Self.progress(t, from: 2.0, length: 0.6)
+        let ge = 1 - pow(1 - g, 4)
+        ctx.fill(Path(roundedRect: CGRect(x: 68 - 20 * ge, y: 15 + 2 * ge, width: 5, height: 6), cornerRadius: 1), with: .color(warm))
+
+        // buyer walks in 34 pt and fades in
+        var buyer = ctx
+        buyer.opacity = we
+        buyer.translateBy(x: -34 * (1 - we), y: 0)
+        let walking = w > 0 && w < 1
+        let swing = walking ? sin(t * 14) * 1.5 : 0
+        buyer.fill(Path(ellipseIn: CGRect(x: 41.4, y: 7.4, width: 5.2, height: 5.2)), with: .color(ink))
+        var body = Path()
+        body.move(to: CGPoint(x: 42, y: 13)); body.addLine(to: CGPoint(x: 46.5, y: 13))
+        body.addLine(to: CGPoint(x: 47.5, y: 21)); body.addLine(to: CGPoint(x: 41, y: 21)); body.closeSubpath()
+        buyer.fill(body, with: .color(ink))
+        var legs = Path()
+        legs.move(to: CGPoint(x: 43, y: 21)); legs.addLine(to: CGPoint(x: 41 + swing, y: 29))
+        legs.move(to: CGPoint(x: 46, y: 21)); legs.addLine(to: CGPoint(x: 48 - swing, y: 29))
+        buyer.stroke(legs, with: .color(ink), style: StrokeStyle(lineWidth: 1.8, lineCap: .round))
+        var arm = Path()
+        arm.move(to: CGPoint(x: 46, y: 14)); arm.addLine(to: CGPoint(x: 50, y: 15))
+        buyer.stroke(arm, with: .color(ink), style: StrokeStyle(lineWidth: 1.6, lineCap: .round))
     }
 }
 

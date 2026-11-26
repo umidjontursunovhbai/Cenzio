@@ -59,7 +59,8 @@ Rules:
 - Pace chart: daily spend as small buildings (today has a lit window), running total line with soft fill, last month dashed.
 - Removed by the owner: taxi, avatar, today/this-week cards, the week section, the walker on Add.
 - Add expense is a 44 pt pill beside a 44 pt mic (`ExpenseEntryBar(compact: true)`); other screens keep the round buttons.
-- Two figures: snacker on the amount, shopper on "Where it goes". They stand on the cap line
+- Pay scene beside the amount (mockup v11): somsa stand, seller, buyer, warm bill and bag; plays once per appear
+  (~2.6 s) and the amount ticks down when the bill lands. Shopper on "Where it goes". They stand on the cap line
   just past the text end (`capFigure`). Red only when over a budget or the plan.
 
 ## 5. The street cast (small figures)
