@@ -29,13 +29,16 @@ final class AppleAccountStore: ObservableObject {
     @Published private(set) var hasSkippedSignIn: Bool
 
     #if DEBUG
-    @Published private var debugShowsOnboarding = true
+    /// Debug builds skip the onboarding for a signed-in owner. Set the launch environment
+    /// variable SMARTSPEND_SHOW_ONBOARDING=1 to see it on every launch again.
+    @Published private var debugShowsOnboarding =
+        ProcessInfo.processInfo.environment["SMARTSPEND_SHOW_ONBOARDING"] == "1"
     #endif
 
     /// The welcome screen shows until the owner signs in.
     var showsWelcome: Bool {
         #if DEBUG
-        // Debug builds show the onboarding on every launch, until it is finished in this run.
+        // Debug builds can force the onboarding on launch (see debugShowsOnboarding).
         if debugShowsOnboarding, state != .checking { return true }
         #endif
         // signing in is required: a signed-out owner always sees the welcome and sign-in

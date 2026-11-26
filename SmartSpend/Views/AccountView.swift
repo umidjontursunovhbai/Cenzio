@@ -234,17 +234,24 @@ struct AccountView: View {
         .accessibilityHidden(true)
     }
 
-    /// Same still, blurred city as Settings: night in dark mode, day in light mode.
+    /// Same ground as Settings: the dashboard's flat ink at night, the blurred day city by day.
+    @ViewBuilder
     private var cityBackground: some View {
-        ZStack(alignment: .bottom) {
-            Color(.systemBackground)
-            NightCityView(page: colorScheme == .dark ? .smart : .privacy, reduceMotion: true, showsOverlay: false)
-                .aspectRatio(City.W / City.H, contentMode: .fill)
-                .blur(radius: 14)
-                .opacity(colorScheme == .dark ? 0.8 : 0.55)
+        if colorScheme == .dark {
+            NightTheme.ink
+                .ignoresSafeArea()
+                .accessibilityHidden(true)
+        } else {
+            ZStack(alignment: .bottom) {
+                Color(.systemBackground)
+                NightCityView(page: .privacy, reduceMotion: true, showsOverlay: false)
+                    .aspectRatio(City.W / City.H, contentMode: .fill)
+                    .blur(radius: 14)
+                    .opacity(0.55)
+            }
+            .ignoresSafeArea()
+            .accessibilityHidden(true)
         }
-        .ignoresSafeArea()
-        .accessibilityHidden(true)
     }
 
     private func authenticateAndDelete() {
