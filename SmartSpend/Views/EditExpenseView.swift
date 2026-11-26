@@ -1,6 +1,9 @@
 import SwiftUI
 
+/// Same layout as Add expense: glass rows, inline category tiles, Save at the bottom.
 struct EditExpenseView: View {
+    private enum Field: Hashable { case title, amount }
+
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var dataManager = DataManager.shared
 
@@ -14,7 +17,9 @@ struct EditExpenseView: View {
     @State private var selectedCategory: UserCategory?
     @State private var selectedDate: Date
     @State private var showingCategoryManagement = false
+    @State private var showingCategoryGrid = false
     @State private var confirmingDelete = false
+    @FocusState private var focusedField: Field?
 
     init(expense: Expense, onDelete: (() -> Void)? = nil) {
         self.expense = expense
@@ -37,6 +42,8 @@ struct EditExpenseView: View {
                 Section {
                     TextField("exp_title_placeholder".localized, text: $title, axis: .vertical)
                         .lineLimit(1...3)
+                        .textFieldStyle(.plain)
+                        .focused($focusedField, equals: .title)
                         .accessibilityIdentifier("edit-expense.title")
 
                     HStack {
@@ -44,23 +51,35 @@ struct EditExpenseView: View {
                             .foregroundStyle(.secondary)
                         TextField("0", text: $amount)
                             .keyboardType(.decimalPad)
+                            .textFieldStyle(.plain)
+                            .focused($focusedField, equals: .amount)
                             .accessibilityIdentifier("edit-expense.amount")
                             .onChange(of: amount) { old, _ in
                                 formatAmountInput(previous: old)
                             }
                     }
 
-                    categoryPicker
+                    categoryRow
+
+                    if showingCategoryGrid {
+                        CategoryTileGrid(categories: dataManager.userCategories, selectedID: selectedCategory?.id) { category in
+                            selectedCategory = category
+                            withAnimation(.snappy(duration: 0.3)) { showingCategoryGrid = false }
+                        } onCreate: {
+                            showingCategoryManagement = true
+                        }
+                    }
 
                     DatePicker("column_date".localized, selection: $selectedDate, displayedComponents: [.date, .hourAndMinute])
                 } header: {
-                    Text("expense_details".localized)
+                    StreetSectionHeader(title: "expense_details".localized, figure: .cyclist)
                 } footer: {
                     if !amount.isEmpty && validAmount == nil {
                         Text("exp_amount_must_be_positive".localized)
                             .foregroundStyle(Color(.systemRed))
                     }
                 }
+                .listRowBackground(NightTheme.glassFill)
 
                 if onDelete != nil {
                     Section {
@@ -68,24 +87,32 @@ struct EditExpenseView: View {
                             confirmingDelete = true
                         } label: {
                             Label("exp_delete_expense".localized, systemImage: "trash")
+                                .foregroundStyle(Color(.systemRed))
                                 .frame(maxWidth: .infinity)
                         }
                     } footer: {
                         Text("exp_delete_footer".localized)
+                            .foregroundStyle(NightTheme.secondaryLabel)
                     }
+                    .listRowBackground(NightTheme.glassFill)
                 }
             }
+            .listRowSeparatorTint(NightTheme.hair)
+            .scrollContentBackground(.hidden)
+            .background(NightGround())
+            .safeAreaInset(edge: .bottom, spacing: 0) { saveBar }
+            .scrollDismissesKeyboard(.interactively)
+            .scrollIndicators(.hidden)
             .navigationTitle("exp_edit_title".localized)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("cancel".localized) { dismiss() }
+                        .foregroundStyle(.tint)
                 }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("save".localized, action: updateExpense)
-                        .fontWeight(.semibold)
-                        .disabled(!canSave)
-                        .accessibilityIdentifier("edit-expense.save")
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("done".localized) { focusedField = nil }
                 }
             }
             .confirmationDialog("exp_delete_expense".localized, isPresented: $confirmingDelete, titleVisibility: .hidden) {
@@ -100,47 +127,45 @@ struct EditExpenseView: View {
         }
     }
 
-    private var categoryPicker: some View {
-        HStack {
-            Text("category".localized)
-            Spacer()
-            Menu {
-                ForEach(dataManager.userCategories) { userCategory in
-                    Button {
-                        selectedCategory = userCategory
-                    } label: {
-                        Label {
-                            Text(userCategory.name)
-                        } icon: {
-                            HeroIcon(systemName: userCategory.iconSystemName)
-                        }
-                    }
-                }
+    private var saveBar: some View {
+        Button("save".localized, action: updateExpense)
+            .buttonStyle(PrimaryCapsuleButtonStyle())
+            .disabled(!canSave)
+            .accessibilityIdentifier("edit-expense.save")
+            .padding(.horizontal, 28)
+            .padding(.top, 8)
+            .padding(.bottom, 10)
+            .background(NightGround())
+    }
 
-                Divider()
-
-                Button {
-                    showingCategoryManagement = true
-                } label: {
-                    HeroIconLabel(title: "create_new_category".localized, systemName: "plus.circle")
-                }
-            } label: {
-                HStack(spacing: 4) {
-                    if let category = selectedCategory {
-                        HeroIcon(systemName: category.iconSystemName, size: 18)
-                            .foregroundStyle(category.color)
-                        Text(category.name)
-                            .foregroundStyle(.primary)
-                    } else {
-                        Text("select_category".localized)
-                            .foregroundStyle(.secondary)
-                    }
-                    Image(systemName: "chevron.up.chevron.down")
-                        .font(.caption)
+    /// Opens the inline category tiles, like Add expense.
+    private var categoryRow: some View {
+        Button {
+            withAnimation(.snappy(duration: 0.3)) { showingCategoryGrid.toggle() }
+        } label: {
+            HStack(spacing: 8) {
+                Text("category".localized)
+                    .foregroundStyle(.primary)
+                Spacer()
+                if let category = selectedCategory {
+                    HeroIcon(systemName: category.iconSystemName)
+                        .foregroundStyle(category.color)
+                    Text(category.name)
+                        .foregroundStyle(.primary)
+                } else {
+                    Text("select_category".localized)
                         .foregroundStyle(.secondary)
                 }
+                HeroIcon(systemName: "chevron.down")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .rotationEffect(.degrees(showingCategoryGrid ? 180 : 0))
             }
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("edit-expense.category")
+        .accessibilityValue(selectedCategory?.name ?? "select_category".localized)
     }
 
     private func updateExpense() {

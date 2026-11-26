@@ -9,6 +9,8 @@ struct ExpenseRowView: View {
     /// `nil` outside selection mode; otherwise whether this row is selected.
     var selection: Bool? = nil
 
+    @Environment(\.colorScheme) private var colorScheme
+
     var body: some View {
         HStack(spacing: iOSDesignSystem.Spacing.medium) {
             if let isSelected = selection {
@@ -16,10 +18,11 @@ struct ExpenseRowView: View {
                     .transition(.move(edge: .leading).combined(with: .opacity))
             }
 
-            HeroIcon(systemName: category.iconSystemName, size: 20)
-                .foregroundStyle(category.color)
-                .frame(width: 40, height: 40)
-                .background(category.color.opacity(0.13), in: RoundedRectangle(cornerRadius: iOSDesignSystem.Radius.medium, style: .continuous))
+            // White icon on a glass tile, like the dashboard rows.
+            HeroIcon(systemName: category.iconSystemName, size: 18)
+                .foregroundStyle(NightTheme.accent)
+                .frame(width: 34, height: 34)
+                .background(NightTheme.iconFill, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(displayTitle)
@@ -28,7 +31,7 @@ struct ExpenseRowView: View {
                     .lineLimit(1)
                 Text(subtitle)
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(NightTheme.secondaryLabel)
                     .lineLimit(1)
             }
 
@@ -36,7 +39,6 @@ struct ExpenseRowView: View {
 
             Text(CurrencyFormatter.format(expense.amount, currency: currency))
                 .font(.body.weight(.semibold))
-                .fontDesign(.rounded)
                 .monospacedDigit()
                 .foregroundStyle(.primary)
                 .lineLimit(1)
@@ -64,11 +66,11 @@ struct ExpenseRowView: View {
     private func selectionMark(_ isSelected: Bool) -> some View {
         ZStack {
             Circle()
-                .strokeBorder(isSelected ? Color.accentColor : Color(.systemGray3), lineWidth: 1.5)
+                .strokeBorder(isSelected ? NightTheme.accent : NightTheme.secondaryLabel.opacity(0.6), lineWidth: 1.5)
             if isSelected {
-                Circle().fill(Color.accentColor)
+                Circle().fill(NightTheme.accent)
                 HeroIcon("check", size: 12)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(colorScheme == .dark ? NightTheme.ink : .white)
             }
         }
         .frame(width: 24, height: 24)

@@ -4,12 +4,14 @@ struct ExpenseListView: View {
     @ObservedObject private var dataManager = DataManager.shared
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.floatingTabBarClearance) private var tabBarClearance
+    @Environment(\.colorScheme) private var colorScheme
     @StateObject private var voice = InlineVoiceExpenseController()
 
     // Filtering. Results are cached and recomputed only when an input changes,
     // not on every view update (voice state, selection taps, etc.).
     @State private var query = ExpenseListQuery()
     @State private var results: [Expense] = []
+    @State private var resultsTotal: Double = 0
     @State private var groups: [ExpenseDayGroup] = []
     @State private var visibleLimit = ExpenseListView.initialPageSize
 
@@ -43,15 +45,15 @@ struct ExpenseListView: View {
                     .accessibilityHidden(voice.isVisible && voice.prefill == nil)
 
                 if !dataManager.expenses.isEmpty {
-                    AppSearchField(text: $query.searchText, prompt: "search_expenses".localized)
+                    AppSearchField(text: $query.searchText, prompt: "search_expenses".localized, style: .glass)
                         .padding(.bottom, iOSDesignSystem.Spacing.small)
                     filterChips
                 }
 
                 content
             }
-            .background(iOSDesignSystem.appBackground)
-            .expenseEntryBar(ExpenseEntryBar(accessibilityPrefix: "expenses", isRecording: voice.isRecording, isProcessing: voice.isProcessing, onAdd: {
+            .background(NightGround())
+            .expenseEntryBar(ExpenseEntryBar(accessibilityPrefix: "expenses", compact: true, isRecording: voice.isRecording, isProcessing: voice.isProcessing, onAdd: {
                 showingAddExpense = true
             }, onVoice: {
                 voice.start()
@@ -73,6 +75,7 @@ struct ExpenseListView: View {
             }
             .sheet(item: $editingExpense) { expense in
                 EditExpenseView(expense: expense) { archive([expense]) }
+                    .tint(NightTheme.accent)
             }
             .sheet(isPresented: $showingFilterSheet, onDismiss: {
                 // Present the range picker only once the filter sheet is gone;
@@ -96,6 +99,7 @@ struct ExpenseListView: View {
                 )
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
+                .tint(NightTheme.accent)
             }
             .sheet(isPresented: $showingRangePicker) {
                 CalendarPickerView(
@@ -106,9 +110,11 @@ struct ExpenseListView: View {
                 .presentationDetents([.fraction(0.85)])
                 .presentationDragIndicator(.visible)
                 .presentationCornerRadius(32)
+                .tint(NightTheme.accent)
             }
             .sheet(isPresented: $showingDeleted) {
                 DeletedExpensesView()
+                    .tint(NightTheme.accent)
             }
             .onAppear(perform: refresh)
             .onDisappear { voice.cancel() }
@@ -140,6 +146,7 @@ struct ExpenseListView: View {
                 withAnimation(.snappy) { undoBatch = nil }
             }
         }
+        .tint(NightTheme.accent)
     }
 
     // MARK: - Derived data
@@ -157,6 +164,7 @@ struct ExpenseListView: View {
     private func refresh() {
         let names = categoryLookup.mapValues(\.name)
         results = query.apply(to: dataManager.expenses, categoryNames: names)
+        resultsTotal = results.reduce(0) { $0 + $1.amount }
         groups = ExpenseDayGroup.make(from: results, limit: visibleLimit)
         // Selections hidden by a filter or removed elsewhere must not be deleted unseen.
         let visible = Set(results.map(\.id))
@@ -180,48 +188,97 @@ struct ExpenseListView: View {
     // MARK: - Header
 
     private var header: some View {
-        AppScreenHeader("expenses".localized, subtitle: headerSubtitle) {
-            if isSelecting {
-                Button(allResultsSelected ? "exp_deselect_all".localized : "exp_select_all".localized) {
-                    withAnimation(.snappy) {
-                        selection = ExpenseSelection.toggleAll(selected: selection, visible: results.map(\.id))
-                    }
-                }
-                .font(.body.weight(.medium))
-                .frame(minHeight: iOSDesignSystem.Size.minimumTapTarget)
-                .disabled(results.isEmpty)
-
-                Button("done".localized, action: endSelection)
-                    .font(.body.weight(.semibold))
-                    .frame(minHeight: iOSDesignSystem.Size.minimumTapTarget)
-            } else {
-                if !dataManager.expenses.isEmpty {
-                    filterButton
-                }
-                moreMenu
+        HStack(alignment: .bottom, spacing: 12) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("expenses".localized)
+                    .font(NightTheme.display(46))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                    .capFigure(isSelecting ? nil : .shopper, fontSize: 46, relativeTo: .largeTitle)
+                    .accessibilityAddTraits(.isHeader)
+                headerSubtitle
             }
+            .accessibilityElement(children: .combine)
+
+            Spacer(minLength: 12)
+
+            HStack(spacing: 8) {
+                if isSelecting {
+                    Button(allResultsSelected ? "exp_deselect_all".localized : "exp_select_all".localized) {
+                        withAnimation(.snappy) {
+                            selection = ExpenseSelection.toggleAll(selected: selection, visible: results.map(\.id))
+                        }
+                    }
+                    .font(.body.weight(.medium))
+                    .frame(minHeight: iOSDesignSystem.Size.minimumTapTarget)
+                    .disabled(results.isEmpty)
+
+                    Button("done".localized, action: endSelection)
+                        .font(.body.weight(.semibold))
+                        .frame(minHeight: iOSDesignSystem.Size.minimumTapTarget)
+                        .padding(.leading, 10)
+                } else {
+                    if !dataManager.expenses.isEmpty {
+                        filterButton
+                    }
+                    moreMenu
+                }
+            }
+            .padding(.bottom, 2)
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 10)
+        .padding(.bottom, 14)
+    }
+
+    /// "This month · 42 items · 3 184 000 so'm" for what is shown; "N selected" while selecting.
+    @ViewBuilder
+    private var headerSubtitle: some View {
+        if isSelecting {
+            Text(String(format: "selected_count".localized, selection.count))
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(NightTheme.secondaryLabel)
+        } else if !dataManager.expenses.isEmpty {
+            let prefix = "\(periodTitle) · \(String(format: "exp_items_count_format".localized, results.count)) · "
+            let total = Text(CurrencyFormatter.format(resultsTotal, currency: currency)).foregroundStyle(.primary)
+            Text("\(prefix)\(total)")
+                .font(.subheadline.weight(.semibold))
+                .monospacedDigit()
+                .foregroundStyle(NightTheme.secondaryLabel)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
         }
     }
 
-    private var headerSubtitle: String? {
-        if isSelecting {
-            return String(format: "selected_count".localized, selection.count)
-        }
-        // "All Time" adds nothing above an unfiltered list.
-        return dataManager.expenses.isEmpty || query.period == .all ? nil : periodTitle
+    /// A 44 pt white glass circle for header actions.
+    private func headerCircle<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        content()
+            .foregroundStyle(NightTheme.accent)
+            .frame(width: iOSDesignSystem.Size.minimumTapTarget, height: iOSDesignSystem.Size.minimumTapTarget)
+            .background(NightTheme.glassFill, in: Circle())
+            .overlay(Circle().stroke(NightTheme.glassLine, lineWidth: 1))
+            .contentShape(Circle())
+    }
+
+    private var groundColor: Color {
+        colorScheme == .dark ? NightTheme.ink : Color(.systemGroupedBackground)
     }
 
     private var filterButton: some View {
-        ActionIconButton(icon: "funnel", style: .secondary) {
+        Button {
             showingFilterSheet = true
+        } label: {
+            headerCircle { HeroIcon("funnel", size: 22) }
         }
+        .buttonStyle(.plain)
         .overlay(alignment: .topTrailing) {
             if query.hasFilters {
                 Circle()
-                    .fill(Color.accentColor)
+                    .fill(NightTheme.accent)
                     .frame(width: 10, height: 10)
-                    .overlay(Circle().stroke(iOSDesignSystem.appBackground, lineWidth: 2))
-                    .offset(x: 1, y: -1)
+                    .overlay(Circle().stroke(groundColor, lineWidth: 2))
+                    .offset(x: -5, y: 5)
                     .accessibilityHidden(true)
             }
         }
@@ -248,12 +305,10 @@ struct ExpenseListView: View {
                 }
             }
         } label: {
-            Image(systemName: "ellipsis")
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(Color.accentColor)
-                .frame(width: iOSDesignSystem.Size.minimumTapTarget, height: iOSDesignSystem.Size.minimumTapTarget)
-                .liquidGlassSurface(Circle())
-                .contentShape(Circle())
+            headerCircle {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 18, weight: .semibold))
+            }
         }
         .accessibilityLabel("exp_more_actions".localized)
         .accessibilityIdentifier("expenses.more")
@@ -283,7 +338,7 @@ struct ExpenseListView: View {
                     .accessibilityHint("exp_remove_category_filter".localized)
                 }
             }
-            .padding(.horizontal, 24)
+            .padding(.horizontal, 20)
         }
         .scrollIndicators(.hidden)
         .padding(.bottom, iOSDesignSystem.Spacing.small)
@@ -310,10 +365,11 @@ struct ExpenseListView: View {
                     Image(systemName: "xmark").font(.caption2.weight(.bold))
                 }
             }
-            .foregroundStyle(isOn ? Color.white : Color.primary)
+            .foregroundStyle(isOn ? (colorScheme == .dark ? NightTheme.ink : Color.white) : Color.primary)
             .padding(.horizontal, 14)
             .frame(height: 34)
-            .background(isOn ? Color.accentColor : Color(.tertiarySystemFill), in: Capsule())
+            .background(isOn ? NightTheme.accent : NightTheme.glassFill, in: Capsule())
+            .overlay(Capsule().stroke(isOn ? Color.clear : NightTheme.glassLine, lineWidth: 1))
             .frame(minHeight: iOSDesignSystem.Size.minimumTapTarget)
             .contentShape(Rectangle())
         }
@@ -326,15 +382,7 @@ struct ExpenseListView: View {
     @ViewBuilder
     private var content: some View {
         if dataManager.expenses.isEmpty {
-            ContentUnavailableView {
-                HeroIconLabel(title: "exp_empty_title".localized, systemName: "tray")
-            } description: {
-                Text("exp_empty_body".localized)
-            } actions: {
-                Button("add_expense".localized) { showingAddExpense = true }
-                    .buttonStyle(.borderedProminent)
-            }
-            .frame(maxHeight: .infinity)
+            emptyState
         } else if results.isEmpty {
             noResults
                 .frame(maxHeight: .infinity)
@@ -343,21 +391,56 @@ struct ExpenseListView: View {
         }
     }
 
+    /// A small dark street with one unlit building: nothing spent yet.
+    private var emptyState: some View {
+        VStack(spacing: 0) {
+            EmptyStreetView()
+            Text("exp_empty_title".localized)
+                .font(NightTheme.display(34))
+                .foregroundStyle(.primary)
+                .multilineTextAlignment(.center)
+                .padding(.top, 22)
+            Text("exp_empty_body".localized)
+                .font(.subheadline)
+                .foregroundStyle(NightTheme.secondaryLabel)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 290)
+                .padding(.top, 10)
+        }
+        .padding(.horizontal, 32)
+        .padding(.top, 64)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .accessibilityElement(children: .combine)
+    }
+
     @ViewBuilder
     private var noResults: some View {
         if query.isSearching && !query.hasFilters {
             ContentUnavailableView.search(text: query.trimmedSearch)
         } else {
-            ContentUnavailableView {
-                HeroIconLabel(title: "no_expenses_found".localized, systemName: "line.3.horizontal.decrease.circle")
-            } description: {
+            VStack(spacing: 10) {
+                Text("no_expenses_found".localized)
+                    .font(NightTheme.display(30))
+                    .foregroundStyle(.primary)
+                    .multilineTextAlignment(.center)
                 Text(query.isSearching
                      ? String(format: "exp_no_matches_in_period_format".localized, query.trimmedSearch, periodTitle)
                      : String(format: "exp_nothing_in_period_format".localized, periodTitle))
-            } actions: {
+                    .font(.subheadline)
+                    .foregroundStyle(NightTheme.secondaryLabel)
+                    .multilineTextAlignment(.center)
                 Button("exp_clear_filters".localized, action: clearFilters)
-                    .buttonStyle(.bordered)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .padding(.horizontal, 18)
+                    .frame(minHeight: iOSDesignSystem.Size.minimumTapTarget)
+                    .background(NightTheme.glassFill, in: Capsule())
+                    .overlay(Capsule().stroke(NightTheme.glassLine, lineWidth: 1))
+                    .contentShape(Capsule())
+                    .buttonStyle(.plain)
+                    .padding(.top, 8)
             }
+            .padding(.horizontal, 32)
         }
     }
 
@@ -380,28 +463,33 @@ struct ExpenseListView: View {
             }
         }
         .listStyle(.insetGrouped)
-        .listSectionSpacing(.compact)
+        .listSectionSpacing(12)
         .scrollContentBackground(.hidden)
         .scrollDismissesKeyboard(.immediately)
         // Keeps the last rows scrollable above the entry bar and floating tab bar.
-        .contentMargins(.bottom, 88 + tabBarClearance, for: .scrollContent)
+        .contentMargins(.bottom, 76 + tabBarClearance, for: .scrollContent)
         .animation(.snappy(duration: 0.25), value: isSelecting)
     }
 
+    /// Big Shoulders day title with the day total; the snacker stands on "Today".
     private func dayHeader(_ group: ExpenseDayGroup) -> some View {
-        HStack(alignment: .firstTextBaseline) {
+        let isToday = Calendar.current.isDateInToday(group.day)
+        return HStack(alignment: .lastTextBaseline, spacing: 8) {
             Text(ExpenseDayGroup.title(for: group.day))
-                .font(.subheadline.weight(.semibold))
+                .font(NightTheme.display(21, weight: .semibold, relativeTo: .title3))
                 .foregroundStyle(.primary)
-            Spacer()
+                .lineLimit(1)
+                .capFigure(isToday ? .snacker : nil, fontSize: 21, relativeTo: .title3, weight: .semibold, height: 22, gap: 6)
+            Spacer(minLength: 8)
             Text(CurrencyFormatter.format(group.total, currency: currency))
                 .font(.subheadline.weight(.semibold))
-                .fontDesign(.rounded)
                 .monospacedDigit()
-                .foregroundStyle(.secondary)
+                .foregroundStyle(NightTheme.secondaryLabel)
+                .lineLimit(1)
         }
         .textCase(nil)
-        .padding(.top, 4)
+        .padding(.top, 14)
+        .padding(.bottom, 2)
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isHeader)
     }
@@ -423,7 +511,8 @@ struct ExpenseListView: View {
             )
         }
         .buttonStyle(.plain)
-        .listRowBackground(isSelecting && isSelected ? Color.accentColor.opacity(0.12) : Self.rowBackground)
+        .listRowBackground(isSelecting && isSelected ? NightTheme.accent.opacity(0.14) : NightTheme.glassFill)
+        .listRowSeparatorTint(NightTheme.hair)
         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
             if !isSelecting {
                 Button(role: .destructive) {
@@ -440,7 +529,7 @@ struct ExpenseListView: View {
                 } label: {
                     Label("exp_edit".localized, systemImage: "pencil")
                 }
-                .tint(.accentColor)
+                .tint(Color(.systemGray))
             }
         }
         .contextMenu {
@@ -464,12 +553,6 @@ struct ExpenseListView: View {
             }
         }
     }
-
-    private static let rowBackground = Color(UIColor { traits in
-        traits.userInterfaceStyle == .dark
-            ? UIColor(red: 0.13, green: 0.135, blue: 0.15, alpha: 1)
-            : UIColor.secondarySystemBackground
-    })
 
     private var loadMoreRow: some View {
         HStack(spacing: iOSDesignSystem.Spacing.small) {
@@ -496,9 +579,9 @@ struct ExpenseListView: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
         } else if let undoBatch {
             undoToast(undoBatch)
-                // Sits above the entry bar's 56pt buttons.
+                // Sits above the entry bar's 44pt buttons.
                 .padding(.horizontal, iOSDesignSystem.Spacing.screenMargin)
-                .padding(.bottom, 12 + 56 + 12 + tabBarClearance)
+                .padding(.bottom, 12 + 44 + 12 + tabBarClearance)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
         }
     }
@@ -541,13 +624,14 @@ struct ExpenseListView: View {
     private func undoToast(_ batch: UndoBatch) -> some View {
         HStack(spacing: iOSDesignSystem.Spacing.medium) {
             HeroIcon("trash", size: 18)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(NightTheme.secondaryLabel)
             Text(String(format: "exp_moved_to_deleted_format".localized, batch.expenseIds.count))
                 .font(.subheadline.weight(.medium))
                 .lineLimit(1)
             Spacer(minLength: 0)
             Button("exp_undo".localized) { undo(batch) }
                 .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.primary)
                 .frame(minHeight: iOSDesignSystem.Size.minimumTapTarget)
                 .accessibilityIdentifier("expenses.undo-delete")
         }
@@ -630,8 +714,7 @@ struct CalendarPickerView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                iOSDesignSystem.appBackground
-                    .ignoresSafeArea()
+                NightGround()
 
                 ScrollView {
                     VStack(spacing: iOSDesignSystem.Spacing.large) {
@@ -674,7 +757,7 @@ struct CalendarPickerView: View {
         VStack(alignment: .leading, spacing: iOSDesignSystem.Spacing.medium) {
             HStack(spacing: iOSDesignSystem.Spacing.small) {
                 HeroIcon("calendar-days", size: 18)
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(NightTheme.accent)
 
                 Text(instructionText)
                     .font(.subheadline.weight(.medium))
@@ -720,12 +803,12 @@ struct CalendarPickerView: View {
             VStack(alignment: .leading, spacing: iOSDesignSystem.Spacing.small) {
                 HStack(spacing: 6) {
                     Circle()
-                        .fill(isActive ? Color.accentColor : Color(.tertiaryLabel))
+                        .fill(isActive ? NightTheme.accent : Color(.tertiaryLabel))
                         .frame(width: 6, height: 6)
 
                     Text(title)
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(isActive ? Color.accentColor : .secondary)
+                        .foregroundStyle(isActive ? NightTheme.accent : .secondary)
                 }
 
                 Text(localizedDateString(from: date))
@@ -737,12 +820,15 @@ struct CalendarPickerView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(iOSDesignSystem.Spacing.medium)
             .frame(minHeight: 72)
-            .background(isActive ? Color.accentColor.opacity(0.07) : Color.clear,
+            .background(NightTheme.glassFill,
                         in: RoundedRectangle(cornerRadius: iOSDesignSystem.Radius.large, style: .continuous))
-            .liquidGlassCard(cornerRadius: iOSDesignSystem.Radius.large)
             .overlay(
                 RoundedRectangle(cornerRadius: iOSDesignSystem.Radius.large, style: .continuous)
-                    .stroke(isActive ? Color.accentColor.opacity(0.55) : Color.clear, lineWidth: 1.25)
+                    .stroke(NightTheme.glassLine, lineWidth: 1)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: iOSDesignSystem.Radius.large, style: .continuous)
+                    .stroke(isActive ? NightTheme.accent.opacity(0.55) : Color.clear, lineWidth: 1.25)
             )
         }
         .buttonStyle(.plain)
@@ -766,7 +852,7 @@ struct CalendarPickerView: View {
                     Text("reset".localized)
                 }
                     .font(.footnote.weight(.semibold))
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(NightTheme.accent)
                     .padding(.horizontal, 10)
                     .frame(minHeight: iOSDesignSystem.Size.minimumTapTarget)
             }
@@ -777,7 +863,7 @@ struct CalendarPickerView: View {
         .frame(maxWidth: .infinity)
         .background(
             RoundedRectangle(cornerRadius: iOSDesignSystem.Radius.medium, style: .continuous)
-                .fill(Color(.tertiarySystemFill))
+                .fill(NightTheme.iconFill)
         )
     }
 
@@ -802,8 +888,9 @@ struct CalendarPickerView: View {
         VStack(spacing: iOSDesignSystem.Spacing.medium) {
             monthNavigation
 
-            Divider()
-                .overlay(Color(.separator).opacity(0.35))
+            Rectangle()
+                .fill(NightTheme.hair)
+                .frame(height: 1)
 
             VStack(spacing: 12) {
                 weekdayHeader
@@ -826,7 +913,7 @@ struct CalendarPickerView: View {
             }
         }
         .padding(iOSDesignSystem.Spacing.medium)
-        .liquidGlassCard(cornerRadius: iOSDesignSystem.Radius.sheet)
+        .nightGroup()
     }
 
     private var monthNavigation: some View {
@@ -834,9 +921,10 @@ struct CalendarPickerView: View {
             Button(action: previousMonth) {
                 HeroIcon(systemName: "chevron.left")
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(NightTheme.accent)
                     .iOSMinimumTapTarget()
-                    .liquidGlassSurface(Circle())
+                    .background(NightTheme.glassFill, in: Circle())
+                    .overlay(Circle().stroke(NightTheme.glassLine, lineWidth: 1))
             }
             
             Spacer()
@@ -850,9 +938,10 @@ struct CalendarPickerView: View {
             Button(action: nextMonth) {
                 HeroIcon(systemName: "chevron.right")
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(NightTheme.accent)
                     .iOSMinimumTapTarget()
-                    .liquidGlassSurface(Circle())
+                    .background(NightTheme.glassFill, in: Circle())
+                    .overlay(Circle().stroke(NightTheme.glassLine, lineWidth: 1))
             }
         }
     }
@@ -992,7 +1081,9 @@ struct CalendarDayView: View {
     let state: DayState
     let isCurrentMonth: Bool
     let action: () -> Void
-    
+
+    @Environment(\.colorScheme) private var colorScheme
+
     var body: some View {
         Button(action: action) {
             ZStack {
@@ -1000,15 +1091,14 @@ struct CalendarDayView: View {
 
                 if Calendar.current.isDateInToday(date) && !showsSelection {
                     Circle()
-                        .stroke(Color.accentColor.opacity(0.45), lineWidth: 1)
+                        .stroke(NightTheme.accent.opacity(0.45), lineWidth: 1)
                         .frame(width: 34, height: 34)
                 }
                 
                 if showsSelection {
                     Circle()
-                        .fill(Color.accentColor)
+                        .fill(NightTheme.accent)
                         .frame(width: 36, height: 36)
-                        .shadow(color: Color.accentColor.opacity(0.22), radius: 5, x: 0, y: 2)
                 }
                 
                 Text("\(Calendar.current.component(.day, from: date))")
@@ -1033,7 +1123,7 @@ struct CalendarDayView: View {
     
     private var textColor: Color {
         if showsSelection {
-            return .white
+            return colorScheme == .dark ? NightTheme.ink : .white
         } else if isCurrentMonth {
             return Color(.label)
         } else {
@@ -1045,7 +1135,7 @@ struct CalendarDayView: View {
         Group {
             if state == .inRange {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color.accentColor.opacity(0.12))
+                    .fill(NightTheme.accent.opacity(0.14))
                     .frame(maxWidth: .infinity)
                     .frame(height: 34)
             } else {
@@ -1090,7 +1180,7 @@ struct ExpenseFilterSheet: View {
     var body: some View {
         NavigationStack {
             List {
-                Section("time_period".localized) {
+                Section {
                     ForEach(ExpensePeriod.quickPeriods, id: \.self) { period in
                         checkRow(isOn: draftPeriod == period) {
                             Text(period.localizedName)
@@ -1108,13 +1198,13 @@ struct ExpenseFilterSheet: View {
                                 Text("custom_date_range".localized)
                             } icon: {
                                 HeroIcon("calendar-days", size: 20)
-                                    .foregroundStyle(Color.accentColor)
+                                    .foregroundStyle(NightTheme.accent)
                             }
                             .foregroundStyle(.primary)
                             Spacer()
                             if draftPeriod == .custom {
                                 Text(customRangeText)
-                                    .foregroundStyle(Color.accentColor)
+                                    .foregroundStyle(NightTheme.secondaryLabel)
                             }
                             Image(systemName: "chevron.right")
                                 .font(.footnote.weight(.semibold))
@@ -1122,7 +1212,10 @@ struct ExpenseFilterSheet: View {
                         }
                     }
                     .accessibilityAddTraits(draftPeriod == .custom ? .isSelected : [])
+                } header: {
+                    sectionTitle("time_period".localized)
                 }
+                .listRowBackground(NightTheme.glassFill)
 
                 Section {
                     if categories.isEmpty {
@@ -1141,7 +1234,7 @@ struct ExpenseFilterSheet: View {
                                     Text(category.name)
                                 } icon: {
                                     HeroIcon(systemName: category.iconSystemName, size: 20)
-                                        .foregroundStyle(category.color)
+                                        .foregroundStyle(NightTheme.accent)
                                 }
                             } action: {
                                 toggle(category.id)
@@ -1149,12 +1242,17 @@ struct ExpenseFilterSheet: View {
                         }
                     }
                 } header: {
-                    Text("category".localized)
+                    sectionTitle("category".localized)
                 } footer: {
                     Text("filter_category_hint".localized)
+                        .foregroundStyle(NightTheme.secondaryLabel)
                 }
+                .listRowBackground(NightTheme.glassFill)
             }
             .listStyle(.insetGrouped)
+            .listRowSeparatorTint(NightTheme.hair)
+            .scrollContentBackground(.hidden)
+            .background(NightGround())
             .navigationTitle("filter".localized)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -1191,12 +1289,19 @@ struct ExpenseFilterSheet: View {
                 if isOn {
                     Image(systemName: "checkmark")
                         .font(.body.weight(.semibold))
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(NightTheme.accent)
                 }
             }
             .contentShape(Rectangle())
         }
         .accessibilityAddTraits(isOn ? .isSelected : [])
+    }
+
+    private func sectionTitle(_ title: String) -> some View {
+        Text(title)
+            .font(NightTheme.sectionFont)
+            .foregroundStyle(NightTheme.secondaryLabel)
+            .textCase(nil)
     }
 
     private func toggle(_ id: UUID) {
@@ -1205,6 +1310,54 @@ struct ExpenseFilterSheet: View {
         } else {
             draftCategoryIds.insert(id)
         }
+    }
+}
+
+// MARK: - Empty street
+
+/// One unlit building, a street lamp and a walker: the Expenses empty state.
+private struct EmptyStreetView: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    var body: some View {
+        let dark = colorScheme == .dark
+        let building = dark ? Color(red: 22 / 255, green: 28 / 255, blue: 44 / 255) : Color(.systemGray5)
+        let window = dark ? Color(red: 35 / 255, green: 43 / 255, blue: 64 / 255) : Color(.systemGray4)
+        let figure = NightTheme.figure(colorScheme)
+        ZStack(alignment: .topLeading) {
+            Canvas { ctx, _ in
+                ctx.fill(Path(roundedRect: CGRect(x: 70, y: 14, width: 56, height: 96), cornerRadius: 3),
+                         with: .color(building))
+                for row in 0..<4 {
+                    for col in 0..<3 {
+                        let rect = CGRect(x: 80 + Double(col) * 14, y: 26 + Double(row) * 20, width: 9, height: 12)
+                        ctx.fill(Path(roundedRect: rect, cornerRadius: 1.5), with: .color(window))
+                    }
+                }
+                var ground = Path()
+                ground.move(to: CGPoint(x: 6, y: 110.5))
+                ground.addLine(to: CGPoint(x: 184, y: 110.5))
+                ctx.stroke(ground, with: .color(NightTheme.hair), lineWidth: 1)
+
+                var post = Path()
+                post.move(to: CGPoint(x: 150, y: 110))
+                post.addLine(to: CGPoint(x: 150, y: 52))
+                post.addQuadCurve(to: CGPoint(x: 156, y: 46), control: CGPoint(x: 150, y: 46))
+                post.addLine(to: CGPoint(x: 162, y: 46))
+                ctx.stroke(post, with: .color(figure), lineWidth: 2)
+                ctx.fill(Path(ellipseIn: CGRect(x: 153, y: 38, width: 20, height: 20)),
+                         with: .color(NightTheme.window.opacity(0.16)))
+                ctx.fill(Path(roundedRect: CGRect(x: 160, y: 45, width: 7, height: 4), cornerRadius: 1),
+                         with: .color(NightTheme.window))
+            }
+            if !typeSize.isAccessibilitySize {
+                StreetFigureView(figure: .walker, height: 22)
+                    .offset(x: 34, y: 88)
+            }
+        }
+        .frame(width: 190, height: 120)
+        .accessibilityHidden(true)
     }
 }
 

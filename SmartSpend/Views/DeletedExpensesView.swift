@@ -70,10 +70,15 @@ struct DeletedExpensesView: View {
                         }
                     } footer: {
                         Text("exp_deleted_footer".localized)
+                            .foregroundStyle(NightTheme.secondaryLabel)
                     }
+                    .listRowBackground(NightTheme.glassFill)
                 }
             }
             .listStyle(.insetGrouped)
+            .listRowSeparatorTint(NightTheme.hair)
+            .scrollContentBackground(.hidden)
+            .background(NightGround())
             .searchable(
                 text: $searchText,
                 placement: .navigationBarDrawer(displayMode: .always),
@@ -115,10 +120,10 @@ struct DeletedExpenseRowView: View {
         let category = dataManager.resolveCategory(id: deletedExpense.categoryId)
         let days = dataManager.getDaysRemainingForExpense(deletedExpense)
         HStack(spacing: iOSDesignSystem.Spacing.medium) {
-            HeroIcon(systemName: category.iconSystemName, size: 20)
-                .foregroundStyle(category.color)
-                .frame(width: 40, height: 40)
-                .background(category.color.opacity(0.13), in: RoundedRectangle(cornerRadius: iOSDesignSystem.Radius.medium, style: .continuous))
+            HeroIcon(systemName: category.iconSystemName, size: 18)
+                .foregroundStyle(NightTheme.accent)
+                .frame(width: 34, height: 34)
+                .background(NightTheme.iconFill, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
                 .opacity(0.7)
 
             VStack(alignment: .leading, spacing: 2) {
@@ -127,7 +132,7 @@ struct DeletedExpenseRowView: View {
                     .lineLimit(1)
                 Text(category.name + " · " + deletedExpense.date.formatted(date: .abbreviated, time: .omitted))
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(NightTheme.secondaryLabel)
                     .lineLimit(1)
             }
 
@@ -136,9 +141,8 @@ struct DeletedExpenseRowView: View {
             VStack(alignment: .trailing, spacing: 2) {
                 Text(CurrencyFormatter.format(deletedExpense.amount, currency: dataManager.user.currency))
                     .font(.body.weight(.semibold))
-                    .fontDesign(.rounded)
                     .monospacedDigit()
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(NightTheme.secondaryLabel)
                 Text(days > 0 ? String(format: "exp_days_left_format".localized, days) : "expired".localized)
                     .font(.caption2)
                     .foregroundStyle(days <= 7 ? Color(.systemRed) : .secondary)
