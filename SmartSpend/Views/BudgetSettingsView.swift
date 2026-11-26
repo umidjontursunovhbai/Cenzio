@@ -75,7 +75,7 @@ struct BudgetSettingsView: View {
 
         return NavigationStack {
             ZStack {
-                iOSDesignSystem.appBackground.ignoresSafeArea()
+                NightGround()
 
                 ScrollViewReader { proxy in
                     ScrollView {
@@ -90,13 +90,16 @@ struct BudgetSettingsView: View {
                                         removal: .opacity.combined(with: .scale(scale: 0.96, anchor: .top))
                                     ))
                             }
-                            monthlyOverview(
-                                currentMonthSpent: spentThisMonth,
-                                counts: statusCounts(using: spendingByCategory)
-                            )
-                            categoryBudgetsSection(spendingByCategory: spendingByCategory)
-                            spendingGoalsSection
-                            budgetToolsSection
+                            // The info replaces the page while open, so only the info is shown.
+                            if !showingInfo {
+                                monthlyOverview(
+                                    currentMonthSpent: spentThisMonth,
+                                    counts: statusCounts(using: spendingByCategory)
+                                )
+                                categoryBudgetsSection(spendingByCategory: spendingByCategory)
+                                spendingGoalsSection
+                                budgetToolsSection
+                            }
                         }
                         .padding(.horizontal, iOSDesignSystem.Spacing.screenMargin)
                         .padding(.top, 8)
@@ -121,11 +124,13 @@ struct BudgetSettingsView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button(action: presentInfo) {
-                        HeroIcon(showingInfo ? "x-mark" : "information-circle", size: 23)
-                            .foregroundStyle(Color.accentColor)
-                            .frame(minWidth: iOSDesignSystem.Size.minimumTapTarget,
-                                   minHeight: iOSDesignSystem.Size.minimumTapTarget)
-                            .contentShape(Rectangle())
+                        HeroIcon(showingInfo ? "x-mark" : "information-circle", size: 22)
+                            .foregroundStyle(NightTheme.accent)
+                            .frame(width: iOSDesignSystem.Size.minimumTapTarget,
+                                   height: iOSDesignSystem.Size.minimumTapTarget)
+                            .background(NightTheme.glassFill, in: Circle())
+                            .overlay(Circle().stroke(NightTheme.glassLine, lineWidth: 1))
+                            .contentShape(Circle())
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(showingInfo ? "close".localized : "budget_info_title".localized)
@@ -145,7 +150,7 @@ struct BudgetSettingsView: View {
                 AddSpendingGoalView()
                     .presentationDetents([.medium, .large])
                     .presentationDragIndicator(.visible)
-                    .presentationBackground(iOSDesignSystem.appBackground)
+                    .presentationBackground { NightGround() }
             }
             .alert("budget_reset_title".localized, isPresented: $showingResetConfirmation) {
                 Button("cancel".localized, role: .cancel) { }
@@ -160,6 +165,7 @@ struct BudgetSettingsView: View {
                 dataManager.saveBudgets()
             }
         }
+        .tint(NightTheme.accent)
     }
 
     private static let pageTopID = "page.top"
@@ -179,18 +185,18 @@ struct BudgetSettingsView: View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(spacing: 10) {
                 HeroIcon("chart-pie", size: 18)
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(NightTheme.accent)
                     .frame(width: 34, height: 34)
-                    .background(Color.accentColor.opacity(0.1), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .background(NightTheme.accent.opacity(0.1), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                     .accessibilityHidden(true)
                 Text("budget_info_title".localized)
                     .font(.headline)
                 Spacer()
                 Button(action: presentInfo) {
                     HeroIcon("x-mark", size: 16)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(NightTheme.secondaryLabel)
                         .frame(width: 30, height: 30)
-                        .background(Color(.systemGray6), in: Circle())
+                        .background(NightTheme.iconFill, in: Circle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("close".localized)
@@ -216,14 +222,14 @@ struct BudgetSettingsView: View {
         let status = BudgetGoalStatus.evaluate(spent: currentMonthSpent, limit: totalBudget, isEnabled: hasBudgets)
         let progress = hasBudgets ? currentMonthSpent / totalBudget : 0
         let remaining = totalBudget - currentMonthSpent
-        let tint = status == .onTrack ? Color.accentColor : status.color
+        let tint = status == .onTrack ? NightTheme.accent : status.color
 
         return VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 5) {
                     Text(Date().formatted(.dateTime.month(.wide).year()).uppercased())
                         .font(.caption2.weight(.bold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(NightTheme.secondaryLabel)
 
                     Text(hasBudgets
                          ? CurrencyFormatter.format(totalBudget, currency: currency)
@@ -238,7 +244,7 @@ struct BudgetSettingsView: View {
                          ? "budget_total_limits_caption".localized(with: activeBudgets.count)
                          : "budget_no_limits_message".localized)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(NightTheme.secondaryLabel)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
@@ -247,7 +253,7 @@ struct BudgetSettingsView: View {
                 if hasBudgets {
                     ZStack {
                         Circle()
-                            .stroke(Color(.systemGray5), lineWidth: 6)
+                            .stroke(NightTheme.track, lineWidth: 6)
                         Circle()
                             .trim(from: 0, to: min(progress, 1))
                             .stroke(tint, style: StrokeStyle(lineWidth: 6, lineCap: .round))
@@ -276,7 +282,7 @@ struct BudgetSettingsView: View {
                         color: .primary
                     )
 
-                    Divider().frame(height: 34)
+                    Divider().overlay(NightTheme.hair).frame(height: 34)
 
                     overviewMetric(
                         label: remaining < 0 ? "budget_over_label".localized : "budget_left_label".localized,
@@ -284,7 +290,7 @@ struct BudgetSettingsView: View {
                         color: remaining < 0 ? Color(.systemRed) : Color(.systemGreen)
                     )
 
-                    Divider().frame(height: 34)
+                    Divider().overlay(NightTheme.hair).frame(height: 34)
 
                     overviewMetric(
                         label: "budget_days_left_label".localized,
@@ -298,13 +304,13 @@ struct BudgetSettingsView: View {
                 if remaining > 0 {
                     HStack(alignment: .top, spacing: 8) {
                         HeroIcon("calendar-days", size: 16)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(NightTheme.secondaryLabel)
                         Text("budget_daily_pace".localized(with:
                             CurrencyFormatter.format(remaining / Double(daysLeftInMonth), currency: currency),
                             daysLeftInMonth
                         ))
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(NightTheme.secondaryLabel)
                         .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -328,7 +334,7 @@ struct BudgetSettingsView: View {
                     Text("budget_how_calculated".localized)
                         .font(.footnote.weight(.semibold))
                 }
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(NightTheme.accent)
                 .frame(minHeight: iOSDesignSystem.Size.minimumTapTarget)
                 .contentShape(Rectangle())
             }
@@ -337,7 +343,7 @@ struct BudgetSettingsView: View {
             .accessibilityIdentifier("budgetGoals.howCalculated")
         }
         .padding(20)
-        .liquidGlassCard(cornerRadius: 22)
+        .budgetScrollCard(cornerRadius: 22)
     }
 
     private func statusSummary(_ counts: [BudgetGoalStatus: Int]) -> some View {
@@ -350,7 +356,7 @@ struct BudgetSettingsView: View {
                         .frame(width: 7, height: 7)
                     Text("\(count) \(status.title.lowercased())")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(count > 0 ? Color.primary : Color.secondary)
+                        .foregroundStyle(count > 0 ? Color.primary : NightTheme.secondaryLabel)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
                 }
@@ -368,7 +374,7 @@ struct BudgetSettingsView: View {
         VStack(alignment: .leading, spacing: 3) {
             Text(label)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(NightTheme.secondaryLabel)
             Text(value)
                 .font(.subheadline.weight(.semibold))
                 .fontDesign(.rounded)
@@ -393,7 +399,7 @@ struct BudgetSettingsView: View {
                 )
                 Text("budget_category_section_caption".localized)
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(NightTheme.secondaryLabel)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -463,7 +469,7 @@ struct BudgetSettingsView: View {
                     )
                     Text("budget_goals_section_caption".localized)
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(NightTheme.secondaryLabel)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
@@ -471,7 +477,7 @@ struct BudgetSettingsView: View {
                     showingAddGoal = true
                 } label: {
                     HeroIcon("plus", size: 20)
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(NightTheme.accent)
                         .frame(width: iOSDesignSystem.Size.minimumTapTarget,
                                height: iOSDesignSystem.Size.minimumTapTarget)
                         .liquidGlassSurface(Circle())
@@ -523,7 +529,7 @@ struct BudgetSettingsView: View {
                 .disabled(!canSuggestBudgets)
                 .opacity(canSuggestBudgets ? 1 : 0.48)
 
-                Divider()
+                Divider().overlay(NightTheme.hair)
                     .padding(.leading, 52)
 
                 Button(role: .destructive) {
@@ -539,7 +545,7 @@ struct BudgetSettingsView: View {
                 .buttonStyle(.plain)
             }
             .padding(.horizontal, 16)
-            .liquidGlassCard(cornerRadius: 18)
+            .budgetScrollCard(cornerRadius: 18)
         }
     }
 
@@ -552,7 +558,7 @@ struct BudgetSettingsView: View {
             if let detail {
                 Text(detail)
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(NightTheme.secondaryLabel)
             }
         }
         .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
@@ -571,7 +577,7 @@ struct BudgetSettingsView: View {
                     .foregroundStyle(tint == Color(.systemRed) ? tint : Color.primary)
                 Text(detail)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(NightTheme.secondaryLabel)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -704,7 +710,7 @@ struct CategoryBudgetSettingRow: View {
                         }
                         Text(subtitle)
                             .font(.caption.weight(status == .noLimit ? .regular : .medium))
-                            .foregroundStyle(status == .noLimit || status == .onTrack ? Color.secondary : status.color)
+                            .foregroundStyle(status == .noLimit || status == .onTrack ? NightTheme.secondaryLabel : status.color)
                             .lineLimit(1)
                             .minimumScaleFactor(0.8)
                     }
@@ -719,13 +725,13 @@ struct CategoryBudgetSettingRow: View {
             }
 
             if isEnabled {
-                Divider()
+                Divider().overlay(NightTheme.hair)
 
                 HStack(spacing: 12) {
                     VStack(alignment: .leading, spacing: 3) {
                         Text("budget_monthly_limit".localized)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(NightTheme.secondaryLabel)
                         TextField("0", text: $budgetAmount)
                             .keyboardType(.decimalPad)
                             .font(.body.weight(.semibold))
@@ -737,11 +743,11 @@ struct CategoryBudgetSettingRow: View {
 
                     Text(currency.rawValue)
                         .font(.caption.weight(.bold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(NightTheme.secondaryLabel)
                 }
                 .padding(.horizontal, 12)
                 .frame(minHeight: 54)
-                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .background(NightTheme.glassFill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
 
                 if enteredAmount > 0 {
                     VStack(spacing: 8) {
@@ -752,7 +758,7 @@ struct CategoryBudgetSettingRow: View {
                                 CurrencyFormatter.format(currentMonthSpent, currency: currency),
                                 CurrencyFormatter.format(enteredAmount, currency: currency)
                             ))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(NightTheme.secondaryLabel)
                             .lineLimit(1)
                             .minimumScaleFactor(0.75)
 
@@ -869,7 +875,7 @@ struct SpendingGoalRow: View {
                         .fontDesign(.rounded)
                     Text("of \(CurrencyFormatter.format(goal.targetAmount, currency: dataManager.user.currency))")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(NightTheme.secondaryLabel)
 
                     Spacer()
 
@@ -884,7 +890,7 @@ struct SpendingGoalRow: View {
                 Text("Due \(deadlineText)")
             }
             .font(.caption)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(NightTheme.secondaryLabel)
         }
         .padding(16)
         .budgetScrollCard(cornerRadius: 18)
@@ -906,9 +912,8 @@ private extension View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
 
         return self
-            .background(Color(.secondarySystemBackground), in: shape)
-            .overlay(shape.stroke(iOSDesignSystem.layerStroke, lineWidth: 1))
-            .shadow(color: Color.black.opacity(0.035), radius: 5, x: 0, y: 2)
+            .background(NightTheme.glassFill, in: shape)
+            .overlay(shape.stroke(NightTheme.glassLine, lineWidth: 1))
     }
 }
 
@@ -932,7 +937,7 @@ struct AddSpendingGoalView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                iOSDesignSystem.appBackground.ignoresSafeArea()
+                NightGround()
 
                 ScrollView {
                     VStack(spacing: 22) {
@@ -961,8 +966,6 @@ struct AddSpendingGoalView: View {
             }
             .navigationTitle("New spending goal")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(iOSDesignSystem.appBackground, for: .navigationBar)
-            .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("cancel".localized) {
@@ -982,7 +985,7 @@ struct AddSpendingGoalView: View {
     private var goalIntro: some View {
         HStack(spacing: 14) {
             HeroIcon("flag", size: 25)
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(NightTheme.accent)
                 .frame(width: 52, height: 52)
                 .liquidGlassSurface(RoundedRectangle(cornerRadius: 16, style: .continuous))
 
@@ -991,7 +994,7 @@ struct AddSpendingGoalView: View {
                     .font(.headline)
                 Text("Choose a category, amount, and deadline. Progress updates from your expenses.")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(NightTheme.secondaryLabel)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -999,7 +1002,7 @@ struct AddSpendingGoalView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
-        .liquidGlassCard(cornerRadius: 18)
+        .budgetScrollCard(cornerRadius: 18)
     }
 
     private var goalDetails: some View {
@@ -1010,7 +1013,7 @@ struct AddSpendingGoalView: View {
                     .multilineTextAlignment(.trailing)
             }
 
-            Divider().padding(.leading, 16)
+            Divider().overlay(NightTheme.hair).padding(.leading, 16)
 
             goalField(label: "Target amount") {
                 HStack(spacing: 8) {
@@ -1021,24 +1024,24 @@ struct AddSpendingGoalView: View {
                         .onChange(of: targetAmount) { old, _ in formatTargetAmountInput(previous: old) }
                     Text(dataManager.user.currency.rawValue)
                         .font(.caption.weight(.bold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(NightTheme.secondaryLabel)
                 }
                 .frame(maxWidth: 180)
             }
 
-            Divider().padding(.leading, 16)
+            Divider().overlay(NightTheme.hair).padding(.leading, 16)
 
             goalField(label: "Deadline") {
                 DatePicker("", selection: $deadline, in: Date()..., displayedComponents: .date)
                     .labelsHidden()
             }
 
-            Divider().padding(.leading, 16)
+            Divider().overlay(NightTheme.hair).padding(.leading, 16)
 
             goalField(label: "Category") {
                 if dataManager.userCategories.isEmpty {
                     Text("No categories")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(NightTheme.secondaryLabel)
                 } else {
                     Menu {
                         ForEach(dataManager.userCategories) { category in
@@ -1058,7 +1061,7 @@ struct AddSpendingGoalView: View {
                                     .lineLimit(1)
                             } else {
                                 Text("Select category")
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(NightTheme.secondaryLabel)
                             }
                             HeroIcon("chevron-right", size: 14)
                                 .foregroundStyle(Color(.tertiaryLabel))
@@ -1069,7 +1072,7 @@ struct AddSpendingGoalView: View {
             }
         }
         .padding(.horizontal, 16)
-        .liquidGlassCard(cornerRadius: 18)
+        .budgetScrollCard(cornerRadius: 18)
     }
 
     private func goalField<Content: View>(
@@ -1120,16 +1123,16 @@ private struct BudgetEmptyState: View {
     var body: some View {
         VStack(spacing: 12) {
             HeroIcon(icon, size: 26)
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(NightTheme.accent)
                 .frame(width: 52, height: 52)
-                .background(Color.accentColor.opacity(0.09), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .background(NightTheme.accent.opacity(0.09), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
 
             VStack(spacing: 4) {
                 Text(title)
                     .font(.headline)
                 Text(message)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(NightTheme.secondaryLabel)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -1137,7 +1140,7 @@ private struct BudgetEmptyState: View {
             if let actionTitle, let action {
                 Button(actionTitle, action: action)
                     .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(NightTheme.accent)
                     .padding(.horizontal, 18)
                     .frame(minHeight: iOSDesignSystem.Size.minimumTapTarget)
                     .liquidGlassSurface(Capsule())
@@ -1147,7 +1150,7 @@ private struct BudgetEmptyState: View {
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 24)
         .padding(.vertical, 26)
-        .liquidGlassCard(cornerRadius: 18)
+        .budgetScrollCard(cornerRadius: 18)
     }
 }
 
