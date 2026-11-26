@@ -64,7 +64,18 @@ struct SettingsView: View {
 
     /// The onboarding city, still and blurred, fixed behind the list: night in dark
     /// mode, day in light mode. It never animates, so it does not compete with the rows.
+    /// Dark mode: the dashboard's flat ink ground (owner, 2026-11-26). Light mode: the blurred day city.
+    @ViewBuilder
     private var cityBackground: some View {
+        if colorScheme == .dark {
+            NightGround()
+                .accessibilityHidden(true)
+        } else {
+            lightCityBackground
+        }
+    }
+
+    private var lightCityBackground: some View {
         ZStack(alignment: .bottom) {
             Color(.systemBackground)
             NightCityView(page: colorScheme == .dark ? .smart : .privacy, reduceMotion: true, showsOverlay: false)

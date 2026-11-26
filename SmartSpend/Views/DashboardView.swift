@@ -321,31 +321,37 @@ struct DashboardView: View {
         let number = currency == .uzs && shown.hasSuffix(unit) ? String(shown.dropLast(unit.count)) : shown
         let showsScene = !typeSize.isAccessibilitySize
 
-        return HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(number)
-                .font(NightTheme.display(60))
-                .monospacedDigit()
-                .contentTransition(.numericText())
-            if currency == .uzs {
-                Text("so'm")
-                    .font(NightTheme.display(22, weight: .semibold, relativeTo: .title2))
-                    .foregroundStyle(isOver ? Color(.systemRed) : NightTheme.secondaryLabel)
+        // The scene keeps the trailing edge of the row; a long amount scales down before it can reach it.
+        return HStack(alignment: .lastTextBaseline, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(number)
+                    .font(NightTheme.display(60))
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.45)
+                if currency == .uzs {
+                    Text("so'm")
+                        .font(NightTheme.display(22, weight: .semibold, relativeTo: .title2))
+                        .foregroundStyle(isOver ? Color(.systemRed) : NightTheme.secondaryLabel)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.45)
+                }
             }
-        }
-        .foregroundStyle(isOver ? Color(.systemRed) : .primary)
-        .lineLimit(1)
-        .minimumScaleFactor(0.45)
-        .overlay(alignment: Alignment(horizontal: .trailing, vertical: .lastTextBaseline)) {
+            .foregroundStyle(isOver ? Color(.systemRed) : .primary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.45)
+            .layoutPriority(1)
+
+            Spacer(minLength: 8)
+
             if showsScene {
                 PayScene()
                     .id(payRun)
-                    .alignmentGuide(.trailing) { $0[.leading] - 6 }
                     .alignmentGuide(.lastTextBaseline) { $0[.bottom] - 1 }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        // room for the scene, so a long amount scales down instead of running under it
-        .padding(.trailing, showsScene ? PayScene.size.width + 6 : 0)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(full)
     }
@@ -883,34 +889,104 @@ struct DashboardView: View {
         .timingCurve(0.16, 1, 0.3, 1, duration: 0.9).delay(delay)
     }
 
+    /// A localized lead sentence: the `**%@**` parts read primary semibold, the rest secondary.
+    private func leadText(_ key: String, _ args: [String]) -> Text {
+        var result = AttributedString()
+        var rest = Substring(key.localized)
+        var index = 0
+        func plain(_ text: Substring) -> AttributedString {
+            var part = AttributedString(String(text))
+            part.swiftUI.foregroundColor = NightTheme.secondaryLabel
+            return part
+        }
+        while let range = rest.range(of: "%@") {
+            var before = rest[..<range.lowerBound]
+            var after = rest[range.upperBound...]
+            let strong = before.hasSuffix("**") && after.hasPrefix("**")
+            if strong {
+                before = before.dropLast(2)
+                after = after.dropFirst(2)
+            }
+            result += plain(before)
+            var value = AttributedString(index < args.count ? args[index] : "")
+            value.swiftUI.foregroundColor = strong ? Color.primary : NightTheme.secondaryLabel
+            if strong { value.swiftUI.font = .subheadline.weight(.semibold) }
+            result += value
+            index += 1
+            rest = after
+        }
+        result += plain(rest)
+        return Text(result)
+    }
+
+    /// The same sentence as plain text, for VoiceOver.
+    private func leadString(_ key: String, _ args: [String]) -> String {
+        String(format: key.localized.replacingOccurrences(of: "**", with: ""), arguments: args.map { $0 as CVarArg })
+    }
+
+    /// 2 columns of small 4x5 windows, one row every 9 pt from 8 pt below the top. The peak
+    /// building's windows light warm after the rise, row by row from the bottom.
+    private func buildingWindows(height: CGFloat, lit: Bool, on: Bool) -> some View {
+        let rows = height >= 17 ? Int((height - 17) / 9) + 1 : 0
+        return VStack(spacing: 4) {
+            ForEach(0..<rows, id: \.self) { row in
+                HStack(spacing: 6) {
+                    ForEach(0..<2, id: \.self) { _ in
+                        RoundedRectangle(cornerRadius: 1, style: .continuous)
+                            .fill(NightTheme.accent.opacity(0.10))
+                            .overlay {
+                                if lit {
+                                    RoundedRectangle(cornerRadius: 1, style: .continuous)
+                                        .fill(NightTheme.window)
+                                        .opacity(on ? 1 : 0)
+                                        .animation(reduceMotion ? nil : .easeOut(duration: 0.35).delay(1.4 + Double(rows - 1 - row) * 0.08), value: on)
+                                }
+                            }
+                            .frame(width: 4, height: 5)
+                    }
+                }
+            }
+        }
+        .padding(.top, 8)
+    }
+
     private var weekdayPatternSection: some View {
         let items = overview.weekdayAverages
         let peak = overview.peakWeekday
         let symbols = calendar.shortStandaloneWeekdaySymbols
+        let todayWeekday = calendar.component(.weekday, from: Date())
         let maxAverage = max(items.map(\.average).max() ?? 0, 1)
+        let mean = items.isEmpty ? 0 : items.map(\.average).reduce(0, +) / Double(items.count)
         let others = items.filter { $0.weekday != peak?.weekday }
         let otherAverage = others.isEmpty ? 0 : others.map(\.average).reduce(0, +) / Double(others.count)
-        let sentence: String = {
-            guard let peak else { return "" }
-            let day = calendar.weekdaySymbols[peak.weekday - 1]
-            let ratio = otherAverage > 0 ? peak.average / otherAverage : 1
-            return String(format: "dash_weekday_sentence_format".localized, day, compactMoney(peak.average),
-                          ratio.formatted(.number.precision(.fractionLength(1))))
-        }()
+        let leadArgs: [String] = peak.map { [calendar.weekdaySymbols[$0.weekday - 1], compactMoney($0.average)] } ?? []
+        let difference = (peak?.average ?? 0) - otherAverage
+        let moreLine = difference > 0 ? String(format: "dash_weekday_more_format".localized, compactMoney(difference)) : ""
         let on = weekdayShown || reduceMotion
-        let barArea: CGFloat = 86
+        let barArea: CGFloat = 90
+        let meanHeight = barArea * mean / maxAverage
 
         return VStack(alignment: .leading, spacing: 6) {
             NightSectionHeader(title: "dash_weekday_title".localized)
 
             VStack(alignment: .leading, spacing: 0) {
-                Text(sentence)
-                    .font(.subheadline)
-                    .foregroundStyle(NightTheme.secondaryLabel)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 16)
-                    .padding(.top, 14)
+                if !leadArgs.isEmpty {
+                    leadText("dash_weekday_lead_format", leadArgs)
+                        .font(.subheadline)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 14)
+                }
+                if !moreLine.isEmpty {
+                    Text(moreLine)
+                        .font(.caption)
+                        .foregroundStyle(NightTheme.secondaryLabel)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 3)
+                }
 
+                // seven buildings on a street line; the peak one is lighter and its windows light up
                 HStack(alignment: .bottom, spacing: 0) {
                     ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                         let isPeak = item.weekday == peak?.weekday
@@ -923,6 +999,10 @@ struct DashboardView: View {
                                     .foregroundStyle(.primary)
                                     .lineLimit(1)
                                     .fixedSize()
+                                    .padding(.horizontal, 7)
+                                    .padding(.vertical, 3)
+                                    .background(Capsule().fill(NightTheme.glassFill))
+                                    .overlay(Capsule().stroke(NightTheme.glassLine, lineWidth: 1))
                                     .opacity(on ? 1 : 0)
                                     .animation(reduceMotion ? nil : .easeOut(duration: 0.5).delay(1.3), value: on)
                             }
@@ -930,39 +1010,62 @@ struct DashboardView: View {
                                 .fill(paceBarColor(today: isPeak))
                                 .frame(width: 30, height: height)
                                 .overlay(alignment: .top) {
-                                    if isPeak && height > 30 {
-                                        LazyVGrid(columns: [GridItem(.fixed(6), spacing: 4), GridItem(.fixed(6))], spacing: 6) {
-                                            ForEach(0..<4, id: \.self) { _ in
-                                                RoundedRectangle(cornerRadius: 1).fill(NightTheme.window).frame(width: 6, height: 8)
-                                            }
-                                        }
-                                        .padding(.top, 10)
-                                        .opacity(on ? 1 : 0)
-                                        .animation(reduceMotion ? nil : .easeOut(duration: 0.5).delay(1.3), value: on)
-                                    }
+                                    buildingWindows(height: height, lit: isPeak, on: on)
                                 }
+                                .clipped()
                                 .scaleEffect(x: 1, y: on ? 1 : 0.001, anchor: .bottom)
                                 .animation(reduceMotion ? nil : growIn(delay: 0.15 + Double(index) * 0.07), value: on)
                         }
                         .frame(maxWidth: .infinity, alignment: .bottom)
                     }
                 }
-                .frame(height: barArea + 24, alignment: .bottom)
+                .frame(height: 120, alignment: .bottom)
                 .overlay(alignment: .bottom) {
-                    Rectangle().fill(NightTheme.accent.opacity(0.18)).frame(height: 1)
+                    if mean > 0 {
+                        StraightLine()
+                            .stroke(NightTheme.secondaryLabel.opacity(0.5), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                            .frame(height: 1)
+                            .padding(.bottom, max(meanHeight - 0.5, 0))
+                            .opacity(on ? 1 : 0)
+                            .animation(reduceMotion ? nil : .easeOut(duration: 0.4).delay(1.0), value: on)
+                    }
+                }
+                .overlay(alignment: .bottomTrailing) {
+                    if mean > 0 {
+                        Text(String(format: "dash_key_average_format".localized, compactMoney(mean)))
+                            .font(.caption2)
+                            .monospacedDigit()
+                            .foregroundStyle(NightTheme.secondaryLabel)
+                            .lineLimit(1)
+                            .fixedSize()
+                            .padding(.bottom, meanHeight + 3)
+                            .opacity(on ? 1 : 0)
+                            .animation(reduceMotion ? nil : .easeOut(duration: 0.4).delay(1.0), value: on)
+                    }
+                }
+                .overlay(alignment: .bottom) {
+                    Rectangle().fill(NightTheme.hair).frame(height: 1)
                 }
                 .padding(.horizontal, 10)
                 .padding(.top, 8)
 
-                HStack(spacing: 0) {
+                HStack(alignment: .top, spacing: 0) {
                     ForEach(items) { item in
                         let isPeak = item.weekday == peak?.weekday
-                        Text(symbols[item.weekday - 1])
-                            .font(.caption2.weight(isPeak ? .semibold : .regular))
-                            .foregroundStyle(isPeak ? AnyShapeStyle(.primary) : AnyShapeStyle(NightTheme.secondaryLabel))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.7)
-                            .frame(maxWidth: .infinity)
+                        let isToday = item.weekday == todayWeekday
+                        let strong = isPeak || isToday
+                        VStack(spacing: 3) {
+                            Text(symbols[item.weekday - 1])
+                                .font(.caption2.weight(strong ? .semibold : .regular))
+                                .foregroundStyle(strong ? AnyShapeStyle(.primary) : AnyShapeStyle(NightTheme.secondaryLabel))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.7)
+                            Circle()
+                                .fill(NightTheme.accent)
+                                .frame(width: 4, height: 4)
+                                .opacity(isToday ? 1 : 0)
+                        }
+                        .frame(maxWidth: .infinity)
                     }
                 }
                 .padding(.horizontal, 10)
@@ -972,12 +1075,13 @@ struct DashboardView: View {
                     .font(.caption)
                     .foregroundStyle(NightTheme.secondaryLabel.opacity(0.8))
                     .padding(.horizontal, 16)
-                    .padding(.top, 10)
+                    .padding(.top, 8)
                     .padding(.bottom, 14)
             }
             .nightGroup()
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(sentence + " " + "dash_weekday_subtitle".localized)
+            .accessibilityLabel([leadArgs.isEmpty ? "" : leadString("dash_weekday_lead_format", leadArgs), moreLine,
+                                 "dash_weekday_subtitle".localized].filter { !$0.isEmpty }.joined(separator: ". "))
             .onScrollVisibilityChange(threshold: 0.4) { visible in
                 if visible { weekdayShown = true }
             }
@@ -993,22 +1097,23 @@ struct DashboardView: View {
         let forecast = max(overview.projectedMonthTotal, history.last?.amount ?? 0)
         let scale = max(history.map(\.amount).max() ?? 0, forecast, average, 1)
         let currentName = monthName(history.last?.month ?? Date())
-        let sentence: String = {
-            guard average > 0 else { return "" }
-            let diff = forecast - average
-            return String(format: (diff <= 0 ? "dash_month_less_format" : "dash_month_more_format").localized,
-                          currentName, compactMoney(abs(diff)))
-        }()
+        let leadKey = forecast - average <= 0 ? "dash_month_less_lead_format" : "dash_month_more_lead_format"
+        let leadArgs = [currentName, compactMoney(abs(forecast - average))]
+        let hasLead = average > 0
         let on = monthsShown || reduceMotion
+        // fixed columns around the track, so the average line can be placed over all rows at once
+        let nameWidth: CGFloat = 66
+        let amountWidth: CGFloat = 70
+        let columnSpacing: CGFloat = 10
+        let averageLabelRoom: CGFloat = average > 0 ? 18 : 0
 
         return VStack(alignment: .leading, spacing: 6) {
             NightSectionHeader(title: "dash_last_six_months".localized)
 
             VStack(alignment: .leading, spacing: 0) {
-                if !sentence.isEmpty {
-                    Text(sentence)
+                if hasLead {
+                    leadText(leadKey, leadArgs)
                         .font(.subheadline)
-                        .foregroundStyle(NightTheme.secondaryLabel)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.horizontal, 16)
                         .padding(.top, 14)
@@ -1017,50 +1122,88 @@ struct DashboardView: View {
                 VStack(spacing: 9) {
                     ForEach(Array(history.enumerated()), id: \.element.month) { index, item in
                         let isNow = index == history.count - 1
-                        HStack(spacing: 10) {
+                        HStack(alignment: .center, spacing: columnSpacing) {
                             Text(monthName(item.month))
                                 .font(.footnote.weight(.medium))
                                 .foregroundStyle(isNow ? AnyShapeStyle(.primary) : AnyShapeStyle(NightTheme.secondaryLabel))
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.7)
-                                .frame(width: 66, alignment: .leading)
+                                .frame(width: nameWidth, alignment: .leading)
+                                .alignmentGuide(VerticalAlignment.center) { $0[.firstTextBaseline] - 4 }
                             GeometryReader { proxy in
                                 let width = proxy.size.width
                                 ZStack(alignment: .leading) {
-                                    if isNow {
-                                        DashedFill(color: NightTheme.accent.opacity(0.45))
-                                            .frame(width: width * forecast / scale)
-                                            .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                                    Capsule().fill(NightTheme.track)
+                                    ZStack(alignment: .leading) {
+                                        if isNow {
+                                            DashedFill(color: NightTheme.accent.opacity(0.45))
+                                                .frame(width: width * forecast / scale)
+                                                .clipShape(Capsule())
+                                        }
+                                        Capsule()
+                                            .fill(isNow ? NightTheme.accent : paceBarColor(today: true))
+                                            .frame(width: max(width * item.amount / scale, item.amount > 0 ? 3 : 0))
                                     }
-                                    RoundedRectangle(cornerRadius: 4, style: .continuous)
-                                        .fill(isNow ? NightTheme.accent : paceBarColor(today: true))
-                                        .frame(width: max(width * item.amount / scale, item.amount > 0 ? 3 : 0))
-                                }
-                                .scaleEffect(x: on ? 1 : 0.001, y: 1, anchor: .leading)
-                                .animation(reduceMotion ? nil : growIn(delay: 0.1 + Double(index) * 0.06), value: on)
-                                .overlay(alignment: .leading) {
-                                    if average > 0 {
-                                        Rectangle()
-                                            .stroke(NightTheme.window.opacity(0.75), style: StrokeStyle(lineWidth: 1.5, dash: [3, 3]))
-                                            .frame(width: 0.1, height: 21)
-                                            .offset(x: width * average / scale)
-                                    }
+                                    .scaleEffect(x: on ? 1 : 0.001, y: 1, anchor: .leading)
+                                    .animation(reduceMotion ? nil : growIn(delay: 0.1 + Double(index) * 0.06), value: on)
                                 }
                             }
-                            .frame(height: 12)
-                            Text(compactMoney(item.amount))
-                                .font(.footnote.weight(.semibold))
-                                .monospacedDigit()
-                                .foregroundStyle(.primary)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.7)
-                                .frame(width: 70, alignment: .trailing)
+                            .frame(height: 10)
+                            VStack(alignment: .trailing, spacing: 1) {
+                                Text(compactMoney(item.amount))
+                                    .font(.footnote.weight(.semibold))
+                                    .monospacedDigit()
+                                    .foregroundStyle(isNow ? AnyShapeStyle(.primary) : AnyShapeStyle(NightTheme.secondaryLabel))
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.7)
+                                if isNow {
+                                    Text("\u{2192} " + compactMoney(forecast))
+                                        .font(.caption2)
+                                        .monospacedDigit()
+                                        .foregroundStyle(NightTheme.secondaryLabel)
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.7)
+                                }
+                            }
+                            .frame(width: amountWidth, alignment: .trailing)
+                            .alignmentGuide(VerticalAlignment.center) { $0[.firstTextBaseline] - 4 }
+                        }
+                        .background {
+                            if isNow {
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .fill(NightTheme.iconFill)
+                                    .padding(.horizontal, -8)
+                                    .padding(.vertical, -6)
+                            }
+                        }
+                    }
+                }
+                .padding(.top, averageLabelRoom)
+                .overlay {
+                    if average > 0 {
+                        GeometryReader { proxy in
+                            let trackX = nameWidth + columnSpacing
+                            let trackWidth = max(proxy.size.width - trackX - columnSpacing - amountWidth, 0)
+                            let x = trackX + trackWidth * average / scale
+                            ZStack(alignment: .topLeading) {
+                                StraightLine(vertical: true)
+                                    .stroke(NightTheme.window.opacity(0.75), style: StrokeStyle(lineWidth: 1.5, dash: [3, 3]))
+                                    .frame(width: 2, height: max(proxy.size.height - averageLabelRoom + 2, 0))
+                                    .position(x: x, y: averageLabelRoom - 2 + (proxy.size.height - averageLabelRoom + 2) / 2)
+                                Text(String(format: "dash_key_average_format".localized, compactMoney(average)))
+                                    .font(.caption2)
+                                    .monospacedDigit()
+                                    .foregroundStyle(NightTheme.window)
+                                    .lineLimit(1)
+                                    .fixedSize()
+                                    .position(x: x, y: (averageLabelRoom - 4) / 2)
+                            }
                         }
                     }
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 14)
-                .padding(.bottom, 10)
+                .padding(.bottom, 12)
 
                 HStack(spacing: 12) {
                     paceKey("dash_legend_spent".localized) {
@@ -1082,7 +1225,7 @@ struct DashboardView: View {
             }
             .nightGroup()
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(([sentence] + history.map { "\(monthName($0.month)): \(fullMoney($0.amount))" })
+            .accessibilityLabel(([hasLead ? leadString(leadKey, leadArgs) : ""] + history.map { "\(monthName($0.month)): \(fullMoney($0.amount))" })
                 .filter { !$0.isEmpty }.joined(separator: ". "))
             .onScrollVisibilityChange(threshold: 0.4) { visible in
                 if visible { monthsShown = true }
@@ -1159,7 +1302,9 @@ struct DashboardView: View {
 
 /// A somsa stand beside the hero amount (mockup v11): the buyer walks in, hands a warm bill
 /// to the seller and gets a warm bag back, once each time the dashboard appears (~2.6 s).
-/// Reduce Motion draws the end state. Decoration only.
+/// After that both people keep moving gently: the buyer breathes and swings the bag, the
+/// seller bobs and serves, and steam rises from the counter. Reduce Motion draws the end
+/// state with nothing moving. Decoration only.
 struct PayScene: View {
     static let size = CGSize(width: 96, height: 30)
     /// When the bill reaches the seller; the amount ticks down then.
@@ -1171,9 +1316,9 @@ struct PayScene: View {
     @State private var start: Date?
 
     var body: some View {
-        TimelineView(.animation(paused: reduceMotion || start == nil)) { tl in
+        TimelineView(.animation(minimumInterval: 1 / 30, paused: reduceMotion || start == nil)) { tl in
             let t = reduceMotion ? Self.duration : start.map { tl.date.timeIntervalSince($0) } ?? 0
-            Canvas { ctx, _ in draw(ctx, t: min(t, Self.duration)) }
+            Canvas { ctx, _ in draw(ctx, t: min(t, Self.duration), idle: max(t - Self.duration, 0)) }
         }
         .frame(width: Self.size.width, height: Self.size.height)
         .allowsHitTesting(false)
@@ -1185,13 +1330,26 @@ struct PayScene: View {
         min(max((t - from) / length, 0), 1)
     }
 
-    private func draw(_ ctx: GraphicsContext, t: Double) {
+    /// 0 at the start of the loop, rising to 1 and back over `period` seconds.
+    private static func wave(_ idle: Double, period: Double, phase: Double = 0) -> Double {
+        0.5 * (1 - cos(2 * .pi * (idle / period + phase)))
+    }
+
+    /// `t` drives the intro (clamped to its length); `idle` counts the seconds since it ended.
+    private func draw(_ ctx: GraphicsContext, t: Double, idle: Double) {
         let ink = NightTheme.figure(colorScheme)
         let warm = NightTheme.window
         let dark = colorScheme == .dark
         let roof = dark ? NightTheme.silver : Color(red: 127 / 255, green: 138 / 255, blue: 160 / 255)
         let pole = Color(red: 127 / 255, green: 138 / 255, blue: 160 / 255)
         let counter = dark ? Color(red: 42 / 255, green: 51 / 255, blue: 80 / 255) : NightTheme.ink.opacity(0.75)
+
+        // idle loop: eases in over 0.6 s so nothing jumps when the intro ends
+        let ramp = min(idle / 0.6, 1)
+        let buyerBob = 0.6 * Self.wave(idle, period: 2.4) * ramp
+        let sellerBob = 0.6 * Self.wave(idle, period: 2.4, phase: 0.35) * ramp
+        let bagSwing = sin(2 * .pi * idle / 1.6) * ramp
+        let serve = Self.wave(idle, period: 1.8) * ramp
 
         // stand: striped awning, poles, seller behind the counter
         ctx.fill(Path(roundedRect: CGRect(x: 64, y: 4, width: 30, height: 4), cornerRadius: 1), with: .color(roof))
@@ -1200,10 +1358,27 @@ struct PayScene: View {
         }
         ctx.fill(Path(CGRect(x: 66, y: 8, width: 1.6, height: 8)), with: .color(pole))
         ctx.fill(Path(CGRect(x: 90.4, y: 8, width: 1.6, height: 8)), with: .color(pole))
-        ctx.fill(Path(ellipseIn: CGRect(x: 77.4, y: 8.4, width: 5.2, height: 5.2)), with: .color(ink))
-        ctx.fill(Path(CGRect(x: 77, y: 14, width: 6, height: 4)), with: .color(ink))
+        ctx.fill(Path(ellipseIn: CGRect(x: 77.4, y: 8.4 - sellerBob, width: 5.2, height: 5.2)), with: .color(ink))
+        ctx.fill(Path(CGRect(x: 77, y: 14 - sellerBob, width: 6, height: 4 + sellerBob)), with: .color(ink))
         ctx.fill(Path(roundedRect: CGRect(x: 63, y: 17, width: 32, height: 12), cornerRadius: 1.5), with: .color(counter))
         ctx.fill(Path(roundedRect: CGRect(x: 70, y: 20, width: 18, height: 2), cornerRadius: 1), with: .color(warm.opacity(0.85)))
+
+        // seller's arm: rests on the counter, rises and falls as if serving
+        var sellerArm = Path()
+        sellerArm.move(to: CGPoint(x: 77.6, y: 14.8 - sellerBob))
+        sellerArm.addLine(to: CGPoint(x: 74.6, y: 17 - 2.6 * serve))
+        ctx.stroke(sellerArm, with: .color(ink), style: StrokeStyle(lineWidth: 1.6, lineCap: .round))
+
+        // steam: small warm dots rising 6 pt from the warm strip and fading, staggered
+        if ramp > 0 {
+            for (index, x) in [71.5, 75.0, 85.5].enumerated() {
+                let p = (idle / 2 + Double(index) / 3).truncatingRemainder(dividingBy: 1)
+                let fade = p < 0.2 ? p / 0.2 : 1 - (p - 0.2) / 0.8
+                let drift = sin(p * .pi * 2 + Double(index)) * 0.6
+                ctx.fill(Path(ellipseIn: CGRect(x: x + drift - 0.9, y: 19 - 6 * p - 0.9, width: 1.8, height: 1.8)),
+                         with: .color(warm.opacity(0.8 * fade * ramp)))
+            }
+        }
 
         // buyer walk-in progress (the bill travels with the buyer until it is handed over)
         let w = Self.progress(t, from: 0.4, length: 0.9)
@@ -1217,20 +1392,20 @@ struct PayScene: View {
             ctx.fill(Path(roundedRect: CGRect(x: 49 + dx, y: 13, width: 6, height: 3.6), cornerRadius: 0.6), with: .color(warm.opacity(alpha)))
         }
 
-        // bag: on the counter, handed 20 pt to the buyer
+        // bag: on the counter, handed 20 pt to the buyer, then swings slightly in the hand
         let g = Self.progress(t, from: 2.0, length: 0.6)
         let ge = 1 - pow(1 - g, 4)
-        ctx.fill(Path(roundedRect: CGRect(x: 68 - 20 * ge, y: 15 + 2 * ge, width: 5, height: 6), cornerRadius: 1), with: .color(warm))
+        ctx.fill(Path(roundedRect: CGRect(x: 68 - 20 * ge + bagSwing, y: 15 + 2 * ge - buyerBob, width: 5, height: 6), cornerRadius: 1), with: .color(warm))
 
-        // buyer walks in 34 pt and fades in
+        // buyer walks in 34 pt and fades in, then breathes (head, body and arm bob; feet stay)
         var buyer = ctx
         buyer.opacity = we
         buyer.translateBy(x: -34 * (1 - we), y: 0)
         let walking = w > 0 && w < 1
         let swing = walking ? sin(t * 14) * 1.5 : 0
-        buyer.fill(Path(ellipseIn: CGRect(x: 41.4, y: 7.4, width: 5.2, height: 5.2)), with: .color(ink))
+        buyer.fill(Path(ellipseIn: CGRect(x: 41.4, y: 7.4 - buyerBob, width: 5.2, height: 5.2)), with: .color(ink))
         var body = Path()
-        body.move(to: CGPoint(x: 42, y: 13)); body.addLine(to: CGPoint(x: 46.5, y: 13))
+        body.move(to: CGPoint(x: 42, y: 13 - buyerBob)); body.addLine(to: CGPoint(x: 46.5, y: 13 - buyerBob))
         body.addLine(to: CGPoint(x: 47.5, y: 21)); body.addLine(to: CGPoint(x: 41, y: 21)); body.closeSubpath()
         buyer.fill(body, with: .color(ink))
         var legs = Path()
@@ -1238,8 +1413,25 @@ struct PayScene: View {
         legs.move(to: CGPoint(x: 46, y: 21)); legs.addLine(to: CGPoint(x: 48 - swing, y: 29))
         buyer.stroke(legs, with: .color(ink), style: StrokeStyle(lineWidth: 1.8, lineCap: .round))
         var arm = Path()
-        arm.move(to: CGPoint(x: 46, y: 14)); arm.addLine(to: CGPoint(x: 50, y: 15))
+        arm.move(to: CGPoint(x: 46, y: 14 - buyerBob)); arm.addLine(to: CGPoint(x: 50, y: 15 - buyerBob))
         buyer.stroke(arm, with: .color(ink), style: StrokeStyle(lineWidth: 1.6, lineCap: .round))
+    }
+}
+
+/// A straight line through the middle of its frame, for dashed guide lines.
+private struct StraightLine: Shape {
+    var vertical = false
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        if vertical {
+            path.move(to: CGPoint(x: rect.midX, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
+        } else {
+            path.move(to: CGPoint(x: rect.minX, y: rect.midY))
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.midY))
+        }
+        return path
     }
 }
 

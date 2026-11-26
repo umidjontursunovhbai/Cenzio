@@ -4637,6 +4637,74 @@
           }
         }
       }
+    },
+    "dash_weekday_lead_format": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On **%@** you spend **%@** on average."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "**%@** kuni o'rtacha **%@** sarflaysiz."
+          }
+        }
+      }
+    },
+    "dash_weekday_more_format": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ more than an average day"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O'rtacha kundan %@ ko'p"
+          }
+        }
+      }
+    },
+    "dash_month_less_lead_format": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ is heading for **%@** less than average."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ o'rtachadan **%@** kam ketyapti."
+          }
+        }
+      }
+    },
+    "dash_month_more_lead_format": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ is heading for **%@** more than average."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ o'rtachadan **%@** ko'p ketyapti."
+          }
+        }
+      }
     }
   },
   "version": "1.0"
