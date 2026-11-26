@@ -28,9 +28,18 @@ final class AppleAccountStore: ObservableObject {
     /// The owner chose "Continue without account" on the welcome screen, or signed out later.
     @Published private(set) var hasSkippedSignIn: Bool
 
-    /// The welcome screen shows only until the owner signs in or skips it.
+    #if DEBUG
+    @Published private var debugShowsOnboarding = true
+    #endif
+
+    /// The welcome screen shows until the owner signs in.
     var showsWelcome: Bool {
-        if case .signedOut = state { return !hasSkippedSignIn }
+        #if DEBUG
+        // Debug builds show the onboarding on every launch, until it is finished in this run.
+        if debugShowsOnboarding, state != .checking { return true }
+        #endif
+        // signing in is required: a signed-out owner always sees the welcome and sign-in
+        if case .signedOut = state { return true }
         return false
     }
 
@@ -77,6 +86,9 @@ final class AppleAccountStore: ObservableObject {
             let merged = Self.merge(stored: keychain.load(), incoming: incoming)
             keychain.save(merged)
             errorMessage = nil
+            #if DEBUG
+            debugShowsOnboarding = false
+            #endif
             state = .signedIn(merged)
         case .failure(let error):
             if Self.isCancellation(error) {
@@ -89,12 +101,7 @@ final class AppleAccountStore: ObservableObject {
         }
     }
 
-    func continueWithoutSignIn() {
-        setSkippedSignIn(true)
-        errorMessage = nil
-    }
-
-    /// Signing in is optional, so signing out keeps the app open.
+    /// Signing in is required, so signing out returns to the sign-in screen.
     func signOut() {
         keychain.delete()
         errorMessage = nil
