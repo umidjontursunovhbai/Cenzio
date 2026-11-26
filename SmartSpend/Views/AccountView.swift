@@ -101,13 +101,12 @@ struct AccountView: View {
                 Button("done".localized) { dismiss() }
             }
         }
-        .confirmationDialog("account_sign_out_confirm_title".localized, isPresented: $confirmingSignOut,
-                            titleVisibility: .visible) {
+        .alert("account_sign_out_confirm_title".localized, isPresented: $confirmingSignOut) {
+            Button("cancel".localized, role: .cancel) { }
             Button("account_sign_out".localized, role: .destructive) {
                 dismiss()
                 store.signOut()
             }
-            Button("cancel".localized, role: .cancel) { }
         } message: {
             Text("account_sign_out_confirm_message".localized)
         }
