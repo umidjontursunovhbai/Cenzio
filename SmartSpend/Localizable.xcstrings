@@ -3745,6 +3745,23 @@
           }
         }
       }
+    },
+    "account_photo_use": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tanlash"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

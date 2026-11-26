@@ -22,6 +22,20 @@ enum ProfilePhoto {
         return scaled.jpegData(compressionQuality: 0.75)
     }
 
+    /// Draws the `crop` square (in image points) into a 256 px JPEG.
+    static func make(from image: UIImage, crop: CGRect) -> Data? {
+        guard crop.width > 0 else { return nil }
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: side, height: side), format: format)
+        let f = side / crop.width
+        let out = renderer.image { _ in
+            image.draw(in: CGRect(x: -crop.minX * f, y: -crop.minY * f,
+                                  width: image.size.width * f, height: image.size.height * f))
+        }
+        return out.jpegData(compressionQuality: 0.75)
+    }
+
     @MainActor private static var cache: (key: Int, image: UIImage)?
 
     @MainActor static func image(from data: Data?) -> UIImage? {

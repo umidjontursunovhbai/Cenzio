@@ -32,6 +32,7 @@ struct AccountView: View {
     @ObservedObject private var dataManager = DataManager.shared
     @State private var showingPhotoPicker = false
     @State private var photoItem: PhotosPickerItem?
+    @State private var cropImage: CropImage?
     @Environment(\.dismiss) private var dismiss
 
     @Environment(\.colorScheme) private var colorScheme
@@ -119,13 +120,21 @@ struct AccountView: View {
         .alert("account_delete".localized, isPresented: Binding(get: { deleteError != nil }, set: { if !$0 { deleteError = nil } })) {
             Button("ok".localized) { deleteError = nil }
         } message: { Text(deleteError ?? "") }
+        .fullScreenCover(item: $cropImage) { item in
+            ProfilePhotoCropView(image: item.image) { photo in
+                dataManager.updateProfilePhoto(photo)
+                cropImage = nil
+            } onCancel: {
+                cropImage = nil
+            }
+        }
         .photosPicker(isPresented: $showingPhotoPicker, selection: $photoItem, matching: .images)
         .onChange(of: photoItem) { _, item in
             guard let item else { return }
             Task {
                 if let data = try? await item.loadTransferable(type: Data.self),
-                   let photo = ProfilePhoto.make(from: data) {
-                    dataManager.updateProfilePhoto(photo)
+                   let image = UIImage(data: data) {
+                    cropImage = CropImage(image: image)
                 }
                 photoItem = nil
             }
@@ -259,4 +268,10 @@ struct AccountView: View {
             store.forgetAccount()
         }
     }
+}
+
+/// A picked photo waiting in the crop screen.
+private struct CropImage: Identifiable {
+    let id = UUID()
+    let image: UIImage
 }
