@@ -20,6 +20,9 @@ struct DashboardView: View {
     @State private var heroTick: Double = 0
     /// Bumped on every appear so the pay scene plays again.
     @State private var payRun = 0
+    /// Lower sections grow in once they scroll into view; reset when the screen goes away.
+    @State private var weekdayShown = false
+    @State private var monthsShown = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var typeSize
     @State private var overview = DashboardOverview(
@@ -133,7 +136,11 @@ struct DashboardView: View {
                 }
             }
             #endif
-            .onDisappear { voice.cancel() }
+            .onDisappear {
+                voice.cancel()
+                weekdayShown = false
+                monthsShown = false
+            }
             .onChange(of: dataManager.expenses) { _, _ in
                 refreshOverview()
             }
@@ -871,50 +878,109 @@ struct DashboardView: View {
 
     // MARK: - Weekday pattern
 
+    /// Ease used by the bars that grow in when a section scrolls into view.
+    private func growIn(delay: Double) -> Animation {
+        .timingCurve(0.16, 1, 0.3, 1, duration: 0.9).delay(delay)
+    }
+
     private var weekdayPatternSection: some View {
         let items = overview.weekdayAverages
         let peak = overview.peakWeekday
-        let symbols = calendar.shortWeekdaySymbols
+        let symbols = calendar.shortStandaloneWeekdaySymbols
+        let maxAverage = max(items.map(\.average).max() ?? 0, 1)
+        let others = items.filter { $0.weekday != peak?.weekday }
+        let otherAverage = others.isEmpty ? 0 : others.map(\.average).reduce(0, +) / Double(others.count)
+        let sentence: String = {
+            guard let peak else { return "" }
+            let day = calendar.weekdaySymbols[peak.weekday - 1]
+            let ratio = otherAverage > 0 ? peak.average / otherAverage : 1
+            return String(format: "dash_weekday_sentence_format".localized, day, compactMoney(peak.average),
+                          ratio.formatted(.number.precision(.fractionLength(1))))
+        }()
+        let on = weekdayShown || reduceMotion
+        let barArea: CGFloat = 86
 
         return VStack(alignment: .leading, spacing: 6) {
-            NightSectionHeader(title: "dash_weekday_pattern".localized)
+            NightSectionHeader(title: "dash_weekday_title".localized)
 
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 0) {
+                Text(sentence)
+                    .font(.subheadline)
+                    .foregroundStyle(NightTheme.secondaryLabel)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 14)
+
+                HStack(alignment: .bottom, spacing: 0) {
+                    ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                        let isPeak = item.weekday == peak?.weekday
+                        let height = max(barArea * item.average / maxAverage, item.average > 0 ? 3 : 0)
+                        VStack(spacing: 6) {
+                            if isPeak {
+                                Text(compactMoney(item.average))
+                                    .font(.caption2.weight(.semibold))
+                                    .monospacedDigit()
+                                    .foregroundStyle(.primary)
+                                    .lineLimit(1)
+                                    .fixedSize()
+                                    .opacity(on ? 1 : 0)
+                                    .animation(reduceMotion ? nil : .easeOut(duration: 0.5).delay(1.3), value: on)
+                            }
+                            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                                .fill(paceBarColor(today: isPeak))
+                                .frame(width: 30, height: height)
+                                .overlay(alignment: .top) {
+                                    if isPeak && height > 30 {
+                                        LazyVGrid(columns: [GridItem(.fixed(6), spacing: 4), GridItem(.fixed(6))], spacing: 6) {
+                                            ForEach(0..<4, id: \.self) { _ in
+                                                RoundedRectangle(cornerRadius: 1).fill(NightTheme.window).frame(width: 6, height: 8)
+                                            }
+                                        }
+                                        .padding(.top, 10)
+                                        .opacity(on ? 1 : 0)
+                                        .animation(reduceMotion ? nil : .easeOut(duration: 0.5).delay(1.3), value: on)
+                                    }
+                                }
+                                .scaleEffect(x: 1, y: on ? 1 : 0.001, anchor: .bottom)
+                                .animation(reduceMotion ? nil : growIn(delay: 0.15 + Double(index) * 0.07), value: on)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .bottom)
+                    }
+                }
+                .frame(height: barArea + 24, alignment: .bottom)
+                .overlay(alignment: .bottom) {
+                    Rectangle().fill(NightTheme.accent.opacity(0.18)).frame(height: 1)
+                }
+                .padding(.horizontal, 10)
+                .padding(.top, 8)
+
+                HStack(spacing: 0) {
+                    ForEach(items) { item in
+                        let isPeak = item.weekday == peak?.weekday
+                        Text(symbols[item.weekday - 1])
+                            .font(.caption2.weight(isPeak ? .semibold : .regular))
+                            .foregroundStyle(isPeak ? AnyShapeStyle(.primary) : AnyShapeStyle(NightTheme.secondaryLabel))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+                .padding(.horizontal, 10)
+                .padding(.top, 6)
+
                 Text("dash_weekday_subtitle".localized)
                     .font(.caption)
-                    .foregroundStyle(NightTheme.secondaryLabel)
-
-                Chart {
-                    ForEach(items) { item in
-                        BarMark(
-                            x: .value("Weekday", symbols[item.weekday - 1]),
-                            y: .value("Average", item.average),
-                            width: .ratio(0.6)
-                        )
-                        .cornerRadius(4)
-                        .foregroundStyle(item.weekday == peak?.weekday ? NightTheme.accent : paceBarColor(today: true))
-                    }
-                }
-                .chartXScale(domain: items.map { symbols[$0.weekday - 1] })
-                .chartYAxis(.hidden)
-                .chartXAxis {
-                    AxisMarks { _ in
-                        AxisValueLabel().font(.caption2).foregroundStyle(NightTheme.secondaryLabel)
-                    }
-                }
-                .frame(height: 120)
-                .accessibilityLabel("dash_weekday_pattern".localized)
-                .accessibilityValue(items.map { "\(calendar.weekdaySymbols[$0.weekday - 1]): \(fullMoney($0.average))" }.joined(separator: ", "))
-
-                if let peak {
-                    Text(String(format: "dash_weekday_peak_format".localized,
-                                calendar.weekdaySymbols[peak.weekday - 1], money(peak.average)))
-                        .font(.footnote)
-                        .foregroundStyle(NightTheme.secondaryLabel)
-                }
+                    .foregroundStyle(NightTheme.secondaryLabel.opacity(0.8))
+                    .padding(.horizontal, 16)
+                    .padding(.top, 10)
+                    .padding(.bottom, 14)
             }
-            .padding(16)
             .nightGroup()
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(sentence + " " + "dash_weekday_subtitle".localized)
+            .onScrollVisibilityChange(threshold: 0.4) { visible in
+                if visible { weekdayShown = true }
+            }
         }
     }
 
@@ -924,56 +990,109 @@ struct DashboardView: View {
         let history = overview.monthlyHistory
         let previousNonZero = history.dropLast().map(\.amount).filter { $0 > 0 }
         let average = previousNonZero.isEmpty ? 0 : previousNonZero.reduce(0, +) / Double(previousNonZero.count)
-        let currentMonth = history.last?.month
+        let forecast = max(overview.projectedMonthTotal, history.last?.amount ?? 0)
+        let scale = max(history.map(\.amount).max() ?? 0, forecast, average, 1)
+        let currentName = monthName(history.last?.month ?? Date())
+        let sentence: String = {
+            guard average > 0 else { return "" }
+            let diff = forecast - average
+            return String(format: (diff <= 0 ? "dash_month_less_format" : "dash_month_more_format").localized,
+                          currentName, compactMoney(abs(diff)))
+        }()
+        let on = monthsShown || reduceMotion
 
         return VStack(alignment: .leading, spacing: 6) {
-            NightSectionHeader(title: "dash_monthly_history".localized)
+            NightSectionHeader(title: "dash_last_six_months".localized)
 
-            VStack(alignment: .leading, spacing: 12) {
-                if average > 0 {
-                    Text(String(format: "dash_monthly_average_format".localized, compactMoney(average)))
-                        .font(.caption)
+            VStack(alignment: .leading, spacing: 0) {
+                if !sentence.isEmpty {
+                    Text(sentence)
+                        .font(.subheadline)
                         .foregroundStyle(NightTheme.secondaryLabel)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 14)
                 }
 
-                Chart {
-                    ForEach(history, id: \.month) { item in
-                        BarMark(
-                            x: .value("Month", item.month, unit: .month),
-                            y: .value("Amount", item.amount),
-                            width: .ratio(0.55)
-                        )
-                        .cornerRadius(4)
-                        .foregroundStyle(item.month == currentMonth ? NightTheme.accent : paceBarColor(today: true))
-                        .annotation(position: .top, spacing: 4) {
-                            if item.amount > 0 {
-                                Text(compactMoney(item.amount))
-                                    .font(.system(size: 9, weight: .semibold))
-                                    .foregroundStyle(NightTheme.secondaryLabel)
+                VStack(spacing: 9) {
+                    ForEach(Array(history.enumerated()), id: \.element.month) { index, item in
+                        let isNow = index == history.count - 1
+                        HStack(spacing: 10) {
+                            Text(monthName(item.month))
+                                .font(.footnote.weight(.medium))
+                                .foregroundStyle(isNow ? AnyShapeStyle(.primary) : AnyShapeStyle(NightTheme.secondaryLabel))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.7)
+                                .frame(width: 66, alignment: .leading)
+                            GeometryReader { proxy in
+                                let width = proxy.size.width
+                                ZStack(alignment: .leading) {
+                                    if isNow {
+                                        DashedFill(color: NightTheme.accent.opacity(0.45))
+                                            .frame(width: width * forecast / scale)
+                                            .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                                    }
+                                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                        .fill(isNow ? NightTheme.accent : paceBarColor(today: true))
+                                        .frame(width: max(width * item.amount / scale, item.amount > 0 ? 3 : 0))
+                                }
+                                .scaleEffect(x: on ? 1 : 0.001, y: 1, anchor: .leading)
+                                .animation(reduceMotion ? nil : growIn(delay: 0.1 + Double(index) * 0.06), value: on)
+                                .overlay(alignment: .leading) {
+                                    if average > 0 {
+                                        Rectangle()
+                                            .stroke(NightTheme.window.opacity(0.75), style: StrokeStyle(lineWidth: 1.5, dash: [3, 3]))
+                                            .frame(width: 0.1, height: 21)
+                                            .offset(x: width * average / scale)
+                                    }
+                                }
                             }
+                            .frame(height: 12)
+                            Text(compactMoney(item.amount))
+                                .font(.footnote.weight(.semibold))
+                                .monospacedDigit()
+                                .foregroundStyle(.primary)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.7)
+                                .frame(width: 70, alignment: .trailing)
                         }
                     }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 14)
+                .padding(.bottom, 10)
+
+                HStack(spacing: 12) {
+                    paceKey("dash_legend_spent".localized) {
+                        RoundedRectangle(cornerRadius: 2).fill(NightTheme.accent).frame(width: 12, height: 8)
+                    }
+                    paceKey("dash_key_forecast".localized) {
+                        DashedFill(color: NightTheme.accent.opacity(0.6)).frame(width: 12, height: 8)
+                    }
                     if average > 0 {
-                        RuleMark(y: .value("Average", average))
-                            .foregroundStyle(NightTheme.secondaryLabel.opacity(0.6))
-                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                        paceKey(String(format: "dash_key_average_format".localized, compactMoney(average))) {
+                            Rectangle()
+                                .stroke(NightTheme.window.opacity(0.85), style: StrokeStyle(lineWidth: 1.5, dash: [2, 2]))
+                                .frame(width: 0.1, height: 10)
+                        }
                     }
                 }
-                .chartYAxis(.hidden)
-                .chartXAxis {
-                    AxisMarks(values: .stride(by: .month)) { _ in
-                        AxisValueLabel(format: .dateTime.month(.abbreviated), centered: true)
-                            .font(.caption2)
-                            .foregroundStyle(NightTheme.secondaryLabel)
-                    }
-                }
-                .frame(height: 140)
-                .accessibilityLabel("dash_monthly_history".localized)
-                .accessibilityValue(history.map { "\($0.month.formatted(.dateTime.month(.wide))): \(fullMoney($0.amount))" }.joined(separator: ", "))
+                .padding(.horizontal, 16)
+                .padding(.bottom, 14)
             }
-            .padding(16)
             .nightGroup()
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(([sentence] + history.map { "\(monthName($0.month)): \(fullMoney($0.amount))" })
+                .filter { !$0.isEmpty }.joined(separator: ". "))
+            .onScrollVisibilityChange(threshold: 0.4) { visible in
+                if visible { monthsShown = true }
+            }
         }
+    }
+
+    private func monthName(_ date: Date) -> String {
+        let name = date.formatted(.dateTime.month(.wide))
+        return name.prefix(1).uppercased() + name.dropFirst()
     }
 
     // MARK: - Upcoming bills

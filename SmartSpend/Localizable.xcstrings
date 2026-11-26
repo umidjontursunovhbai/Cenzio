@@ -4518,6 +4518,125 @@
           }
         }
       }
+    },
+    "dash_weekday_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Which day you spend most"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qaysi kuni ko'p sarflaysiz"
+          }
+        }
+      }
+    },
+    "dash_weekday_sentence_format": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On %@ you spend %@ on average, %@ times more than other days."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ kuni o'rtacha %@ sarflaysiz. Bu boshqa kunlardan %@ baravar ko'p."
+          }
+        }
+      }
+    },
+    "dash_last_six_months": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last 6 months"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oxirgi 6 oy"
+          }
+        }
+      }
+    },
+    "dash_month_less_format": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ is heading for %@ less than average."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ o'rtachadan %@ kam ketyapti."
+          }
+        }
+      }
+    },
+    "dash_month_more_format": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ is heading for %@ more than average."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ o'rtachadan %@ ko'p ketyapti."
+          }
+        }
+      }
+    },
+    "dash_key_forecast": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Forecast to month end"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oy oxirigacha taxmin"
+          }
+        }
+      }
+    },
+    "dash_key_average_format": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Average %@"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O'rtacha %@"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
