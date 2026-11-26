@@ -33,6 +33,8 @@ struct RecurringExpenseFormView: View {
     @State private var isActive: Bool
     @State private var showingCategoryManagement = false
     @State private var showingDeleteConfirmation = false
+    @State private var showingCategoryGrid = false
+    @Environment(\.colorScheme) private var colorScheme
     @FocusState private var focusedField: Field?
 
     private enum Field { case title, amount }
@@ -72,9 +74,12 @@ struct RecurringExpenseFormView: View {
                 Section {
                     Toggle("active".localized, isOn: $isActive)
                         .accessibilityIdentifier("recurringActiveToggle")
+                } header: {
+                    StreetSectionHeader(title: "status".localized)
                 } footer: {
                     Text("recurring_active_footer".localized)
                 }
+                .listRowBackground(NightTheme.glassFill)
 
                 if let stored {
                     statusSection(for: stored)
@@ -84,36 +89,43 @@ struct RecurringExpenseFormView: View {
                     RecurrencePreviewView(
                         recurrenceType: recurrence,
                         startDate: startDate,
-                        endDate: hasEndDate ? endDate : nil
+                        endDate: hasEndDate ? endDate : nil,
+                        amount: AmountInputFormatter.parse(amount),
+                        currency: dataManager.user.currency
                     )
+                } header: {
+                    StreetSectionHeader(title: "upcoming_occurrences".localized)
                 } footer: {
                     if let note = backfillNote {
                         Text(note)
                     }
                 }
+                .listRowBackground(NightTheme.glassFill)
 
                 if isEditing {
                     Section {
-                        Button("recurring_delete_button".localized, role: .destructive) {
+                        Button(role: .destructive) {
                             showingDeleteConfirmation = true
+                        } label: {
+                            Label("recurring_delete_button".localized, systemImage: "trash")
+                                .frame(maxWidth: .infinity)
                         }
-                        .frame(maxWidth: .infinity)
                         .accessibilityIdentifier("recurringDeleteButton")
                     }
+                    .listRowBackground(NightTheme.glassFill)
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(NightGround())
+            .tint(NightTheme.accent)
+            .safeAreaInset(edge: .bottom, spacing: 0) { saveBar }
             .scrollDismissesKeyboard(.interactively)
+            .scrollIndicators(.hidden)
             .navigationTitle((isEditing ? "edit_recurring_expense" : "add_recurring_expense").localized)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("cancel".localized) { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("save".localized, action: save)
-                        .fontWeight(.semibold)
-                        .disabled(!canSave)
-                        .accessibilityIdentifier("recurringSaveButton")
                 }
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
@@ -149,8 +161,20 @@ struct RecurringExpenseFormView: View {
         }
     }
 
+    /// Save as the white capsule at the bottom, like Add expense.
+    private var saveBar: some View {
+        Button("save".localized, action: save)
+            .buttonStyle(PrimaryCapsuleButtonStyle())
+            .disabled(!canSave)
+            .accessibilityIdentifier("recurringSaveButton")
+            .padding(.horizontal, 28)
+            .padding(.top, 8)
+            .padding(.bottom, 10)
+            .background(NightGround())
+    }
+
     private var detailsSection: some View {
-        Section("expense_details".localized) {
+        Section {
             TextField("title".localized, text: $title)
                 .textInputAutocapitalization(.words)
                 .submitLabel(.next)
@@ -158,34 +182,68 @@ struct RecurringExpenseFormView: View {
                 .onSubmit { focusedField = .amount }
                 .accessibilityIdentifier("recurringTitleField")
 
-            HStack {
+            HStack(alignment: .firstTextBaseline) {
                 Text("amount".localized)
+                    .foregroundStyle(NightTheme.secondaryLabel)
                 Spacer()
                 TextField("0", text: $amount)
+                    .font(NightTheme.display(28, relativeTo: .title))
                     .keyboardType(.decimalPad)
                     .multilineTextAlignment(.trailing)
                     .monospacedDigit()
                     .focused($focusedField, equals: .amount)
-                    .frame(maxWidth: 160)
                     .accessibilityIdentifier("recurringAmountField")
                 Text(dataManager.user.currency.symbol)
-                    .foregroundStyle(.secondary)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(NightTheme.secondaryLabel)
             }
 
-            RecurringCategoryPicker(selectedCategory: $selectedCategory) {
-                showingCategoryManagement = true
+            // Category: a row that opens the same inline tile grid as Add expense.
+            Button {
+                withAnimation(.snappy(duration: 0.3)) { showingCategoryGrid.toggle() }
+            } label: {
+                HStack(spacing: 8) {
+                    Text("category".localized)
+                        .foregroundStyle(.primary)
+                    Spacer()
+                    if let category = selectedCategory {
+                        HeroIcon(systemName: category.iconSystemName)
+                            .foregroundStyle(category.color)
+                        Text(category.name)
+                            .foregroundStyle(.primary)
+                    } else {
+                        Text("select_category".localized)
+                            .foregroundStyle(.secondary)
+                    }
+                    HeroIcon(systemName: "chevron.down")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(showingCategoryGrid ? 180 : 0))
+                }
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("recurringCategoryPicker")
+            .accessibilityValue(selectedCategory?.name ?? "select_category".localized)
+
+            if showingCategoryGrid {
+                CategoryTileGrid(categories: dataManager.userCategories, selectedID: selectedCategory?.id) { category in
+                    selectedCategory = category
+                    withAnimation(.snappy(duration: 0.3)) { showingCategoryGrid = false }
+                } onCreate: {
+                    showingCategoryManagement = true
+                }
+            }
+        } header: {
+            StreetSectionHeader(title: "expense_details".localized, figure: .walker)
         }
+        .listRowBackground(NightTheme.glassFill)
     }
 
     private var scheduleSection: some View {
         Section {
-            Picker("frequency".localized, selection: $recurrence) {
-                ForEach(RecurrenceType.allCases, id: \.self) { type in
-                    Text(type.localizedName).tag(type)
-                }
-            }
-            .accessibilityIdentifier("recurringFrequencyPicker")
+            frequencyGrid
+                .accessibilityIdentifier("recurringFrequencyPicker")
 
             DatePicker("start_date".localized, selection: $startDate, displayedComponents: .date)
                 .accessibilityIdentifier("recurringStartDatePicker")
@@ -198,16 +256,44 @@ struct RecurringExpenseFormView: View {
                     .accessibilityIdentifier("recurringEndDatePicker")
             }
         } header: {
-            Text("recurrence".localized)
+            StreetSectionHeader(title: "recurrence".localized)
         } footer: {
             if isEditing {
                 Text("recurring_schedule_footer".localized)
             }
         }
+        .listRowBackground(NightTheme.glassFill)
+    }
+
+    /// All six frequencies as cells, three per row; the chosen one is filled with the accent.
+    private var frequencyGrid: some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 3), spacing: 6) {
+            ForEach(RecurrenceType.allCases, id: \.self) { type in
+                let isOn = recurrence == type
+                Button {
+                    withAnimation(.snappy(duration: 0.2)) { recurrence = type }
+                } label: {
+                    Text(type.localizedName)
+                        .font(.subheadline.weight(isOn ? .semibold : .medium))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                        .foregroundStyle(isOn ? (colorScheme == .dark ? NightTheme.ink : Color.white) : Color.primary)
+                        .frame(maxWidth: .infinity, minHeight: iOSDesignSystem.Size.minimumTapTarget)
+                        .background(isOn ? NightTheme.accent : NightTheme.iconFill,
+                                    in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(isOn ? .isSelected : [])
+            }
+        }
+        .padding(.vertical, 4)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("frequency".localized)
     }
 
     private func statusSection(for stored: RecurringExpense) -> some View {
-        Section("status".localized) {
+        Section {
             if let lastProcessed = stored.lastProcessedDate {
                 LabeledContent("last_processed".localized) {
                     Text(lastProcessed.formatted(date: .abbreviated, time: .omitted))
@@ -220,9 +306,11 @@ struct RecurringExpenseFormView: View {
                     Text("expired".localized)
                 } else {
                     Text(stored.nextDueDate.formatted(date: .abbreviated, time: .omitted))
+                        .foregroundStyle(stored.isOverdue ? RecurringStatusColor.overdue : NightTheme.secondaryLabel)
                 }
             }
         }
+        .listRowBackground(NightTheme.glassFill)
     }
 
     /// Past occurrences that saving will record immediately (a new bill starting last month).
@@ -291,50 +379,6 @@ struct RecurringExpenseFormView: View {
     }
 }
 
-// MARK: - Shared Category Picker
-
-struct RecurringCategoryPicker: View {
-    @Binding var selectedCategory: UserCategory?
-    var onCreateNew: () -> Void
-    @ObservedObject private var dataManager = DataManager.shared
-
-    var body: some View {
-        HStack {
-            Text("category".localized)
-            Spacer()
-            Menu {
-                ForEach(dataManager.userCategories) { category in
-                    Button {
-                        selectedCategory = category
-                    } label: {
-                        HeroIconLabel(title: category.name, systemName: category.iconSystemName)
-                    }
-                }
-                Divider()
-                Button(action: onCreateNew) {
-                    HeroIconLabel(title: "create_new_category".localized, systemName: "plus.circle")
-                }
-            } label: {
-                HStack(spacing: 6) {
-                    if let category = selectedCategory {
-                        HeroIcon(systemName: category.iconSystemName)
-                            .foregroundStyle(category.color)
-                        Text(category.name)
-                            .foregroundStyle(.primary)
-                    } else {
-                        Text("select_category".localized)
-                            .foregroundStyle(.secondary)
-                    }
-                    HeroIcon(systemName: "chevron.up.chevron.down")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                }
-            }
-            .accessibilityIdentifier("recurringCategoryPicker")
-        }
-    }
-}
-
 // MARK: - Recurrence Preview
 
 /// The next few charges from today (or from the start day, if it is later).
@@ -342,6 +386,8 @@ struct RecurrencePreviewView: View {
     let recurrenceType: RecurrenceType
     let startDate: Date
     let endDate: Date?
+    var amount: Double? = nil
+    var currency: Currency? = nil
 
     private static let limit = 5
 
@@ -375,41 +421,44 @@ struct RecurrencePreviewView: View {
         let dates = upcomingDates
         let startDay = Calendar.current.startOfDay(for: startDate)
 
-        VStack(alignment: .leading, spacing: 8) {
-            Text("upcoming_occurrences".localized)
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(dates.prefix(Self.limit).enumerated()), id: \.offset) { index, date in
+                if index > 0 {
+                    Rectangle().fill(NightTheme.hair).frame(height: 1)
+                }
+                HStack(spacing: 10) {
+                    Text("\(index + 1)")
+                        .foregroundStyle(NightTheme.secondaryLabel)
+                        .frame(width: 18, alignment: .leading)
 
-            VStack(alignment: .leading, spacing: 4) {
-                ForEach(Array(dates.prefix(Self.limit).enumerated()), id: \.offset) { index, date in
-                    HStack {
-                        Text("\(index + 1).")
-                            .foregroundStyle(.secondary)
-                            .frame(width: 20, alignment: .leading)
+                    Text(date.formatted(date: .abbreviated, time: .omitted))
+                        .foregroundStyle(.primary)
 
-                        Text(date.formatted(date: .abbreviated, time: .omitted))
-                            .foregroundStyle(.primary)
-
-                        if date == startDay {
-                            Text("(\("start".localized))")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        Spacer()
+                    if date == startDay {
+                        Text("(\("start".localized))")
+                            .font(.caption)
+                            .foregroundStyle(NightTheme.secondaryLabel)
                     }
-                    .font(.caption.monospacedDigit())
-                }
 
-                if dates.count > Self.limit {
-                    Text("…")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .padding(.leading, 20)
+                    Spacer()
+
+                    if let amount, amount > 0, let currency {
+                        Text(CurrencyFormatter.format(amount, currency: currency))
+                            .foregroundStyle(NightTheme.secondaryLabel)
+                    }
                 }
+                .font(.subheadline.monospacedDigit())
+                .padding(.vertical, 9)
+            }
+
+            if dates.count > Self.limit {
+                Text("…")
+                    .font(.subheadline)
+                    .foregroundStyle(NightTheme.secondaryLabel)
+                    .padding(.leading, 28)
+                    .padding(.bottom, 4)
             }
         }
-        .padding(.vertical, 8)
         .accessibilityElement(children: .combine)
     }
 }
