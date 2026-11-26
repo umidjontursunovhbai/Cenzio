@@ -97,18 +97,33 @@ enum StreetCast {
         }
     }
 
-    /// A person on a bicycle, facing right.
-    static func cyclist(_ ctx: GraphicsContext, color: Color) {
+    /// A person on a bicycle, facing right. With a pedal phase `ph` the wheels show a
+    /// turning spoke and the leg follows the pedal; without it the rider is drawn still.
+    static func cyclist(_ ctx: GraphicsContext, color: Color, ph: Double? = nil) {
         for cx in [-7.0, 7] {
             ctx.stroke(circle(cx, -4.5, 4.3), with: .color(color), lineWidth: 1.4)
+            if let ph {
+                let dx = cos(ph) * 4, dy = sin(ph) * 4
+                line(ctx, CGPoint(x: cx - dx, y: -4.5 - dy), CGPoint(x: cx + dx, y: -4.5 + dy), 0.7, color)
+            }
         }
         let frame: [(Double, Double, Double, Double, Double)] = [
             (-7, -4.5, -1, -4.5, 1.4), (-1, -4.5, 4, -11, 1.4), (-1, -4.5, -3, -12, 1.4),
             (4, -11, 7, -4.5, 1.4), (-4.5, -12, -1.5, -12, 1.6),
-            (-2, -12, 1, -19, 4.4), (0.5, -17.5, 5, -12, 2), (-2, -12, 0, -6, 2.4), (0, -6, -1, -4.5, 2.4),
+            (-2, -12, 1, -19, 4.4), (0.5, -17.5, 5, -12, 2),
         ]
         for (x1, y1, x2, y2, w) in frame {
             line(ctx, CGPoint(x: x1, y: y1), CGPoint(x: x2, y: y2), w, color)
+        }
+        if let ph {
+            // foot on a pedal circling the crank (-1, -4.5); knee halfway, pushed forward
+            let foot = CGPoint(x: -1 + cos(ph) * 2.6, y: -4.5 + sin(ph) * 2.6)
+            let knee = CGPoint(x: (foot.x - 2) / 2 + 1.5, y: (foot.y - 12) / 2 - 1)
+            line(ctx, CGPoint(x: -2, y: -12), knee, 2.4, color)
+            line(ctx, knee, foot, 2.4, color)
+        } else {
+            line(ctx, CGPoint(x: -2, y: -12), CGPoint(x: 0, y: -6), 2.4, color)
+            line(ctx, CGPoint(x: 0, y: -6), CGPoint(x: -1, y: -4.5), 2.4, color)
         }
         ctx.fill(circle(2.2, -22.6, 3), with: .color(color))
     }
@@ -211,6 +226,135 @@ struct StreetFigureView: View {
             StreetCast.person(ctx, 0, 0, .init(walk: walking, ph: walking ? ph : 3.5, dir: dir, eat: true, scale: 1), color: color, reduce: false)
         case .cyclist:
             StreetCast.cyclist(ctx, color: color)
+        case .lamp:
+            StreetCast.lamp(ctx, color: color)
+        case .taxi:
+            StreetCast.taxi(ctx, 0, 0, wheel: NightTheme.ink, rims: true)
+        }
+    }
+}
+
+// MARK: - Figures that keep moving (Settings)
+
+extension EnvironmentValues {
+    /// Set by a screen to hold looping figures still (not used while scrolling: owner wants them moving).
+    @Entry var streetMotionPaused = false
+}
+
+/// Accumulates only the time the loop actually ran, so a figure resumes where it
+/// stopped after a scroll or a trip to the background instead of jumping ahead.
+private final class StreetClock {
+    var t: Double = 0
+    var last: Date?
+
+    func tick(_ now: Date) -> Double {
+        if let last { t += min(max(0, now.timeIntervalSince(last)), 1.0 / 12) }
+        last = now
+        return t
+    }
+}
+
+/// A street figure that keeps moving: it goes right until `reach` (a share of the screen
+/// width, measured from the screen's left edge) and turns back to the start of its lane.
+/// 24 frames a second, and it holds still when off screen, in the background, in Low
+/// Power Mode and with Reduce Motion. It keeps moving while the list scrolls. Decoration only.
+struct StreetLoopView: View {
+    let figure: StreetFigure
+    var height: CGFloat = 22
+    /// How far right it goes, as a share of the screen width (cyclist 0.55, walkers 0.30).
+    var reach: CGFloat = 0.55
+    /// A street lamp stands at the end of the lane; the figure turns back at it.
+    var lamp = false
+    var color: Color?
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.streetMotionPaused) private var scrolling
+    @State private var visible = false
+    @State private var lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
+    @State private var clock = StreetClock()
+
+    /// The lamp beside the cyclist is drawn this many times the row height.
+    static let lampGrow: CGFloat = 1.8
+
+    private var still: Bool { reduceMotion || lowPower }
+    private var paused: Bool { still || scrolling || !visible || scenePhase != .active }
+
+    var body: some View {
+        let box = figure.box
+        let scale = height / box.height
+        let ink = color ?? NightTheme.figure(colorScheme)
+        GeometryReader { geo in
+            // the lane may end at `reach` of the screen; list inset ~20 pt on the right
+            let frame = geo.frame(in: .global)
+            let screen = frame.maxX + 20
+            let lane = min(geo.size.width, max(0, screen * reach - frame.minX))
+            TimelineView(.animation(minimumInterval: 1.0 / 24, paused: paused)) { tl in
+                let t = paused ? clock.t : clock.tick(tl.date)
+                Canvas { ctx, _ in
+                    // the cyclist's turning point stays where it was with the small lamp
+                    let lampW = lamp ? StreetFigure.lamp.box.width * height / StreetFigure.lamp.box.height : 0
+                    var c = ctx
+                    let w = box.width * scale
+                    let (x, dir) = position(t: t, lane: lane - lampW * 0.6, width: w)
+                    c.translateBy(x: x, y: 0)
+                    if dir < 0 && figure == .cyclist {
+                        c.translateBy(x: w, y: 0)
+                        c.scaleBy(x: -1, y: 1)
+                    }
+                    c.scaleBy(x: scale, y: scale)
+                    c.translateBy(x: -box.minX, y: -box.minY)
+                    draw(c, color: ink, t: t, dir: dir)
+                }
+            }
+            .overlay(alignment: .bottomLeading) {
+                if lamp {
+                    // drawn taller than the header row; it overflows upward and does not change the layout
+                    let lampBox = StreetFigure.lamp.box
+                    let small = lampBox.width * height / lampBox.height
+                    let tall = height * Self.lampGrow
+                    StreetFigureView(figure: .lamp, height: tall, color: color)
+                        .offset(x: max(0, lane - small) + small / 2 - lampBox.width * tall / lampBox.height / 2)
+                }
+            }
+            .onChange(of: paused) { _, isPaused in if isPaused { clock.last = nil } }
+        }
+        .frame(height: height)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+        .onAppear { visible = true }
+        .onDisappear { visible = false }
+        .onReceive(NotificationCenter.default.publisher(for: .NSProcessInfoPowerStateDidChange)) { _ in
+            lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
+        }
+    }
+
+    /// Left edge of the drawing in the lane, and the facing direction.
+    private func position(t: Double, lane: CGFloat, width: CGFloat) -> (CGFloat, Double) {
+        let room = max(0, lane - width)
+        let speed: Double
+        switch figure {
+        case .cyclist, .taxi: speed = 26
+        case .walker, .shopper, .snacker: speed = 14
+        case .lamp: return (0, 1)
+        }
+        guard !still, room > 4 else { return (0, 1) }
+        let period = 2 * room / speed
+        let u = t.truncatingRemainder(dividingBy: period) / period
+        return u < 0.5 ? (room * u * 2, 1) : (room * (1 - (u - 0.5) * 2), -1)
+    }
+
+    private func draw(_ ctx: GraphicsContext, color: Color, t: Double, dir: Double) {
+        switch figure {
+        case .walker:
+            StreetCast.person(ctx, 0, 0, .init(walk: !still, ph: t * 7, dir: dir, scale: 1), color: color, reduce: still)
+        case .shopper:
+            StreetCast.person(ctx, 0, 0, .init(walk: !still, ph: t * 6.5, dir: dir, bags: true, scale: 1), color: color, reduce: still)
+        case .snacker:
+            StreetCast.person(ctx, 0, 0, .init(walk: !still, ph: still ? 3.5 : t * 6, dir: dir, eat: true, scale: 1), color: color, reduce: false)
+        case .cyclist:
+            StreetCast.cyclist(ctx, color: color, ph: still ? nil : t * 6)
         case .lamp:
             StreetCast.lamp(ctx, color: color)
         case .taxi:

@@ -1129,6 +1129,12 @@ class DataManager: ObservableObject {
         user.language = language
         saveData()
     }
+
+    /// Sets or removes (nil) the profile photo; it syncs with the Settings record.
+    func updateProfilePhoto(_ photo: Data?) {
+        user.photo = photo
+        saveData()
+    }
     
     // MARK: - User Categories
     func addUserCategory(_ category: UserCategory) {

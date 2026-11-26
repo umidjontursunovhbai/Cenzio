@@ -96,6 +96,11 @@ extension View {
 struct StreetSectionHeader: View {
     let title: String
     var figure: StreetFigure?
+    /// The figure keeps moving in a lane that fills the rest of the header (Settings).
+    var loops = false
+    /// How far right a looping figure goes, as a share of the screen width.
+    var reach: CGFloat = 0.55
+    var lamp = false
 
     @Environment(\.dynamicTypeSize) private var typeSize
 
@@ -105,8 +110,14 @@ struct StreetSectionHeader: View {
                 .font(NightTheme.sectionFont)
                 .foregroundStyle(.secondary)
             if let figure, !typeSize.isAccessibilitySize {
-                StreetFigureView(figure: figure, height: 22)
-                    .alignmentGuide(.lastTextBaseline) { $0[.bottom] - 1 }
+                if loops {
+                    StreetLoopView(figure: figure, height: 22, reach: reach, lamp: lamp)
+                        .frame(maxWidth: .infinity)
+                        .alignmentGuide(.lastTextBaseline) { $0[.bottom] - 1 }
+                } else {
+                    StreetFigureView(figure: figure, height: 22)
+                        .alignmentGuide(.lastTextBaseline) { $0[.bottom] - 1 }
+                }
             }
         }
         .textCase(nil)
