@@ -2,6 +2,8 @@ import SwiftUI
 
 struct RecurringExpensesView: View {
     @ObservedObject private var dataManager = DataManager.shared
+    @Environment(\.floatingTabBarClearance) private var tabBarClearance
+    @Environment(\.colorScheme) private var colorScheme
 
     @State private var showingAddRecurring = false
     @State private var selectedRecurring: RecurringExpense?
@@ -22,6 +24,21 @@ struct RecurringExpensesView: View {
             case .all: return "all".localized
             case .active: return "active".localized
             case .inactive: return "inactive".localized
+            }
+        }
+    }
+
+    /// The list is split by when the next charge comes; order inside each part is unchanged.
+    private enum RecurringGroup: CaseIterable, Identifiable {
+        case thisWeek, later, paused
+
+        var id: Self { self }
+
+        var title: String {
+            switch self {
+            case .thisWeek: return "recurring_group_this_week".localized
+            case .later: return "recurring_group_later".localized
+            case .paused: return "recurring_group_paused".localized
             }
         }
     }
@@ -62,6 +79,23 @@ struct RecurringExpensesView: View {
         dataManager.getRecurringExpenseNotifications()
     }
 
+    private var currency: Currency { dataManager.user.currency }
+
+    private func group(for recurring: RecurringExpense) -> RecurringGroup {
+        guard recurring.isActive, !recurring.isExpired else { return .paused }
+        let calendar = Calendar.current
+        let weekEnd = calendar.date(byAdding: .day, value: 7, to: calendar.startOfDay(for: Date())) ?? Date()
+        return recurring.nextDueDate < weekEnd ? .thisWeek : .later
+    }
+
+    private var groupedRecurring: [(group: RecurringGroup, items: [RecurringExpense])] {
+        let sorted = sortedRecurringExpenses
+        return RecurringGroup.allCases.compactMap { group in
+            let items = sorted.filter { self.group(for: $0) == group }
+            return items.isEmpty ? nil : (group, items)
+        }
+    }
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
@@ -72,10 +106,12 @@ struct RecurringExpensesView: View {
                         showingAddRecurring = true
                     }
                 } else {
+                    filterChips
                     recurringContent
                 }
             }
-            .background(iOSDesignSystem.appBackground)
+            .background(NightGround())
+            .tint(NightTheme.accent)
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(.hidden, for: .navigationBar)
@@ -106,9 +142,12 @@ struct RecurringExpensesView: View {
                 let visible = Set(sortedRecurringExpenses.map(\.id))
                 selectedRecurringExpenses.formIntersection(visible)
             }
-            .safeAreaInset(edge: .bottom, spacing: 0) {
+            .overlay(alignment: .bottom) {
                 if isSelectionMode {
                     selectionBar
+                        .padding(.horizontal, iOSDesignSystem.Spacing.screenMargin)
+                        .padding(.bottom, 12 + tabBarClearance)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
             .onAppear {
@@ -117,227 +156,361 @@ struct RecurringExpensesView: View {
         }
     }
 
+    // MARK: - Header
+
     private var header: some View {
-        AppScreenHeader("recurring".localized) {
-            if isSelectionMode {
-                Button("cancel".localized) {
-                    endSelectionMode()
-                }
-                .font(.body.weight(.semibold))
-                .foregroundStyle(Color.accentColor)
-                .frame(minHeight: iOSDesignSystem.Size.minimumTapTarget)
-                .accessibilityIdentifier("recurringCancelSelectionButton")
-            } else {
-                if !dataManager.recurringExpenses.isEmpty {
-                    ActionIconButton(icon: "check-circle", style: .secondary) {
-                        withAnimation(.snappy(duration: 0.25)) {
-                            isSelectionMode = true
-                        }
-                    }
-                    .accessibilityLabel("recurring_select".localized)
-                    .accessibilityIdentifier("recurringSelectButton")
-                }
-
-                ActionIconButton(icon: "plus", style: .primary) {
-                    showingAddRecurring = true
-                }
-                .accessibilityLabel("add_recurring_expense".localized)
-                .accessibilityIdentifier("addRecurringButton")
+        HStack(alignment: .bottom, spacing: 12) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("recurring".localized)
+                    .font(NightTheme.display(46))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                    .capFigure(isSelectionMode ? nil : .cyclist, fontSize: 46, relativeTo: .largeTitle)
+                    .accessibilityAddTraits(.isHeader)
+                headerSubtitle
             }
-        }
-    }
+            .accessibilityElement(children: .combine)
 
-    private var recurringContent: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                if !runningRecurringExpenses.isEmpty {
-                    RecurringSummaryCard(
-                        running: runningRecurringExpenses,
-                        currency: dataManager.user.currency
-                    )
-                }
+            Spacer(minLength: 12)
 
-                if !notifications.isEmpty {
-                    RecurringAttentionCard(notifications: notifications) {
-                        dataManager.processRecurringExpenses()
+            HStack(spacing: 8) {
+                if isSelectionMode {
+                    Button("cancel".localized) {
+                        endSelectionMode()
                     }
-                }
-
-                filterControl
-
-                if sortedRecurringExpenses.isEmpty {
-                    filteredEmptyState
-                } else {
-                    recurringList
-                }
-            }
-            .padding(.horizontal, iOSDesignSystem.Spacing.screenMargin)
-            .padding(.top, 6)
-            .padding(.bottom, iOSDesignSystem.Spacing.screenMargin)
-        }
-        .scrollIndicators(.hidden)
-        .background(iOSDesignSystem.appBackground)
-    }
-
-    private var filterControl: some View {
-        HStack(spacing: 5) {
-            ForEach(RecurringFilter.allCases) { item in
-                Button {
-                    withAnimation(.snappy(duration: 0.24)) {
-                        filter = item
-                    }
-                } label: {
-                    HStack(spacing: 6) {
-                        Text(item.title)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.82)
-
-                        Text("\(recurringCount(for: item))")
-                            .font(.caption2.weight(.bold).monospacedDigit())
-                            .foregroundStyle(filter == item ? Color.accentColor : Color.secondary)
-                            .padding(.horizontal, 6)
-                            .frame(minHeight: 20)
-                            .background(
-                                filter == item
-                                    ? Color.accentColor.opacity(0.09)
-                                    : Color(.tertiarySystemFill),
-                                in: Capsule()
-                            )
-                    }
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(filter == item ? Color.accentColor : Color.secondary)
-                    .frame(maxWidth: .infinity)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(NightTheme.accent)
                     .frame(minHeight: iOSDesignSystem.Size.minimumTapTarget)
-                    .background {
-                        if filter == item {
-                            Capsule()
-                                .fill(Color.accentColor.opacity(0.075))
-                                .overlay(
-                                    Capsule()
-                                        .stroke(Color.accentColor.opacity(0.13), lineWidth: 1)
-                                )
+                    .accessibilityIdentifier("recurringCancelSelectionButton")
+                } else {
+                    if !dataManager.recurringExpenses.isEmpty {
+                        Button {
+                            withAnimation(.snappy(duration: 0.25)) {
+                                isSelectionMode = true
+                            }
+                        } label: {
+                            headerCircle(filled: false) { HeroIcon("check-circle", size: 20) }
                         }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("recurring_select".localized)
+                        .accessibilityIdentifier("recurringSelectButton")
                     }
+
+                    Button {
+                        showingAddRecurring = true
+                    } label: {
+                        headerCircle(filled: true) { HeroIcon("plus", size: 20) }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("add_recurring_expense".localized)
+                    .accessibilityIdentifier("addRecurringButton")
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("\(item.title), \(recurringCount(for: item))")
             }
+            .padding(.bottom, 2)
         }
-        .padding(4)
-        .liquidGlassSurface(Capsule())
+        .padding(.horizontal, 20)
+        .padding(.top, 10)
+        .padding(.bottom, 14)
+    }
+
+    /// "3 670 000 so'm a month · 6 active"; "N selected" while selecting.
+    @ViewBuilder
+    private var headerSubtitle: some View {
+        if isSelectionMode {
+            Text(String(format: "selected_count".localized, selectedRecurringExpenses.count))
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(NightTheme.secondaryLabel)
+        } else if !runningRecurringExpenses.isEmpty {
+            let running = runningRecurringExpenses
+            let monthly = running.reduce(0) { $0 + $1.monthlyEquivalentAmount }
+            let total = Text(CurrencyFormatter.format(monthly, currency: currency)).foregroundStyle(.primary)
+            let parts = "recurring_header_monthly_format".localized.components(separatedBy: "%@")
+            let suffix = (parts.count > 1 ? parts[1] : "") + " · " + String(format: "recurring_active_count_format".localized, running.count)
+            Text("\(parts[0])\(total)\(suffix)")
+                .font(.subheadline.weight(.semibold))
+                .monospacedDigit()
+                .foregroundStyle(NightTheme.secondaryLabel)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .contentTransition(.numericText())
+                .accessibilityIdentifier("recurringMonthlyTotal")
+        }
+    }
+
+    /// A 44 pt header circle: glass, or filled with the accent for the main action.
+    private func headerCircle<Content: View>(filled: Bool, @ViewBuilder _ content: () -> Content) -> some View {
+        content()
+            .foregroundStyle(filled ? (colorScheme == .dark ? NightTheme.ink : Color.white) : NightTheme.accent)
+            .frame(width: iOSDesignSystem.Size.minimumTapTarget, height: iOSDesignSystem.Size.minimumTapTarget)
+            .background(filled ? NightTheme.accent : NightTheme.glassFill, in: Circle())
+            .overlay(Circle().stroke(filled ? Color.clear : NightTheme.glassLine, lineWidth: 1))
+            .contentShape(Circle())
+    }
+
+    // MARK: - Chips
+
+    private var filterChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(RecurringFilter.allCases) { item in
+                    chip(item)
+                }
+            }
+            .padding(.horizontal, 20)
+        }
+        .padding(.bottom, 4)
+    }
+
+    private func chip(_ item: RecurringFilter) -> some View {
+        let isOn = filter == item
+        let count = recurringCount(for: item)
+        return Button {
+            withAnimation(.snappy(duration: 0.24)) {
+                filter = item
+            }
+        } label: {
+            HStack(spacing: 5) {
+                Text(item.title)
+                    .font(.subheadline.weight(isOn ? .semibold : .medium))
+                    .lineLimit(1)
+                Text("\(count)")
+                    .font(.caption.weight(.semibold).monospacedDigit())
+                    .opacity(0.7)
+            }
+            .foregroundStyle(isOn ? (colorScheme == .dark ? NightTheme.ink : Color.white) : Color.primary)
+            .padding(.horizontal, 14)
+            .frame(height: 34)
+            .background(isOn ? NightTheme.accent : NightTheme.glassFill, in: Capsule())
+            .overlay(Capsule().stroke(isOn ? Color.clear : NightTheme.glassLine, lineWidth: 1))
+            .frame(minHeight: iOSDesignSystem.Size.minimumTapTarget)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(item.title), \(count)")
+        .accessibilityAddTraits(isOn ? .isSelected : [])
+    }
+
+    // MARK: - List
+
+    @ViewBuilder
+    private var recurringContent: some View {
+        if sortedRecurringExpenses.isEmpty {
+            ScrollView {
+                if !notifications.isEmpty, !isSelectionMode {
+                    attentionRow
+                        .padding(.horizontal, 20)
+                        .padding(.top, 8)
+                }
+                filteredEmptyState
+            }
+            .scrollIndicators(.hidden)
+        } else {
+            recurringList
+        }
     }
 
     private var recurringList: some View {
-        VStack(spacing: 12) {
-            ForEach(sortedRecurringExpenses) { recurring in
-                Button {
-                    if isSelectionMode {
-                        toggleSelection(recurring)
-                    } else {
-                        selectedRecurring = recurring
-                    }
-                } label: {
-                    RecurringExpenseCard(
-                        recurringExpense: recurring,
-                        categoryInfo: categoryDisplayInfo(for: recurring),
-                        currency: dataManager.user.currency,
-                        isSelectionMode: isSelectionMode,
-                        isSelected: selectedRecurringExpenses.contains(recurring.id)
-                    )
-                    .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        List {
+            if !notifications.isEmpty, !isSelectionMode {
+                Section {
+                    attentionRow
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
                 }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("recurringExpenseCard")
-                .accessibilityAddTraits(isSelectionMode && selectedRecurringExpenses.contains(recurring.id) ? .isSelected : [])
-                .contextMenu {
-                    if !isSelectionMode {
-                        Button {
-                            selectedRecurring = recurring
-                        } label: {
-                            Label("edit".localized, systemImage: "pencil")
-                        }
+            }
 
-                        if !recurring.isExpired {
-                            Button {
-                                toggleActive(recurring)
-                            } label: {
-                                if recurring.isActive {
-                                    Label("recurring_pause".localized, systemImage: "pause.circle")
-                                } else {
-                                    Label("recurring_resume".localized, systemImage: "play.circle")
-                                }
-                            }
-                        }
-
-                        Button(role: .destructive) {
-                            pendingDeletion = [recurring.id]
-                        } label: {
-                            Label("delete".localized, systemImage: "trash")
-                        }
+            ForEach(groupedRecurring, id: \.group) { entry in
+                Section {
+                    ForEach(entry.items) { recurring in
+                        row(recurring)
                     }
+                } header: {
+                    groupHeader(entry.group, items: entry.items)
                 }
             }
         }
+        .listStyle(.insetGrouped)
+        .listSectionSpacing(12)
+        .scrollContentBackground(.hidden)
+        .scrollIndicators(.hidden)
+        .contentMargins(.bottom, isSelectionMode ? 88 : 12, for: .scrollContent)
         .animation(.snappy(duration: 0.28), value: sortedRecurringExpenses.map(\.id))
+        .animation(.snappy(duration: 0.25), value: isSelectionMode)
+    }
+
+    private func groupHeader(_ group: RecurringGroup, items: [RecurringExpense]) -> some View {
+        HStack(alignment: .lastTextBaseline, spacing: 8) {
+            Text(group.title)
+                .font(NightTheme.display(21, weight: .semibold, relativeTo: .title3))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+            Spacer(minLength: 8)
+            Text(group == .paused
+                 ? String(format: "recurring_count_format".localized, items.count)
+                 : CurrencyFormatter.format(items.reduce(0) { $0 + $1.amount }, currency: currency))
+                .font(.subheadline.weight(.semibold))
+                .monospacedDigit()
+                .foregroundStyle(NightTheme.secondaryLabel)
+                .lineLimit(1)
+        }
+        .textCase(nil)
+        .padding(.top, 14)
+        .padding(.bottom, 2)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isHeader)
+    }
+
+    private func row(_ recurring: RecurringExpense) -> some View {
+        let isSelected = selectedRecurringExpenses.contains(recurring.id)
+        return Button {
+            if isSelectionMode {
+                toggleSelection(recurring)
+            } else {
+                selectedRecurring = recurring
+            }
+        } label: {
+            RecurringRowView(
+                recurringExpense: recurring,
+                category: dataManager.resolveCategory(id: recurring.categoryId),
+                currency: currency,
+                selection: isSelectionMode ? isSelected : nil
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("recurringExpenseCard")
+        .listRowBackground(isSelectionMode && isSelected ? NightTheme.accent.opacity(0.14) : NightTheme.glassFill)
+        .listRowSeparatorTint(NightTheme.hair)
+        .contextMenu {
+            if !isSelectionMode {
+                Button {
+                    selectedRecurring = recurring
+                } label: {
+                    Label("edit".localized, systemImage: "pencil")
+                }
+
+                if !recurring.isExpired {
+                    Button {
+                        toggleActive(recurring)
+                    } label: {
+                        if recurring.isActive {
+                            Label("recurring_pause".localized, systemImage: "pause.circle")
+                        } else {
+                            Label("recurring_resume".localized, systemImage: "play.circle")
+                        }
+                    }
+                }
+
+                Button(role: .destructive) {
+                    pendingDeletion = [recurring.id]
+                } label: {
+                    Label("delete".localized, systemImage: "trash")
+                }
+            }
+        }
+    }
+
+    /// One row for bills waiting to be recorded: red when one is overdue, amber when only due.
+    private var attentionRow: some View {
+        let hasOverdue = notifications.contains { if case .overdue = $0.type { return true } else { return false } }
+        let tint = hasOverdue ? RecurringStatusColor.overdue : RecurringStatusColor.due(colorScheme)
+        let first = notifications.first?.recurringExpense
+        let title: String = {
+            guard let first else { return "upcoming_bills".localized }
+            return notifications.count > 1
+                ? String(format: "recurring_attention_more_format".localized, first.title, notifications.count - 1)
+                : first.title
+        }()
+
+        return HStack(spacing: 12) {
+            HeroIcon(hasOverdue ? "exclamation-triangle" : "bell", size: 18)
+                .foregroundStyle(tint)
+                .frame(width: 34, height: 34)
+                .background(tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                Text(first.map { relativeDueText(for: $0.nextDueDate) } ?? "")
+                    .font(.footnote)
+                    .foregroundStyle(tint)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 8)
+
+            Button("recurring_record".localized) {
+                dataManager.processRecurringExpenses()
+            }
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(colorScheme == .dark ? NightTheme.ink : Color.white)
+            .padding(.horizontal, 14)
+            .frame(height: 36)
+            .background(NightTheme.accent, in: Capsule())
+            .frame(minHeight: iOSDesignSystem.Size.minimumTapTarget)
+            .contentShape(Capsule())
+            .buttonStyle(.plain)
+        }
+        .padding(.leading, 16)
+        .padding(.trailing, 10)
+        .padding(.vertical, 6)
+        .background(tint.opacity(0.08), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(tint.opacity(0.28), lineWidth: 1))
     }
 
     private var filteredEmptyState: some View {
-        VStack(spacing: 12) {
-            HeroIcon(filter == .inactive ? "pause-circle" : "arrow-path", size: 27)
-                .foregroundStyle(Color.accentColor)
-                .frame(width: 54, height: 54)
-                .background(Color.accentColor.opacity(0.08), in: Circle())
-
+        VStack(spacing: 10) {
             Text((filter == .inactive ? "recurring_empty_inactive_title" : "recurring_empty_active_title").localized)
-                .font(.headline)
+                .font(NightTheme.display(30))
+                .foregroundStyle(.primary)
+                .multilineTextAlignment(.center)
 
             Text((filter == .inactive ? "recurring_empty_inactive_message" : "recurring_empty_active_message").localized)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(NightTheme.secondaryLabel)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
-        .padding(.horizontal, 28)
+        .padding(.horizontal, 32)
         .padding(.vertical, 54)
     }
 
     private var selectionBar: some View {
-        HStack(spacing: 14) {
-            VStack(alignment: .leading, spacing: 2) {
+        HStack(spacing: iOSDesignSystem.Spacing.medium) {
+            VStack(alignment: .leading, spacing: 1) {
                 Text(String(format: "selected_count".localized, selectedRecurringExpenses.count))
-                    .font(.headline)
-
+                    .font(.subheadline.weight(.semibold))
                 Text("recurring_expenses_title".localized)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            Spacer()
+            Spacer(minLength: 0)
 
-            Button {
+            Button(role: .destructive) {
                 deleteSelectedRecurring()
             } label: {
-                HeroIcon("trash", size: 21)
-                    .foregroundStyle(selectedRecurringExpenses.isEmpty ? Color(.systemGray3) : Color(.systemRed))
-                    .frame(width: 44, height: 44)
-                    .background(
-                        Color(.systemRed).opacity(selectedRecurringExpenses.isEmpty ? 0.04 : 0.09),
-                        in: Circle()
-                    )
+                Label("delete".localized, systemImage: "trash")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 16)
+                    .frame(height: 40)
+                    .background(Color(.systemRed).opacity(selectedRecurringExpenses.isEmpty ? 0.35 : 1), in: Capsule())
             }
             .buttonStyle(.plain)
             .disabled(selectedRecurringExpenses.isEmpty)
-            .accessibilityLabel("delete".localized)
             .accessibilityIdentifier("recurringDeleteSelectedButton")
         }
-        .padding(.leading, 18)
-        .padding(.trailing, 10)
-        .padding(.vertical, 8)
+        .padding(.leading, iOSDesignSystem.Spacing.large)
+        .padding(.trailing, iOSDesignSystem.Spacing.small)
+        .padding(.vertical, iOSDesignSystem.Spacing.small)
         .liquidGlassSurface(Capsule())
-        .padding(.horizontal, iOSDesignSystem.Spacing.screenMargin)
-        .padding(.bottom, iOSDesignSystem.Spacing.small)
-        .transition(.move(edge: .bottom).combined(with: .opacity))
     }
+
+    // MARK: - Actions
 
     private func recurringCount(for filter: RecurringFilter) -> Int {
         dataManager.recurringExpenses.reduce(into: 0) { count, recurring in
@@ -354,15 +527,6 @@ struct RecurringExpensesView: View {
                 break
             }
         }
-    }
-
-    private func categoryDisplayInfo(for recurring: RecurringExpense) -> RecurringCategoryInfo {
-        let category = dataManager.resolveCategory(id: recurring.categoryId)
-        return RecurringCategoryInfo(
-            name: category.name,
-            icon: category.iconSystemName,
-            color: category.color
-        )
     }
 
     private func toggleSelection(_ recurring: RecurringExpense) {
@@ -410,363 +574,136 @@ struct RecurringExpensesView: View {
     }
 }
 
-private struct RecurringCategoryInfo {
-    let name: String
-    let icon: String
-    let color: Color
-}
+/// Status colors: red for a missed charge, lamp amber (orange by day) for one due today.
+/// Everything else stays silver, like the rest of the night street.
+enum RecurringStatusColor {
+    static let overdue = Color(.systemRed)
 
-/// Monthly cost of everything still charging, with each frequency averaged to a month,
-/// plus the next upcoming charge.
-private struct RecurringSummaryCard: View {
-    let running: [RecurringExpense]
-    let currency: Currency
-
-    private var monthlyTotal: Double {
-        running.reduce(0) { $0 + $1.monthlyEquivalentAmount }
-    }
-
-    private var nextCharge: RecurringExpense? {
-        running.min { $0.nextDueDate < $1.nextDueDate }
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("recurring_per_month".localized)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                Spacer(minLength: 8)
-                Text(String(format: "recurring_active_count_format".localized, running.count))
-                    .font(.caption.weight(.semibold).monospacedDigit())
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 9)
-                    .frame(minHeight: 24)
-                    .background(Color(.tertiarySystemFill), in: Capsule())
-            }
-
-            Text(CurrencyFormatter.format(monthlyTotal, currency: currency))
-                .font(.system(size: 34, weight: .bold, design: .rounded))
-                .monospacedDigit()
-                .lineLimit(1)
-                .minimumScaleFactor(0.5)
-                .contentTransition(.numericText())
-                .accessibilityIdentifier("recurringMonthlyTotal")
-
-            if let nextCharge {
-                Rectangle()
-                    .fill(Color(.separator).opacity(0.5))
-                    .frame(height: 1)
-
-                HStack(spacing: 8) {
-                    HeroIcon("calendar", size: 16)
-                        .foregroundStyle(dueColor(for: nextCharge))
-                    Text(String(
-                        format: "recurring_next_charge_format".localized,
-                        nextCharge.title,
-                        relativeDueText(for: nextCharge.nextDueDate)
-                    ))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    Spacer(minLength: 8)
-                    Text(CurrencyFormatter.format(nextCharge.amount, currency: currency))
-                        .font(.footnote.weight(.semibold).monospacedDigit())
-                        .lineLimit(1)
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(iOSDesignSystem.Spacing.screenMargin)
-        .liquidGlassCard()
-        .accessibilityElement(children: .combine)
+    static func due(_ scheme: ColorScheme) -> Color {
+        scheme == .dark ? NightTheme.window : Color(.systemOrange)
     }
 }
 
-private struct RecurringAttentionCard: View {
-    let notifications: [RecurringExpenseNotification]
-    let process: () -> Void
-
-    private var primaryNotification: RecurringExpenseNotification? {
-        notifications.first
-    }
-
-    private var hasOverdue: Bool {
-        notifications.contains { notification in
-            if case .overdue = notification.type { return true }
-            return false
-        }
-    }
-
-    private var tint: Color {
-        hasOverdue ? Color(.systemRed) : Color(.systemOrange)
-    }
-
-    var body: some View {
-        HStack(spacing: 12) {
-            HeroIcon(hasOverdue ? "exclamation-triangle" : "bell", size: 20)
-                .foregroundStyle(tint)
-                .frame(width: 42, height: 42)
-                .background(tint.opacity(0.09), in: Circle())
-                .overlay(alignment: .topTrailing) {
-                    if notifications.count > 1 {
-                        Text("\(notifications.count)")
-                            .font(.caption2.weight(.bold).monospacedDigit())
-                            .foregroundStyle(.white)
-                            .frame(minWidth: 18, minHeight: 18)
-                            .background(tint, in: Circle())
-                    }
-                }
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(primaryNotification?.recurringExpense.title ?? "upcoming_bills".localized)
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(1)
-
-                Text(primaryNotification.map { relativeDueText(for: $0.recurringExpense.nextDueDate) } ?? "")
-                    .font(.caption)
-                    .foregroundStyle(tint)
-                    .lineLimit(1)
-            }
-
-            Spacer(minLength: 8)
-
-            Button("process".localized, action: process)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(tint)
-                .padding(.horizontal, 12)
-                .frame(minHeight: iOSDesignSystem.Size.minimumTapTarget)
-                .background(tint.opacity(0.08), in: Capsule())
-                .buttonStyle(.plain)
-        }
-        .padding(12)
-        .background(iOSDesignSystem.elevatedBackground, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(tint.opacity(0.16), lineWidth: 1)
-        )
-        .shadow(color: tint.opacity(0.06), radius: 10, x: 0, y: 4)
-    }
-}
-
-private struct RecurringExpenseCard: View {
+/// One recurring bill: white icon on a glass tile, title, "Monthly · due", amount.
+/// Paused and ended bills are dimmed.
+private struct RecurringRowView: View {
     let recurringExpense: RecurringExpense
-    let categoryInfo: RecurringCategoryInfo
+    let category: UserCategory
     let currency: Currency
-    let isSelectionMode: Bool
-    let isSelected: Bool
+    /// `nil` outside selection mode; otherwise whether this row is selected.
+    var selection: Bool?
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var isRunning: Bool { recurringExpense.isActive && !recurringExpense.isExpired }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(alignment: .top, spacing: 12) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(categoryInfo.color.opacity(0.10))
+        HStack(spacing: iOSDesignSystem.Spacing.medium) {
+            HeroIcon(systemName: category.iconSystemName, size: 18)
+                .foregroundStyle(isRunning ? NightTheme.accent : NightTheme.secondaryLabel)
+                .frame(width: 34, height: 34)
+                .background(NightTheme.iconFill, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
 
-                        HeroIcon(systemName: categoryInfo.icon, size: 22)
-                            .foregroundStyle(categoryInfo.color)
-                    }
-                    .frame(width: 48, height: 48)
-
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text(recurringExpense.title.isEmpty ? categoryInfo.name : recurringExpense.title)
-                            .font(.system(size: 17, weight: .semibold, design: .rounded))
-                            .foregroundStyle(.primary)
-                            .lineLimit(1)
-
-                        HStack(spacing: 7) {
-                            Text(categoryInfo.name)
-                                .lineLimit(1)
-
-                            Circle()
-                                .fill(statusColor)
-                                .frame(width: 5, height: 5)
-
-                            Text(statusText)
-                                .lineLimit(1)
-                        }
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
-                    }
-
-                    Spacer(minLength: 4)
-
-                    Text(CurrencyFormatter.format(recurringExpense.amount, currency: currency))
-                        .font(.system(size: 16, weight: .bold, design: .rounded).monospacedDigit())
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.62)
-                        .multilineTextAlignment(.trailing)
-                }
-
-                Divider()
-                    .overlay(Color(.separator).opacity(0.16))
-
-                HStack(spacing: 10) {
-                    Capsule()
-                        .fill(statusColor)
-                        .frame(width: 3, height: 34)
-
-                    HeroIcon(recurringExpense.isActive ? "calendar" : "pause-circle", size: 18)
-                        .foregroundStyle(statusColor)
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(scheduleHeadline)
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(statusColor)
-                            .lineLimit(1)
-
-                        if let scheduleDetail {
-                            Text(scheduleDetail)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-                    }
-
-                    Spacer(minLength: 8)
-
-                    HStack(spacing: 6) {
-                        HeroIcon(systemName: recurringExpense.recurrenceType.icon, size: 13)
-                        Text(recurringExpense.recurrenceType.localizedName)
-                            .lineLimit(1)
-                    }
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(categoryInfo.color)
-                    .padding(.horizontal, 9)
-                    .frame(minHeight: 30)
-                    .background(categoryInfo.color.opacity(0.075), in: Capsule())
-                }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(recurringExpense.title.isEmpty ? category.name : recurringExpense.title)
+                    .font(.body.weight(.medium))
+                    .foregroundStyle(isRunning ? Color.primary : NightTheme.secondaryLabel)
+                    .lineLimit(1)
+                (Text(recurringExpense.recurrenceType.localizedName + " · ")
+                    + Text(scheduleText).foregroundStyle(statusTint ?? NightTheme.secondaryLabel))
+                    .font(.footnote)
+                    .foregroundStyle(NightTheme.secondaryLabel)
+                    .lineLimit(1)
             }
 
-            if isSelectionMode {
-                selectionMark
-                    .padding(.top, 11)
-                    .padding(.trailing, iOSDesignSystem.Spacing.small)
+            Spacer(minLength: iOSDesignSystem.Spacing.small)
+
+            Text(CurrencyFormatter.format(recurringExpense.amount, currency: currency))
+                .font(.body.weight(.semibold))
+                .monospacedDigit()
+                .foregroundStyle(isRunning ? Color.primary : NightTheme.secondaryLabel)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+
+            if let isSelected = selection {
+                selectionMark(isSelected)
                     .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }
-        .padding(16)
-        .background(iOSDesignSystem.elevatedBackground, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(
-                    isSelected ? Color.accentColor.opacity(0.48) : Color(.separator).opacity(0.14),
-                    lineWidth: isSelected ? 1.5 : 1
-                )
-        )
-        .shadow(color: categoryInfo.color.opacity(0.035), radius: 12, x: 0, y: 6)
-        .shadow(color: Color.black.opacity(0.025), radius: 3, x: 0, y: 1)
-        .scaleEffect(isSelected ? 0.985 : 1)
-        .animation(.snappy(duration: 0.2), value: isSelected)
+        .padding(.vertical, 2)
+        .frame(minHeight: iOSDesignSystem.Size.minimumTapTarget)
+        .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
-    }
-
-    private var selectionMark: some View {
-        ZStack {
-            Circle()
-                .stroke(isSelected ? Color.accentColor : Color(.systemGray3), lineWidth: 2)
-                .frame(width: 24, height: 24)
-
-            if isSelected {
-                Circle()
-                    .fill(Color.accentColor)
-                    .frame(width: 24, height: 24)
-
-                HeroIcon("check", size: 12)
-                    .foregroundStyle(.white)
-            }
-        }
-    }
-
-    private var statusColor: Color {
-        dueColor(for: recurringExpense)
+        .accessibilityAddTraits(selection == true ? .isSelected : [])
     }
 
     /// Paused and ended bills have no real "next due", so say what state they are in instead.
-    private var scheduleHeadline: String {
+    private var scheduleText: String {
         if recurringExpense.isExpired, let endDate = recurringExpense.endDate {
             return String(format: "recurring_ended_on_format".localized, exactDueDateText(for: endDate))
         } else if !recurringExpense.isActive {
             return "recurring_paused".localized
         }
-        return relativeDueText(for: recurringExpense.nextDueDate)
+        let due = recurringExpense.nextDueDate
+        let days = Calendar.current.dateComponents([.day], from: Calendar.current.startOfDay(for: Date()),
+                                                   to: Calendar.current.startOfDay(for: due)).day ?? 0
+        // Close charges read better as "Tomorrow"; later ones as a date.
+        return days <= 1 ? relativeDueText(for: due) : exactDueDateText(for: due)
     }
 
-    private var scheduleDetail: String? {
-        guard recurringExpense.isActive, !recurringExpense.isExpired else { return nil }
-        let due = exactDueDateText(for: recurringExpense.nextDueDate)
-        guard let endDate = recurringExpense.endDate else { return due }
-        return "\(due) · " + String(format: "recurring_ends_on_format".localized, exactDueDateText(for: endDate))
+    private var statusTint: Color? {
+        guard isRunning else { return nil }
+        if recurringExpense.isOverdue { return RecurringStatusColor.overdue }
+        if recurringExpense.isDue { return RecurringStatusColor.due(colorScheme) }
+        return nil
     }
 
-    private var statusText: String {
-        if !recurringExpense.isActive {
-            return "recurring_paused".localized
-        } else if recurringExpense.isExpired {
-            return "expired".localized
-        } else if recurringExpense.isOverdue {
-            return "overdue".localized
-        } else if recurringExpense.isDue {
-            return "due".localized
-        } else {
-            return "active".localized
+    private func selectionMark(_ isSelected: Bool) -> some View {
+        ZStack {
+            Circle()
+                .strokeBorder(isSelected ? NightTheme.accent : NightTheme.secondaryLabel.opacity(0.6), lineWidth: 1.5)
+            if isSelected {
+                Circle().fill(NightTheme.accent)
+                HeroIcon("check", size: 12)
+                    .foregroundStyle(colorScheme == .dark ? NightTheme.ink : .white)
+            }
         }
+        .frame(width: 24, height: 24)
+        .animation(.snappy(duration: 0.15), value: isSelected)
     }
 }
 
+/// No recurring bills yet: the small dark street with the cyclist and one Add button.
 struct EmptyRecurringExpensesView: View {
     let addAction: () -> Void
 
     var body: some View {
-        VStack(spacing: 24) {
-            Spacer(minLength: 44)
-
-            ZStack {
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(Color.accentColor.opacity(0.08))
-                    .frame(width: 84, height: 84)
-
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .stroke(Color.accentColor.opacity(0.12), lineWidth: 1)
-                    .frame(width: 84, height: 84)
-
-                HeroIcon("arrow-path", size: 34)
-                    .foregroundStyle(Color.accentColor)
-            }
-
-            VStack(spacing: 9) {
-                Text("no_recurring_expenses".localized)
-                    .font(.system(size: 22, weight: .bold, design: .rounded))
-
-                Text("set_up_recurring_expenses".localized)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: 310)
-            }
+        VStack(spacing: 0) {
+            EmptyStreetView(figure: .cyclist)
+            Text("no_recurring_expenses".localized)
+                .font(NightTheme.display(34))
+                .foregroundStyle(.primary)
+                .multilineTextAlignment(.center)
+                .padding(.top, 22)
+            Text("set_up_recurring_expenses".localized)
+                .font(.subheadline)
+                .foregroundStyle(NightTheme.secondaryLabel)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 290)
+                .padding(.top, 10)
 
             Button(action: addAction) {
-                HStack(spacing: 8) {
-                    HeroIcon("plus", size: 18)
-                    Text("add_recurring_expense".localized)
-                }
-                .font(.body.weight(.semibold))
-                .foregroundStyle(Color.accentColor)
-                .frame(maxWidth: .infinity)
-                .frame(minHeight: 50)
-                .liquidGlassSurface(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                Label("add_recurring_expense".localized, systemImage: "plus")
+                    .padding(.horizontal, 24)
             }
-            .buttonStyle(.plain)
-            .frame(maxWidth: 320)
-
-            Spacer()
+            .buttonStyle(PrimaryCapsuleButtonStyle())
+            .fixedSize()
+            .padding(.top, 26)
+            .accessibilityIdentifier("emptyAddRecurringButton")
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.horizontal, 28)
-        .padding(.bottom, iOSDesignSystem.Spacing.large)
-        .background(iOSDesignSystem.appBackground)
+        .padding(.horizontal, 32)
+        .padding(.top, 64)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 }
 
@@ -791,18 +728,6 @@ private func relativeDueText(for date: Date) -> String {
 
 private func exactDueDateText(for date: Date) -> String {
     date.formatted(date: .abbreviated, time: .omitted)
-}
-
-private func dueColor(for recurring: RecurringExpense) -> Color {
-    if !recurring.isActive || recurring.isExpired {
-        return Color(.systemGray)
-    } else if recurring.isOverdue {
-        return Color(.systemRed)
-    } else if recurring.isDue {
-        return Color(.systemOrange)
-    } else {
-        return Color(.systemGreen)
-    }
 }
 
 #Preview {

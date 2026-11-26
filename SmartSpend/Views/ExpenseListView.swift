@@ -1316,7 +1316,9 @@ struct ExpenseFilterSheet: View {
 // MARK: - Empty street
 
 /// One unlit building, a street lamp and a walker: the Expenses empty state.
-private struct EmptyStreetView: View {
+struct EmptyStreetView: View {
+    /// The Expenses tab has the walker; Recurring has the cyclist.
+    var figure: StreetFigure = .walker
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dynamicTypeSize) private var typeSize
 
@@ -1324,7 +1326,7 @@ private struct EmptyStreetView: View {
         let dark = colorScheme == .dark
         let building = dark ? Color(red: 22 / 255, green: 28 / 255, blue: 44 / 255) : Color(.systemGray5)
         let window = dark ? Color(red: 35 / 255, green: 43 / 255, blue: 64 / 255) : Color(.systemGray4)
-        let figure = NightTheme.figure(colorScheme)
+        let figureColor = NightTheme.figure(colorScheme)
         ZStack(alignment: .topLeading) {
             Canvas { ctx, _ in
                 ctx.fill(Path(roundedRect: CGRect(x: 70, y: 14, width: 56, height: 96), cornerRadius: 3),
@@ -1345,15 +1347,15 @@ private struct EmptyStreetView: View {
                 post.addLine(to: CGPoint(x: 150, y: 52))
                 post.addQuadCurve(to: CGPoint(x: 156, y: 46), control: CGPoint(x: 150, y: 46))
                 post.addLine(to: CGPoint(x: 162, y: 46))
-                ctx.stroke(post, with: .color(figure), lineWidth: 2)
+                ctx.stroke(post, with: .color(figureColor), lineWidth: 2)
                 ctx.fill(Path(ellipseIn: CGRect(x: 153, y: 38, width: 20, height: 20)),
                          with: .color(NightTheme.window.opacity(0.16)))
                 ctx.fill(Path(roundedRect: CGRect(x: 160, y: 45, width: 7, height: 4), cornerRadius: 1),
                          with: .color(NightTheme.window))
             }
             if !typeSize.isAccessibilitySize {
-                StreetFigureView(figure: .walker, height: 22)
-                    .offset(x: 34, y: 88)
+                StreetFigureView(figure: figure, height: 22)
+                    .offset(x: figure == .cyclist ? 22 : 34, y: 88)
             }
         }
         .frame(width: 190, height: 120)
