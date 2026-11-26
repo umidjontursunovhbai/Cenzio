@@ -263,6 +263,8 @@ struct StreetLoopView: View {
     var height: CGFloat = 22
     /// How far right it goes, as a share of the screen width (cyclist 0.55, walkers 0.30).
     var reach: CGFloat = 0.55
+    /// A street lamp stands at the end of the lane; the figure turns back at it.
+    var lamp = false
     var color: Color?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -288,9 +290,19 @@ struct StreetLoopView: View {
             TimelineView(.animation(minimumInterval: 1.0 / 24, paused: paused)) { tl in
                 let t = paused ? clock.t : clock.tick(tl.date)
                 Canvas { ctx, _ in
+                    let lampBox = StreetFigure.lamp.box
+                    let lampScale = height / lampBox.height
+                    let lampW = lamp ? lampBox.width * lampScale : 0
+                    if lamp {
+                        var l = ctx
+                        l.translateBy(x: max(0, lane - lampW), y: 0)
+                        l.scaleBy(x: lampScale, y: lampScale)
+                        l.translateBy(x: -lampBox.minX, y: -lampBox.minY)
+                        StreetCast.lamp(l, color: ink)
+                    }
                     var c = ctx
                     let w = box.width * scale
-                    let (x, dir) = position(t: t, lane: lane, width: w)
+                    let (x, dir) = position(t: t, lane: lane - lampW * 0.6, width: w)
                     c.translateBy(x: x, y: 0)
                     if dir < 0 && figure == .cyclist {
                         c.translateBy(x: w, y: 0)

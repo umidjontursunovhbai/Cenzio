@@ -97,22 +97,7 @@ struct SettingsView: View {
                 .contentShape(Rectangle())
             }
             .accessibilityIdentifier("settings.account")
-        } header: {
-            accountFigures
         }
-    }
-
-    /// A street lamp standing on the account card's top edge, under the title.
-    private var accountFigures: some View {
-        HStack(alignment: .bottom, spacing: 6) {
-            Spacer(minLength: 0)
-            if !typeSize.isAccessibilitySize {
-                StreetFigureView(figure: .lamp, height: 40)
-            }
-        }
-        .padding(.trailing, 8)
-        .padding(.bottom, -4)
-        .accessibilityHidden(true)
     }
 
     private func avatar(for name: String?) -> some View {
@@ -178,7 +163,7 @@ struct SettingsView: View {
                 }
             }
         } header: {
-            StreetSectionHeader(title: "settings_money".localized, figure: .cyclist, loops: true)
+            StreetSectionHeader(title: "settings_money".localized, figure: .cyclist, loops: true, lamp: true)
         }
     }
 

@@ -100,6 +100,7 @@ struct StreetSectionHeader: View {
     var loops = false
     /// How far right a looping figure goes, as a share of the screen width.
     var reach: CGFloat = 0.55
+    var lamp = false
 
     @Environment(\.dynamicTypeSize) private var typeSize
 
@@ -110,7 +111,7 @@ struct StreetSectionHeader: View {
                 .foregroundStyle(.secondary)
             if let figure, !typeSize.isAccessibilitySize {
                 if loops {
-                    StreetLoopView(figure: figure, height: 22, reach: reach)
+                    StreetLoopView(figure: figure, height: 22, reach: reach, lamp: lamp)
                         .frame(maxWidth: .infinity)
                         .alignmentGuide(.lastTextBaseline) { $0[.bottom] - 1 }
                 } else {
