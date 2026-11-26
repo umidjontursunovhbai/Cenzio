@@ -4094,23 +4094,6 @@
         }
       }
     },
-    "dash_lit_days_format": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Days with spending: %d"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Xarajat bo'lgan kunlar: %d"
-          }
-        }
-      }
-    },
     "dash_meter_a11y_format": {
       "extractionState": "manual",
       "localizations": {

@@ -67,12 +67,11 @@ struct DashboardView: View {
                             upcomingBillsSection
                         }
 
+                        // An empty month shows nothing here (owner, 2026-11-26).
                         if hasMonthSpending {
                             spendingPaceSection
                             categorySection
                             spotlightSection
-                        } else {
-                            emptyMonthSection
                         }
 
                         if overview.weekdaySampleDays >= 14, overview.peakWeekday != nil {
@@ -234,25 +233,10 @@ struct DashboardView: View {
         .accessibilityElement(children: .combine)
     }
 
+    /// Only the hazy night sky over the title; no towers, windows or lamps (owner, 2026-11-26).
     private var skyline: some View {
-        SkylineBandView(litDays: litDays, today: today, showsTaxi: false)
+        SkylineBandView(litDays: litDays, today: today, showsTaxi: false, showsBuildings: false)
             .frame(height: 150)
-            .overlay(alignment: .topTrailing) {
-                if !litDays.isEmpty {
-                    HStack(spacing: 6) {
-                        RoundedRectangle(cornerRadius: 1)
-                            .fill(NightTheme.window)
-                            .frame(width: 7, height: 9)
-                            .shadow(color: NightTheme.window.opacity(0.7), radius: 3)
-                        Text(String(format: "dash_lit_days_format".localized, litDays.count))
-                            .font(.caption2.weight(.medium))
-                            .foregroundStyle(NightTheme.secondaryLabel)
-                    }
-                    .padding(.trailing, 16)
-                    .padding(.top, 8)
-                    .accessibilityElement(children: .combine)
-                }
-            }
     }
 
     // MARK: - Hero on the street
@@ -993,29 +977,6 @@ struct DashboardView: View {
             }
             .nightGroup()
         }
-    }
-
-    // MARK: - Empty month
-
-    private var emptyMonthSection: some View {
-        VStack(spacing: 14) {
-            VStack(spacing: 4) {
-                Text((overview.recentExpenses.isEmpty ? "no_expenses_yet" : "dash_no_expenses_month").localized)
-                    .font(NightTheme.display(21, weight: .semibold, relativeTo: .title3))
-                    .foregroundStyle(.primary)
-                    .multilineTextAlignment(.center)
-                Text("dash_empty_month_hint".localized)
-                    .font(.subheadline)
-                    .foregroundStyle(NightTheme.secondaryLabel)
-                    .multilineTextAlignment(.center)
-            }
-            Button("add_expense".localized) {
-                showingAddExpense = true
-            }
-            .buttonStyle(PrimaryCapsuleButtonStyle())
-        }
-        .padding(20)
-        .nightGroup()
     }
 
     // MARK: - Helpers
