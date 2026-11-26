@@ -37,8 +37,7 @@ struct SettingsView: View {
                 clearDataSection
                 helpSection
                 }
-                // over the flat dark ground a material reads gray, so dark mode uses the dashboard's clear glass
-                .listRowBackground(Rectangle().fill(colorScheme == .dark ? AnyShapeStyle(NightTheme.glassFill) : AnyShapeStyle(.ultraThinMaterial)))
+                .listRowBackground(Rectangle().fill(.ultraThinMaterial))
                 .listRowSeparator(.hidden)
                 versionFooter
             }
@@ -65,12 +64,21 @@ struct SettingsView: View {
 
     /// The onboarding city, still and blurred, fixed behind the list: night in dark
     /// mode, day in light mode. It never animates, so it does not compete with the rows.
-    /// Dark mode: the dashboard's flat ink ground (owner, 2026-11-26). Light mode: the blurred day city.
+    /// Dark mode: the dashboard's ink ground with a faint blurred night city (owner, 2026-11-26). Light mode: the blurred day city.
     @ViewBuilder
     private var cityBackground: some View {
         if colorScheme == .dark {
-            NightGround()
-                .accessibilityHidden(true)
+            // the dashboard's ink ground with a faint blurred city in it, so the glass rows have
+            // color to blur (on plain ink the material reads flat gray)
+            ZStack(alignment: .bottom) {
+                NightTheme.ink
+                NightCityView(page: .smart, reduceMotion: true, showsOverlay: false)
+                    .aspectRatio(City.W / City.H, contentMode: .fill)
+                    .blur(radius: 18)
+                    .opacity(0.45)
+            }
+            .ignoresSafeArea()
+            .accessibilityHidden(true)
         } else {
             lightCityBackground
         }
