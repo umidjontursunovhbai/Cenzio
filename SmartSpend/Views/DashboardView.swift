@@ -21,9 +21,14 @@ struct DashboardView: View {
     /// Bumped on every appear so the pay scene plays again.
     @State private var payRun = 0
     /// Lower sections grow in once they scroll into view; reset when the screen goes away.
-    @State private var weekdayShown = false
     @State private var monthsShown = false
+    /// Weekly highlights: the insight shown, whether the card is on screen, and a token
+    /// bumped on manual changes so the 5 s timer starts over.
+    @State private var insightIndex = 0
+    @State private var insightsVisible = false
+    @State private var insightTimerToken = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     @Environment(\.dynamicTypeSize) private var typeSize
     @State private var overview = DashboardOverview(
         expenses: DataManager.shared.expenses,
@@ -80,8 +85,11 @@ struct DashboardView: View {
                             spotlightSection
                         }
 
-                        if overview.weekdaySampleDays >= 14, overview.peakWeekday != nil {
-                            weekdayPatternSection
+                        if overview.weekdaySampleDays >= 14 {
+                            let insights = weeklyInsights
+                            if insights.count >= 2 {
+                                weeklyHighlightsSection(insights)
+                            }
                         }
 
                         if !overview.previousMonthsWithExpenses.isEmpty {
@@ -139,7 +147,7 @@ struct DashboardView: View {
             #endif
             .onDisappear {
                 voice.cancel()
-                weekdayShown = false
+                insightsVisible = false
                 monthsShown = false
             }
             .onChange(of: dataManager.expenses) { _, _ in
@@ -912,7 +920,7 @@ struct DashboardView: View {
     }
 
     /// A localized lead sentence: the `**%@**` parts read primary semibold, the rest secondary.
-    private func leadText(_ key: String, _ args: [String]) -> Text {
+    private func leadText(_ key: String, _ args: [String], strongFont: Font = .subheadline.weight(.semibold)) -> Text {
         var result = AttributedString()
         var rest = Substring(key.localized)
         var index = 0
@@ -932,7 +940,7 @@ struct DashboardView: View {
             result += plain(before)
             var value = AttributedString(index < args.count ? args[index] : "")
             value.swiftUI.foregroundColor = strong ? Color.primary : NightTheme.secondaryLabel
-            if strong { value.swiftUI.font = .subheadline.weight(.semibold) }
+            if strong { value.swiftUI.font = strongFont }
             result += value
             index += 1
             rest = after
@@ -946,158 +954,142 @@ struct DashboardView: View {
         String(format: key.localized.replacingOccurrences(of: "**", with: ""), arguments: args.map { $0 as CVarArg })
     }
 
-    /// 2 columns of small 4x5 windows, one row every 9 pt from 8 pt below the top. The peak
-    /// building's windows light warm after the rise, row by row from the bottom.
-    private func buildingWindows(height: CGFloat, lit: Bool, on: Bool) -> some View {
-        let rows = height >= 17 ? Int((height - 17) / 9) + 1 : 0
-        return VStack(spacing: 4) {
-            ForEach(0..<rows, id: \.self) { row in
-                HStack(spacing: 6) {
-                    ForEach(0..<2, id: \.self) { _ in
-                        RoundedRectangle(cornerRadius: 1, style: .continuous)
-                            .fill(NightTheme.accent.opacity(0.10))
-                            .overlay {
-                                if lit {
-                                    RoundedRectangle(cornerRadius: 1, style: .continuous)
-                                        .fill(NightTheme.window)
-                                        .opacity(on ? 1 : 0)
-                                        .animation(reduceMotion ? nil : .easeOut(duration: 0.35).delay(1.4 + Double(rows - 1 - row) * 0.08), value: on)
-                                }
-                            }
-                            .frame(width: 4, height: 5)
-                    }
-                }
+    // MARK: - Weekly highlights
+
+    /// The weekday highlights for the current data; the section shows only with 2 or more.
+    private var weeklyInsights: [DashboardOverview.WeeklyInsight] {
+        overview.weeklyInsights(
+            weekdayName: { weekday in
+                let name = calendar.weekdaySymbols[weekday - 1]
+                let capitalized = name.prefix(1).uppercased() + name.dropFirst()
+                return String(format: "dash_week_days_format".localized, capitalized)
+            },
+            money: compactMoney,
+            category: { id in
+                let category = dataManager.resolveCategory(id: id)
+                return (category.name, category.iconSystemName)
             }
-        }
-        .padding(.top, 8)
+        )
     }
 
-    private var weekdayPatternSection: some View {
-        let items = overview.weekdayAverages
-        let peak = overview.peakWeekday
-        let symbols = calendar.shortStandaloneWeekdaySymbols
-        let todayWeekday = calendar.component(.weekday, from: Date())
-        let maxAverage = max(items.map(\.average).max() ?? 0, 1)
-        let mean = items.isEmpty ? 0 : items.map(\.average).reduce(0, +) / Double(items.count)
-        let leadArgs: [String] = peak.map { [calendar.weekdaySymbols[$0.weekday - 1], compactMoney($0.average)] } ?? []
-        let averageLine = mean > 0 ? String(format: "dash_weekday_avg_day_format".localized, compactMoney(mean)) : ""
-        let on = weekdayShown || reduceMotion
-        let barArea: CGFloat = 90
-        let chartHeight: CGFloat = 120
-        let meanHeight = barArea * mean / maxAverage
+    /// Auto-advance runs only while the card is on screen, the app is active, and neither
+    /// Reduce Motion nor VoiceOver is on.
+    private func autoRotates(_ count: Int) -> Bool {
+        count > 1 && insightsVisible && scenePhase == .active && !reduceMotion && !voiceOverEnabled
+    }
+
+    private func showInsight(_ index: Int, count: Int, manual: Bool) {
+        guard count > 0 else { return }
+        let next = ((index % count) + count) % count
+        withAnimation(.easeOut(duration: 0.45)) { insightIndex = next }
+        if manual { insightTimerToken += 1 }
+    }
+
+    private func insightContent(_ insight: DashboardOverview.WeeklyInsight) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            rowIcon(HeroIcon(systemName: insight.icon, size: 17).foregroundStyle(NightTheme.window))
+            VStack(alignment: .leading, spacing: 4) {
+                leadText(insight.headlineKey, insight.headlineArgs, strongFont: .body.weight(.semibold))
+                    .font(.body)
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(insight.caption)
+                    .font(.footnote)
+                    .foregroundStyle(NightTheme.secondaryLabel)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func weeklyHighlightsSection(_ insights: [DashboardOverview.WeeklyInsight]) -> some View {
+        let count = insights.count
+        let index = insightIndex % count
+        let current = insights[index]
+        let rotates = autoRotates(count)
+        let transition: AnyTransition = reduceMotion
+            ? .opacity
+            : .asymmetric(insertion: .opacity.combined(with: .offset(y: 6)),
+                          removal: .opacity.combined(with: .offset(y: -6)))
 
         return VStack(alignment: .leading, spacing: 6) {
-            NightSectionHeader(title: "dash_weekday_title".localized)
+            NightSectionHeader(title: "dash_week_title".localized)
 
-            VStack(alignment: .leading, spacing: 0) {
-                if !leadArgs.isEmpty {
-                    leadText("dash_weekday_lead_format", leadArgs)
-                        .font(.subheadline)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.horizontal, 16)
-                        .padding(.top, 14)
-                }
-                if !averageLine.isEmpty {
-                    Text(averageLine)
-                        .font(.caption)
-                        .foregroundStyle(NightTheme.secondaryLabel)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.horizontal, 16)
-                        .padding(.top, 3)
-                }
-
-                // seven buildings on a street line; only the peak one is lighter and has windows
-                HStack(alignment: .bottom, spacing: 0) {
-                    ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                        let isPeak = item.weekday == peak?.weekday
-                        let height = max(barArea * item.average / maxAverage, item.average > 0 ? 3 : 0)
-                        RoundedRectangle(cornerRadius: 3, style: .continuous)
-                            .fill(paceBarColor(today: isPeak))
-                            .frame(width: 30, height: height)
-                            .overlay(alignment: .top) {
-                                if isPeak {
-                                    buildingWindows(height: height, lit: true, on: on)
-                                }
-                            }
-                            .clipped()
-                            .scaleEffect(x: 1, y: on ? 1 : 0.001, anchor: .bottom)
-                            .animation(reduceMotion ? nil : growIn(delay: 0.15 + Double(index) * 0.07), value: on)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                            .overlay(alignment: .bottom) {
-                                if isPeak {
-                                    Text(compactMoney(item.average))
-                                        .font(.caption2.weight(.semibold))
-                                        .monospacedDigit()
-                                        .foregroundStyle(.primary)
-                                        .lineLimit(1)
-                                        .fixedSize()
-                                        .padding(.horizontal, 7)
-                                        .padding(.vertical, 3)
-                                        .background(Capsule().fill(NightTheme.glassFill))
-                                        .overlay(Capsule().stroke(NightTheme.glassLine, lineWidth: 1))
-                                        // 6 pt above the building, clamped inside the chart top
-                                        .alignmentGuide(.bottom) { d in
-                                            d[.bottom] + max(min(height + 6, chartHeight - d.height), 0)
-                                        }
-                                        .opacity(on ? 1 : 0)
-                                        .animation(reduceMotion ? nil : .easeOut(duration: 0.5).delay(1.3), value: on)
-                                }
-                            }
+            VStack(alignment: .leading, spacing: 14) {
+                // Every insight laid out hidden keeps the card at the tallest one's height,
+                // so rotating never moves the page.
+                ZStack(alignment: .topLeading) {
+                    ForEach(insights) { insight in
+                        insightContent(insight).hidden()
                     }
+                    insightContent(current)
+                        .id(current.id)
+                        .transition(transition)
                 }
-                .frame(height: chartHeight, alignment: .bottom)
-                // the average line runs behind the buildings
-                .background(alignment: .bottom) {
-                    if mean > 0 {
-                        StraightLine()
-                            .stroke(NightTheme.secondaryLabel.opacity(0.35), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                            .frame(height: 1)
-                            .padding(.bottom, max(meanHeight - 0.5, 0))
-                            .opacity(on ? 1 : 0)
-                            .animation(reduceMotion ? nil : .easeOut(duration: 0.4).delay(1.0), value: on)
-                    }
-                }
-                .overlay(alignment: .bottom) {
-                    Rectangle().fill(NightTheme.hair).frame(height: 1)
-                }
-                .padding(.horizontal, 10)
-                .padding(.top, 8)
 
-                HStack(alignment: .top, spacing: 0) {
-                    ForEach(items) { item in
-                        let isPeak = item.weekday == peak?.weekday
-                        let isToday = item.weekday == todayWeekday
-                        let strong = isPeak || isToday
-                        VStack(spacing: 3) {
-                            Text(symbols[item.weekday - 1])
-                                .font(.caption2.weight(strong ? .semibold : .regular))
-                                .foregroundStyle(strong ? AnyShapeStyle(.primary) : AnyShapeStyle(NightTheme.secondaryLabel))
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.7)
-                            Circle()
-                                .fill(NightTheme.accent)
-                                .frame(width: 4, height: 4)
-                                .opacity(isToday ? 1 : 0)
+                HStack(alignment: .center, spacing: 8) {
+                    HStack(spacing: 0) {
+                        ForEach(0..<count, id: \.self) { dot in
+                            Capsule()
+                                .fill(dot == index ? NightTheme.accent : NightTheme.secondaryLabel.opacity(0.35))
+                                .frame(width: dot == index ? 16 : 6, height: 6)
+                                .padding(.horizontal, 3)
+                                .frame(height: 44)
+                                .contentShape(Rectangle())
+                                .onTapGesture { showInsight(dot, count: count, manual: true) }
                         }
-                        .frame(maxWidth: .infinity)
                     }
-                }
-                .padding(.horizontal, 10)
-                .padding(.top, 6)
+                    .padding(.leading, -3)
+                    // 44 pt tall hit area without making the row taller
+                    .padding(.vertical, -19)
+                    .transaction { if reduceMotion { $0.animation = nil } }
 
-                Text("dash_weekday_subtitle".localized)
-                    .font(.caption)
-                    .foregroundStyle(NightTheme.secondaryLabel.opacity(0.8))
-                    .padding(.horizontal, 16)
-                    .padding(.top, 8)
-                    .padding(.bottom, 14)
+                    Spacer(minLength: 8)
+
+                    Text("dash_week_footnote".localized)
+                        .font(.caption2)
+                        .foregroundStyle(NightTheme.secondaryLabel)
+                        .lineLimit(1)
+                }
             }
+            .padding(16)
             .nightGroup()
+            .contentShape(Rectangle())
+            .onTapGesture { showInsight(index + 1, count: count, manual: true) }
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 20).onEnded { value in
+                    let dx = value.translation.width
+                    guard abs(dx) > 40, abs(dx) > abs(value.translation.height) else { return }
+                    showInsight(index + (dx < 0 ? 1 : -1), count: count, manual: true)
+                }
+            )
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel([leadArgs.isEmpty ? "" : leadString("dash_weekday_lead_format", leadArgs), averageLine,
-                                 "dash_weekday_subtitle".localized].filter { !$0.isEmpty }.joined(separator: ". "))
+            .accessibilityLabel(leadString(current.headlineKey, current.headlineArgs) + ". " + current.caption)
+            .accessibilityHint("dash_week_hint".localized)
+            .accessibilityAdjustableAction { direction in
+                let step: Int
+                switch direction {
+                case .increment: step = 1
+                case .decrement: step = -1
+                @unknown default: return
+                }
+                let next = ((index + step) % count + count) % count
+                showInsight(next, count: count, manual: true)
+                let insight = insights[next]
+                AccessibilityNotification.Announcement(
+                    leadString(insight.headlineKey, insight.headlineArgs) + ". " + insight.caption
+                ).post()
+            }
             .onScrollVisibilityChange(threshold: 0.4) { visible in
-                if visible { weekdayShown = true }
+                insightsVisible = visible
+            }
+            .task(id: rotates ? insightTimerToken : -1) {
+                guard rotates else { return }
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(5))
+                    guard !Task.isCancelled else { break }
+                    showInsight(insightIndex + 1, count: count, manual: false)
+                }
             }
         }
     }
@@ -1537,6 +1529,10 @@ struct DashboardOverview {
     let weekdayAverages: [WeekdaySpend]
     /// Days of history behind `weekdayAverages` (from the first recorded expense in the window).
     let weekdaySampleDays: Int
+    /// Same window as `weekdayAverages`: weekday (1 = Sunday … 7 = Saturday) → category → total.
+    let weekdayCategoryTotals: [Int: [UUID: Double]]
+    /// Same window: number of distinct days each category had an expense.
+    let categoryExpenseDays: [UUID: Int]
     /// This month's most expensive titles, highest first (max 5).
     let topTitles: [TitleSpend]
     /// This month's single largest expenses, highest first (max 5).
@@ -1558,6 +1554,136 @@ struct DashboardOverview {
         weekdayAverages
             .filter { $0.average > 0 }
             .max { $0.average < $1.average }
+    }
+
+    /// One written line of the weekly highlights card. `headlineKey` is a lead format whose
+    /// `**%@**` parts read bold.
+    struct WeeklyInsight: Identifiable, Equatable {
+        enum Kind: Hashable {
+            case peakDay, lightestDay, weekendRatio, peakDayCategory, categoryWeekday
+        }
+
+        let kind: Kind
+        /// SF Symbol or Heroicon name, resolved by `HeroIcon`.
+        let icon: String
+        let headlineKey: String
+        let headlineArgs: [String]
+        let caption: String
+        var id: Kind { kind }
+    }
+
+    /// Written highlights from the weekday window, in display order; each one only when its
+    /// data says something. `weekdayName` gets 1 = Sunday … 7 = Saturday and returns the
+    /// plural form used in the sentences ("Saturdays").
+    func weeklyInsights(
+        weekdayName: (Int) -> String,
+        money: (Double) -> String,
+        category: (UUID) -> (name: String, icon: String)
+    ) -> [WeeklyInsight] {
+        var insights: [WeeklyInsight] = []
+        let averages = Dictionary(uniqueKeysWithValues: weekdayAverages.map { ($0.weekday, $0.average) })
+        func average(_ weekday: Int) -> Double { averages[weekday] ?? 0 }
+        func percent(_ share: Double) -> String { share.formatted(.percent.precision(.fractionLength(0))) }
+        func topCategory(_ totals: [UUID: Double]) -> (id: UUID, amount: Double)? {
+            totals
+                .filter { $0.value > 0 }
+                .max { $0.value != $1.value ? $0.value < $1.value : $0.key.uuidString > $1.key.uuidString }
+                .map { ($0.key, $0.value) }
+        }
+
+        // 1. Peak day
+        let peak = peakWeekday
+        if let peak {
+            let others = (1...7).filter { $0 != peak.weekday }.map(average)
+            let othersMean = others.reduce(0, +) / Double(others.count)
+            let above = peak.average - othersMean
+            if above > 0 {
+                insights.append(WeeklyInsight(
+                    kind: .peakDay,
+                    icon: "flame.fill",
+                    headlineKey: "dash_week_peak_format",
+                    headlineArgs: [weekdayName(peak.weekday)],
+                    caption: String(format: "dash_week_peak_caption_format".localized, money(peak.average), money(above))
+                ))
+            }
+        }
+
+        // 2. Lightest day: lowest non-zero average, not the peak
+        if let peak, let light = weekdayAverages
+            .filter({ $0.average > 0 && $0.weekday != peak.weekday && $0.average < peak.average })
+            .min(by: { $0.average < $1.average }) {
+            insights.append(WeeklyInsight(
+                kind: .lightestDay,
+                icon: "arrow-trending-down",
+                headlineKey: "dash_week_light_format",
+                headlineArgs: [weekdayName(light.weekday)],
+                caption: String(format: "dash_week_light_caption_format".localized, money(light.average))
+            ))
+        }
+
+        // 3. Weekends (Sat + Sun) against weekdays (Mon–Fri), per day
+        let weekend = (average(7) + average(1)) / 2
+        let workdays = (2...6).map(average).reduce(0, +) / 5
+        if weekend > 0, workdays > 0 {
+            let ratio = weekend / workdays
+            if ratio < 0.9 || ratio > 1.1 {
+                let more = ratio > 1
+                let times = (more ? ratio : workdays / weekend).formatted(.number.precision(.fractionLength(1)))
+                insights.append(WeeklyInsight(
+                    kind: .weekendRatio,
+                    icon: "calendar",
+                    headlineKey: more ? "dash_week_weekend_more_format" : "dash_week_weekend_less_format",
+                    headlineArgs: [String(format: "dash_week_times_format".localized, times)],
+                    caption: String(format: "dash_week_weekend_caption_format".localized, money(weekend), money(workdays))
+                ))
+            }
+        }
+
+        // 4. The category that takes most of the peak day
+        var peakPair: (category: UUID, weekday: Int)?
+        if let peak, let totals = weekdayCategoryTotals[peak.weekday], let top = topCategory(totals) {
+            let dayTotal = totals.values.reduce(0, +)
+            let share = dayTotal > 0 ? top.amount / dayTotal : 0
+            if share >= 0.25 {
+                let info = category(top.id)
+                peakPair = (top.id, peak.weekday)
+                insights.append(WeeklyInsight(
+                    kind: .peakDayCategory,
+                    icon: info.icon,
+                    headlineKey: "dash_week_day_category_format",
+                    headlineArgs: [weekdayName(peak.weekday), info.name],
+                    caption: String(format: "dash_week_day_category_caption_format".localized, percent(share))
+                ))
+            }
+        }
+
+        // 5. A category that leans on one weekday
+        var best: (category: UUID, weekday: Int, share: Double)?
+        for (categoryID, days) in categoryExpenseDays where days >= 4 {
+            let byWeekday = (1...7).map { ($0, weekdayCategoryTotals[$0]?[categoryID] ?? 0) }
+            let total = byWeekday.reduce(0) { $0 + $1.1 }
+            guard total > 0, let top = byWeekday.max(by: { $0.1 < $1.1 }) else { continue }
+            let share = top.1 / total
+            if let current = best {
+                let better = share > current.share
+                    || (share == current.share && categoryID.uuidString < current.category.uuidString)
+                if !better { continue }
+            }
+            best = (categoryID, top.0, share)
+        }
+        if let best, best.share >= 0.3,
+           !(peakPair?.category == best.category && peakPair?.weekday == best.weekday) {
+            let info = category(best.category)
+            insights.append(WeeklyInsight(
+                kind: .categoryWeekday,
+                icon: info.icon,
+                headlineKey: "dash_week_category_day_format",
+                headlineArgs: [info.name, weekdayName(best.weekday)],
+                caption: String(format: "dash_week_category_day_caption_format".localized, percent(best.share))
+            ))
+        }
+
+        return insights
     }
 
     /// Spending so far minus an even spread of `monthlyIncome` through today.
@@ -1636,6 +1762,20 @@ struct DashboardOverview {
                 day = next
             }
         }
+        // Same window, split by category, for the weekly highlights.
+        var weekdayCategories = [Int: [UUID: Double]]()
+        var categoryDays = [UUID: Set<Date>]()
+        if let firstRecorded {
+            for expense in past {
+                let day = calendar.startOfDay(for: expense.date)
+                guard day >= firstRecorded, day <= today else { continue }
+                let weekday = calendar.component(.weekday, from: day)
+                weekdayCategories[weekday, default: [:]][expense.categoryId, default: 0] += expense.amount
+                categoryDays[expense.categoryId, default: []].insert(day)
+            }
+        }
+        weekdayCategoryTotals = weekdayCategories
+        categoryExpenseDays = categoryDays.mapValues(\.count)
         weekdaySampleDays = sampleDays
         weekdayAverages = (0..<7).map { offset in
             let weekday = (calendar.firstWeekday - 1 + offset) % 7 + 1

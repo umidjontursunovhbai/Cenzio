@@ -4722,6 +4722,278 @@
           }
         }
       }
+    },
+    "dash_week_title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your week"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Haftangiz"
+          }
+        }
+      }
+    },
+    "dash_week_days_format": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@s"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@"
+          }
+        }
+      }
+    },
+    "dash_week_peak_format": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "**%@** cost you the most"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "**%@** kunlari eng ko'p sarflaysiz"
+          }
+        }
+      }
+    },
+    "dash_week_peak_caption_format": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ on average, %@ above a usual day"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O'rtacha %@, oddiy kundan %@ ko'p"
+          }
+        }
+      }
+    },
+    "dash_week_light_format": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "**%@** are your lightest day"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "**%@** kunlari eng kam sarflaysiz"
+          }
+        }
+      }
+    },
+    "dash_week_light_caption_format": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ on average"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O'rtacha %@"
+          }
+        }
+      }
+    },
+    "dash_week_times_format": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@×"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ baravar"
+          }
+        }
+      }
+    },
+    "dash_week_weekend_more_format": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Weekends cost **%@** more than weekdays"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dam olish kunlari ish kunlaridan **%@** ko'p sarflaysiz"
+          }
+        }
+      }
+    },
+    "dash_week_weekend_less_format": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Weekends cost **%@** less than weekdays"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dam olish kunlari ish kunlaridan **%@** kam sarflaysiz"
+          }
+        }
+      }
+    },
+    "dash_week_weekend_caption_format": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ a day at weekends, %@ on weekdays"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dam olish kunlari kuniga %@, ish kunlari %@"
+          }
+        }
+      }
+    },
+    "dash_week_day_category_format": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On **%@**, most goes to **%@**"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "**%@** kunlari pul ko'proq **%@**ga ketadi"
+          }
+        }
+      }
+    },
+    "dash_week_day_category_caption_format": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ of that day's spending"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Shu kungi xarajatlarning %@ qismi"
+          }
+        }
+      }
+    },
+    "dash_week_category_day_format": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "**%@** spending peaks on **%@**"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "**%@** uchun eng ko'p **%@** kunlari sarflaysiz"
+          }
+        }
+      }
+    },
+    "dash_week_category_day_caption_format": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ of it happens that day"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uning %@ qismi shu kunga to'g'ri keladi"
+          }
+        }
+      }
+    },
+    "dash_week_footnote": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last 12 weeks"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oxirgi 12 hafta"
+          }
+        }
+      }
+    },
+    "dash_week_hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Swipe up or down for more highlights"
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Boshqa xulosalar uchun yuqoriga yoki pastga suring"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
