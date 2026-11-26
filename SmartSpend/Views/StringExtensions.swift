@@ -219,7 +219,7 @@ extension String {
             "exp_all_categories": "All Categories",
             "exp_no_categories": "No categories yet",
             "exp_empty_title": "No expenses yet",
-            "exp_empty_body": "Tap + to add your first expense, or tap the mic and just say it.",
+            "exp_empty_body": "Add your first expense. Each one lights a window in this building.",
             "exp_no_matches_in_period_format": "No results for \u{201C}%@\u{201D} in %@.",
             "exp_nothing_in_period_format": "Nothing recorded for %@.",
             "exp_clear_filters": "Clear Filters",

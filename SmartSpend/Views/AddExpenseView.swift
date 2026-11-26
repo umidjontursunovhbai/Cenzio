@@ -199,7 +199,13 @@ struct AddExpenseView: View {
                     .accessibilityValue(selectedCategory?.name ?? "select_category".localized)
 
                     if showingCategoryGrid {
-                        categoryGrid
+                        CategoryTileGrid(categories: dataManager.userCategories, selectedID: selectedCategoryID) { category in
+                            selectedCategoryID = category.id
+                            categoryChosenByUser = true
+                            withAnimation(.snappy(duration: 0.3)) { showingCategoryGrid = false }
+                        } onCreate: {
+                            showingCategoryManagement = true
+                        }
                     }
 
                     // Date Picker
@@ -292,58 +298,6 @@ struct AddExpenseView: View {
 
     private let calendar = Calendar.current
 
-    /// Category tiles in a 3-column grid: icon in its color on a soft tile, name under it.
-    /// The chosen one gets an accent ring; the last tile creates a new category.
-    private var categoryGrid: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
-            ForEach(dataManager.userCategories) { category in
-                let isSelected = category.id == selectedCategoryID
-                Button {
-                    selectedCategoryID = category.id
-                    categoryChosenByUser = true
-                    withAnimation(.snappy(duration: 0.3)) { showingCategoryGrid = false }
-                } label: {
-                    categoryTile(icon: category.iconSystemName, title: category.name,
-                                 tint: category.color, selected: isSelected)
-                }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(isSelected ? .isSelected : [])
-            }
-            Button {
-                showingCategoryManagement = true
-            } label: {
-                categoryTile(icon: "plus.circle", title: "create_new_category".localized,
-                             tint: .secondary, selected: false)
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.vertical, 4)
-        .transition(.opacity.combined(with: .move(edge: .top)))
-    }
-
-    private func categoryTile(icon: String, title: String, tint: Color, selected: Bool) -> some View {
-        VStack(spacing: 6) {
-            HeroIcon(systemName: icon, size: 18)
-                .foregroundStyle(tint)
-                .frame(width: 34, height: 34)
-                .background(tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            Text(title)
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.primary)
-                .lineLimit(2)
-                .multilineTextAlignment(.center)
-                .minimumScaleFactor(0.8)
-        }
-        .frame(maxWidth: .infinity, minHeight: 78)
-        .padding(.horizontal, 4)
-        .background(NightTheme.iconFill, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(selected ? NightTheme.accent : .clear, lineWidth: 1.5)
-        )
-        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-    }
-
     /// Days of this month with expenses, plus today once this expense is saved.
     private var savedLitDays: Set<Int> {
         let now = Date()
@@ -430,6 +384,64 @@ struct AddExpenseView: View {
         if formatted != new {
             amount = formatted
         }
+    }
+}
+
+// MARK: - Category tiles
+
+/// Category tiles in a 3-column grid: icon in its color on a soft tile, name under it.
+/// The chosen one gets an accent ring; the last tile creates a new category.
+/// Shared by Add expense and Edit expense.
+struct CategoryTileGrid: View {
+    let categories: [UserCategory]
+    let selectedID: UUID?
+    let onSelect: (UserCategory) -> Void
+    let onCreate: () -> Void
+
+    var body: some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
+            ForEach(categories) { category in
+                let isSelected = category.id == selectedID
+                Button {
+                    onSelect(category)
+                } label: {
+                    tile(icon: category.iconSystemName, title: category.name,
+                         tint: category.color, selected: isSelected)
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
+            }
+            Button(action: onCreate) {
+                tile(icon: "plus.circle", title: "create_new_category".localized,
+                     tint: .secondary, selected: false)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.vertical, 4)
+        .transition(.opacity.combined(with: .move(edge: .top)))
+    }
+
+    private func tile(icon: String, title: String, tint: Color, selected: Bool) -> some View {
+        VStack(spacing: 6) {
+            HeroIcon(systemName: icon, size: 18)
+                .foregroundStyle(tint)
+                .frame(width: 34, height: 34)
+                .background(tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            Text(title)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.primary)
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+                .minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity, minHeight: 78)
+        .padding(.horizontal, 4)
+        .background(NightTheme.iconFill, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(selected ? NightTheme.accent : .clear, lineWidth: 1.5)
+        )
+        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 }
 

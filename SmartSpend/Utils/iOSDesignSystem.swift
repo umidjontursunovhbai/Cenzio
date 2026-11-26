@@ -198,13 +198,23 @@ struct AppScreenHeader<Actions: View>: View {
 }
 
 struct AppSearchField: View {
+    enum Style {
+        /// System gray capsule.
+        case standard
+        /// Night street: 44 pt white glass capsule with a hairline edge (Expenses).
+        case glass
+    }
+
     @Binding var text: String
     let prompt: String
+    var style: Style = .standard
+
+    private var isGlass: Bool { style == .glass }
 
     var body: some View {
         HStack(spacing: 10) {
-            HeroIcon("magnifying-glass", size: 21)
-                .foregroundStyle(.secondary)
+            HeroIcon("magnifying-glass", size: isGlass ? 19 : 21)
+                .foregroundStyle(isGlass ? NightTheme.secondaryLabel : .secondary)
 
             TextField(prompt, text: $text)
                 .textInputAutocapitalization(.never)
@@ -222,13 +232,13 @@ struct AppSearchField: View {
                 .buttonStyle(.plain)
             }
         }
-        .padding(.horizontal, 16)
-        .frame(height: 50)
-        .background(Color(.secondarySystemGroupedBackground), in: Capsule())
+        .padding(.horizontal, isGlass ? 14 : 16)
+        .frame(height: isGlass ? 44 : 50)
+        .background(isGlass ? NightTheme.glassFill : Color(.secondarySystemGroupedBackground), in: Capsule())
         .overlay(
             Capsule()
-                .stroke(Color(.separator).opacity(0.22), lineWidth: 1)
+                .stroke(isGlass ? NightTheme.glassLine : Color(.separator).opacity(0.22), lineWidth: 1)
         )
-        .padding(.horizontal, 24)
+        .padding(.horizontal, isGlass ? 20 : 24)
     }
 }
