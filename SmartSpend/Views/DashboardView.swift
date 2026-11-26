@@ -1,8 +1,12 @@
 import SwiftUI
 import Charts
 
+/// Dashboard in the night street look (DESIGN.md, mockup v8): the month name over a skyline
+/// whose lit windows are spending days, the money left standing on the street below it,
+/// then glass groups with Big Shoulders headings. Three figures: cyclist, snacker, shopper.
 struct DashboardView: View {
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.colorScheme) private var colorScheme
     @ObservedObject private var dataManager = DataManager.shared
     @ObservedObject private var tabManager = TabManager.shared
     @State private var showingAddExpense = false
@@ -10,14 +14,29 @@ struct DashboardView: View {
     @State private var showingMonthlySalary = false
     @State private var selectedBudgetCategory: UserCategory?
     @State private var showingBudgetSettings = false
-    @State private var selectedPaceDay: Int?
+    @State private var selectedPaceDay: Double?
     @State private var spotlight: Spotlight = .places
+    /// Added to the hero amount until the pay scene's bill lands, then animated to 0.
+    @State private var heroTick: Double = 0
+    /// Bumped on every appear so the pay scene plays again.
+    @State private var payRun = 0
+    /// Lower sections grow in once they scroll into view; reset when the screen goes away.
+    @State private var monthsShown = false
+    /// Weekly highlights: the insight shown, whether the card is on screen, and a token
+    /// bumped on manual changes so the 5 s timer starts over.
+    @State private var insightIndex = 0
+    @State private var insightsVisible = false
+    @State private var insightTimerToken = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
+    @Environment(\.dynamicTypeSize) private var typeSize
     @State private var overview = DashboardOverview(
         expenses: DataManager.shared.expenses,
         now: Date()
     )
 
     private let calendar = Calendar.current
+    private let margin: CGFloat = 20
 
     private enum Spotlight: Hashable, CaseIterable {
         case places
@@ -35,56 +54,58 @@ struct DashboardView: View {
         NavigationStack {
             ScrollView {
                 // Plain VStack: a LazyVStack re-measured cards near the bottom, so the content jumped.
-                VStack(spacing: 18) {
-                    AppScreenHeader(
-                        "dashboard".localized,
-                        subtitle: Date().formatted(.dateTime.month(.wide).year())
-                    )
-                    .padding(.horizontal, -iOSDesignSystem.Spacing.screenMargin)
-                    // The voice HUD temporarily replaces the header visually,
-                    // keeping its layout space without duplicate controls behind it.
-                    .opacity(voice.isVisible && voice.prefill == nil ? 0 : 1)
-                    .allowsHitTesting(!voice.isVisible || voice.prefill != nil)
-                    .accessibilityHidden(voice.isVisible && voice.prefill == nil)
+                VStack(alignment: .leading, spacing: 0) {
+                    monthHeader
+                        .padding(.horizontal, margin)
+                        .padding(.top, 10)
+                        // The voice HUD temporarily replaces the header visually,
+                        // keeping its layout space without duplicate controls behind it.
+                        .opacity(voice.isVisible && voice.prefill == nil ? 0 : 1)
+                        .accessibilityHidden(voice.isVisible && voice.prefill == nil)
 
-                    SkylineBandView(litDays: litDays, today: calendar.component(.day, from: Date()))
-                        .frame(height: 150)
-                        .padding(.horizontal, -iOSDesignSystem.Spacing.screenMargin)
-                        .padding(.vertical, -10)
-
-                    heroCard
-                        .kerbFigure(.snacker, alignment: .leading, inset: 22, height: 24)
+                    heroStreet
+                        .padding(.horizontal, margin)
+                        .padding(.top, 28)
                         .accessibilityElement(children: .contain)
                         .accessibilityIdentifier("dashboard.overview")
 
-                    if !upcomingBills.isEmpty {
-                        upcomingBillsCard
-                    }
+                    metricTrio
+                        .padding(.horizontal, margin)
+                        .padding(.top, 20)
 
-                    if hasMonthSpending {
-                        spendingPaceCard
-                        calendarHeatmapCard
-                        categoryCard
-                        spotlightCard
-                    } else {
-                        emptyMonthCard
-                    }
+                    VStack(alignment: .leading, spacing: 30) {
+                        if !upcomingBills.isEmpty {
+                            upcomingBillsSection
+                        }
 
-                    if overview.weekdaySampleDays >= 14, overview.peakWeekday != nil {
-                        weekdayPatternCard
-                    }
+                        // An empty month shows nothing here (owner, 2026-11-26).
+                        if hasMonthSpending {
+                            spendingPaceSection
+                            categorySection
+                            spotlightSection
+                        }
 
-                    if !overview.previousMonthsWithExpenses.isEmpty {
-                        monthlyHistoryCard
+                        if overview.weekdaySampleDays >= 14 {
+                            let insights = weeklyInsights
+                            if insights.count >= 2 {
+                                weeklyHighlightsSection(insights)
+                            }
+                        }
+
+                        if !overview.previousMonthsWithExpenses.isEmpty {
+                            monthlyHistorySection
+                        }
                     }
+                    .padding(.horizontal, margin)
+                    .padding(.top, 30)
                 }
-                .padding(.horizontal, iOSDesignSystem.Spacing.screenMargin)
-                .padding(.vertical, iOSDesignSystem.Spacing.screenMargin)
-                // Keeps the last card scrollable above the entry bar.
-                .padding(.bottom, 72)
+                // Keeps the last group scrollable above the entry bar.
+                .padding(.bottom, 96)
+
             }
-            .background(iOSDesignSystem.appBackground)
-            .expenseEntryBar(ExpenseEntryBar(accessibilityPrefix: "dashboard", figure: .walker, isRecording: voice.isRecording, isProcessing: voice.isProcessing, onAdd: {
+            .background(NightGround())
+            .overlay(alignment: .top) { topScrollEdgeFade }
+            .expenseEntryBar(ExpenseEntryBar(accessibilityPrefix: "dashboard", compact: true, isRecording: voice.isRecording, isProcessing: voice.isProcessing, onAdd: {
                 showingAddExpense = true
             }, onVoice: {
                 voice.start()
@@ -112,6 +133,7 @@ struct DashboardView: View {
                 BudgetSettingsView()
             }
             .onAppear(perform: refreshOverview)
+            .onAppear(perform: playPayScene)
             #if DEBUG
             .onAppear {
                 // Explicit UI-test replay: no microphone, no save, synthetic text only.
@@ -123,7 +145,11 @@ struct DashboardView: View {
                 }
             }
             #endif
-            .onDisappear { voice.cancel() }
+            .onDisappear {
+                voice.cancel()
+                insightsVisible = false
+                monthsShown = false
+            }
             .onChange(of: dataManager.expenses) { _, _ in
                 refreshOverview()
             }
@@ -133,13 +159,22 @@ struct DashboardView: View {
         }
     }
 
+    /// Fades scrolled content out under the status bar: page ground at the top, clear 12 pt below it.
+    private var topScrollEdgeFade: some View {
+        GeometryReader { proxy in
+            let ground = colorScheme == .dark ? NightTheme.ink : Color(.systemGroupedBackground)
+            LinearGradient(colors: [ground, ground.opacity(0)], startPoint: .top, endPoint: .bottom)
+                .frame(height: proxy.safeAreaInsets.top + 12)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .ignoresSafeArea(edges: .top)
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
     private var currency: Currency { dataManager.user.currency }
     private var hasMonthSpending: Bool { overview.monthTotal > 0 }
-
-    /// Days of this month with at least one expense: the lit windows of the skyline band.
-    private var litDays: Set<Int> {
-        Set(overview.monthExpenses.map { calendar.component(.day, from: $0.date) })
-    }
+    private var today: Int { calendar.component(.day, from: Date()) }
 
     private func money(_ amount: Double) -> String {
         CurrencyFormatter.format(amount, currency: currency)
@@ -147,6 +182,17 @@ struct DashboardView: View {
 
     private func compactMoney(_ amount: Double) -> String {
         CurrencyFormatter.formatCompact(amount, currency: currency)
+    }
+
+    private func fullMoney(_ amount: Double) -> String {
+        CurrencyFormatter.formatFull(amount, currency: currency)
+    }
+
+    /// `compactMoney` without the currency unit ("5.1M"); other currencies keep their symbol.
+    private func compactNumber(_ amount: Double) -> String {
+        let text = compactMoney(amount)
+        guard currency == .uzs, text.hasSuffix(" so'm") else { return text }
+        return String(text.dropLast(" so'm".count))
     }
 
     // MARK: - Derived data
@@ -199,871 +245,1049 @@ struct DashboardView: View {
         return rows
     }
 
-    private var budgetAlertCount: Int {
-        activeBudgets.filter { overview.categoryTotals[$0.key, default: 0] >= $0.value * 0.8 }.count
-    }
+    // MARK: - Header
 
-    // MARK: - Hero
+    private var monthHeader: some View {
+        let now = Date()
+        let month = now.formatted(.dateTime.month(.wide))
+        let title = month.prefix(1).uppercased() + month.dropFirst()
+        let year = String(calendar.component(.year, from: now))
 
-    private var heroCard: some View {
-        let income = monthlySalary
-        let snapshot = spendableSnapshot
-        let isOver = income > 0 && snapshot.availableAfterBills < 0
-        let forecastOverIncome = income > 0 && overview.projectedMonthTotal > income
-
-        return VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .center, spacing: 8) {
-                Text(heroTitle(income: income, isOver: isOver))
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                Spacer(minLength: 8)
-                if hasMonthSpending && overview.previousMonthToDateTotal > 0 {
-                    monthComparison
-                }
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(money(income > 0 ? abs(snapshot.availableAfterBills) : overview.monthTotal))
-                    .font(NightTheme.display(48))
-                    .monospacedDigit()
-                    .foregroundStyle(isOver ? Color(.systemRed) : .primary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.45)
-                    .contentTransition(.numericText())
-
-                if income > 0 {
-                    Text(String(format: "dash_of_income_days_format".localized, money(income), snapshot.daysRemaining))
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
-            }
-            .accessibilityElement(children: .combine)
-
-            if income > 0 {
-                budgetBar(income: income, snapshot: snapshot)
-            }
-
-            Rectangle()
-                .fill(Color(.separator).opacity(0.5))
-                .frame(height: 1)
-
-            HStack(alignment: .top, spacing: 10) {
-                if income > 0 {
-                    heroMetric(
-                        title: "dash_safe_per_day".localized,
-                        value: money(snapshot.spendableToday),
-                        color: snapshot.availableAfterBills <= 0 ? Color(.systemRed) : .primary
-                    )
-                } else {
-                    heroMetric(title: "dash_daily_average".localized, value: money(overview.dailyAverage))
-                }
-                metricDivider
-                heroMetric(title: "dash_spent_today".localized, value: money(overview.todayTotal))
-                metricDivider
-                heroMetric(
-                    title: "dash_forecast".localized,
-                    value: hasMonthSpending ? money(overview.projectedMonthTotal) : "—",
-                    color: forecastOverIncome ? Color(.systemRed) : .primary
-                )
-            }
-
-            if income <= 0 {
-                Button {
-                    showingMonthlySalary = true
-                } label: {
-                    HStack(spacing: 10) {
-                        HeroIcon("wallet", size: 18)
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text("set_income_for_budget".localized)
-                                .font(.subheadline.weight(.semibold))
-                            Text("dash_set_income_hint".localized)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        HeroIcon("chevron-right", size: 13)
-                    }
-                    .foregroundStyle(Color.accentColor)
-                    .padding(12)
-                    .frame(minHeight: 44)
-                    .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: iOSDesignSystem.Radius.medium, style: .continuous))
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .dashboardCard()
-    }
-
-    private func heroTitle(income: Double, isOver: Bool) -> String {
-        if income <= 0 { return "month_spending".localized }
-        return isOver ? "dash_over_plan".localized : "dash_left_to_spend".localized
-    }
-
-    private var metricDivider: some View {
-        Rectangle().fill(Color(.separator).opacity(0.6)).frame(width: 1, height: 34)
-    }
-
-    private func heroMetric(title: String, value: String, color: Color = .primary) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(value)
-                .font(.subheadline.weight(.semibold))
-                .fontDesign(.rounded)
-                .monospacedDigit()
-                .foregroundStyle(color)
-                .lineLimit(1)
-                .minimumScaleFactor(0.55)
-                .contentTransition(.numericText())
+        return VStack(alignment: .leading, spacing: 6) {
             Text(title)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+                .font(NightTheme.display(46))
+                .foregroundStyle(.primary)
                 .lineLimit(1)
-                .minimumScaleFactor(0.8)
+                .minimumScaleFactor(0.6)
+                .accessibilityAddTraits(.isHeader)
+            Text(String(format: "dash_year_day_format".localized, year, today))
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(NightTheme.secondaryLabel)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
     }
 
-    /// Income split into what is spent, what is reserved for scheduled bills, and what is free.
-    private func budgetBar(income: Double, snapshot: SpendableTodaySnapshot) -> some View {
+    // MARK: - Hero on the street
+
+    private var heroStreet: some View {
+        let income = monthlySalary
+        let snapshot = spendableSnapshot
+        let isOver = income > 0 && snapshot.availableAfterBills < 0
+        let amount = income > 0 ? abs(snapshot.availableAfterBills) : overview.monthTotal
+
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .center, spacing: 8) {
+                Text(heroTitle(income: income, isOver: isOver))
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(NightTheme.secondaryLabel)
+                Spacer(minLength: 8)
+                if hasMonthSpending && overview.previousMonthToDateTotal > 0 {
+                    monthComparisonChip
+                }
+            }
+
+            heroAmount(amount, isOver: isOver)
+                .padding(.top, 20)
+
+            if income > 0 {
+                Text(String(format: "dash_of_income_days_format".localized, money(income), snapshot.daysRemaining))
+                    .font(.footnote)
+                    .foregroundStyle(NightTheme.secondaryLabel)
+                    .lineLimit(2)
+                    .padding(.top, 6)
+
+                budgetMeter(income: income, snapshot: snapshot)
+                    .padding(.top, 16)
+            } else {
+                setIncomeButton
+                    .padding(.top, 16)
+            }
+        }
+    }
+
+    private func heroTitle(income: Double, isOver: Bool) -> String {
+        if income <= 0 { return "month_spending".localized }
+        return isOver ? "dash_over_plan".localized : "dash_left_until_month_end".localized
+    }
+
+    /// The hero amount as it was before today's last expense, minus the current one: the
+    /// pay scene starts from there and ticks down to the real value when the bill lands.
+    private var heroTickStart: Double {
+        guard let last = overview.monthExpenses.filter({ calendar.isDateInToday($0.date) }).max(by: { $0.date < $1.date }) else {
+            return 0
+        }
+        let income = monthlySalary
+        if income <= 0 { return -min(last.amount, overview.monthTotal) }
+        // left to spend grows back by the expense; an over-plan amount shrinks
+        return spendableSnapshot.availableAfterBills < 0 ? -min(last.amount, abs(spendableSnapshot.availableAfterBills)) : last.amount
+    }
+
+    private func playPayScene() {
+        payRun += 1
+        guard !reduceMotion, !typeSize.isAccessibilitySize else {
+            heroTick = 0
+            return
+        }
+        let start = heroTickStart
+        var still = Transaction()
+        still.disablesAnimations = true
+        withTransaction(still) { heroTick = start }
+        guard start != 0 else { return }
+        let run = payRun
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(PayScene.billLands))
+            guard run == payRun else { return }
+            withAnimation(.snappy(duration: 0.5)) { heroTick = 0 }
+        }
+    }
+
+    /// The big number in Big Shoulders 60 with a smaller unit; the pay scene plays beside it.
+    private func heroAmount(_ amount: Double, isOver: Bool) -> some View {
+        let full = fullMoney(amount)
+        let shown = fullMoney(max(amount + heroTick, 0))
+        let unit = " so'm"
+        let number = currency == .uzs && shown.hasSuffix(unit) ? String(shown.dropLast(unit.count)) : shown
+        let showsScene = !typeSize.isAccessibilitySize
+
+        // The scene keeps the trailing edge of the row; a long amount scales down before it can reach it.
+        return HStack(alignment: .lastTextBaseline, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(number)
+                    .font(NightTheme.display(60))
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.45)
+                if currency == .uzs {
+                    Text("so'm")
+                        .font(NightTheme.display(22, weight: .semibold, relativeTo: .title2))
+                        .foregroundStyle(isOver ? Color(.systemRed) : NightTheme.secondaryLabel)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.45)
+                }
+            }
+            .foregroundStyle(isOver ? Color(.systemRed) : .primary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.45)
+            .layoutPriority(1)
+
+            Spacer(minLength: 8)
+
+            if showsScene {
+                PayScene()
+                    .id(payRun)
+                    .alignmentGuide(.lastTextBaseline) { $0[.bottom] - 1 }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(full)
+    }
+
+    /// Change against the same days of last month, as a quiet glass chip.
+    private var monthComparisonChip: some View {
+        let previous = overview.previousMonthToDateTotal
+        let change = (overview.monthTotal - previous) / previous
+        let percent = Int((abs(change) * 100).rounded())
+        let signed = (change > 0 ? "+" : change < 0 ? "\u{2212}" : "") + "\(percent)%"
+
+        return Text(String(format: "dash_vs_last_month_format".localized, signed))
+            .font(.caption.weight(.semibold))
+            .monospacedDigit()
+            .foregroundStyle(.primary)
+            .lineLimit(1)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 4)
+            .background(Capsule().fill(NightTheme.glassFill))
+            .overlay(Capsule().stroke(NightTheme.glassLine, lineWidth: 1))
+    }
+
+    /// Income split into spent (solid), reserved for scheduled bills (dashed) and free (track).
+    private func budgetMeter(income: Double, snapshot: SpendableTodaySnapshot) -> some View {
         let spent = min(overview.monthTotal, income)
         let bills = min(max(snapshot.upcomingRecurring, 0), max(income - spent, 0))
-        let free = max(income - spent - bills, 0)
         let overspent = overview.monthTotal > income
+        let free = max(snapshot.availableAfterBills, 0)
 
-        return VStack(alignment: .leading, spacing: 8) {
+        return VStack(alignment: .leading, spacing: 9) {
             GeometryReader { proxy in
                 let width = proxy.size.width
                 HStack(spacing: 2) {
                     if spent > 0 {
-                        Capsule()
-                            .fill(overspent ? Color(.systemRed) : Color.accentColor)
-                            .frame(width: max(width * spent / income, 6))
+                        Rectangle()
+                            .fill(overspent ? Color(.systemRed) : NightTheme.accent)
+                            .frame(width: max(width * spent / income, 4))
                     }
                     if bills > 0 {
-                        Capsule()
-                            .fill(Color.orange.opacity(0.75))
-                            .frame(width: max(width * bills / income, 6))
+                        DashedFill(color: NightTheme.secondaryLabel)
+                            .frame(width: max(width * bills / income, 4))
                     }
-                    if free > 0 {
-                        Capsule()
-                            .fill(Color(.systemGray5))
-                    }
+                    Spacer(minLength: 0)
                 }
             }
             .frame(height: 10)
-            .accessibilityHidden(true)
+            .background(NightTheme.track)
+            .clipShape(Capsule())
 
-            HStack(spacing: 12) {
-                legendDot("dash_legend_spent".localized, value: compactMoney(overview.monthTotal),
-                          color: overspent ? Color(.systemRed) : Color.accentColor)
+            HStack(spacing: 14) {
+                legendItem("dash_legend_spent".localized, value: compactMoney(overview.monthTotal))
                 if snapshot.upcomingRecurring > 0 {
-                    legendDot("dash_legend_bills".localized, value: compactMoney(snapshot.upcomingRecurring), color: Color.orange.opacity(0.75))
+                    legendItem("dash_legend_bills".localized, value: compactMoney(snapshot.upcomingRecurring))
                 }
-                legendDot("dash_legend_free".localized, value: compactMoney(max(snapshot.availableAfterBills, 0)), color: Color(.systemGray4))
+                legendItem("dash_legend_free".localized, value: compactMoney(free))
                 Spacer(minLength: 0)
             }
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(String(format: "dash_meter_a11y_format".localized,
+                                   fullMoney(overview.monthTotal), fullMoney(snapshot.upcomingRecurring), fullMoney(free)))
     }
 
-    private func legendDot(_ title: String, value: String, color: Color) -> some View {
-        HStack(spacing: 5) {
-            Circle().fill(color).frame(width: 7, height: 7)
-            Text(title)
-                .foregroundStyle(.secondary)
-            Text(value)
-                .fontWeight(.semibold)
-                .monospacedDigit()
+    private func legendItem(_ title: String, value: String) -> some View {
+        HStack(spacing: 4) {
+            Text(title).foregroundStyle(NightTheme.secondaryLabel)
+            Text(value).foregroundStyle(.primary).monospacedDigit()
         }
-        .font(.caption2)
+        .font(.caption.weight(.medium))
         .lineLimit(1)
-        .accessibilityElement(children: .combine)
+        .minimumScaleFactor(0.8)
     }
 
-    /// This month's change against the same number of days last month.
-    private var monthComparison: some View {
-        let previous = overview.previousMonthToDateTotal
-        let change = (overview.monthTotal - previous) / previous
-        let isUp = change > 0
-        let tint = isUp ? Color(.systemRed) : Color(.systemGreen)
-
-        return HStack(spacing: 4) {
-            Image(systemName: isUp ? "arrow.up.right" : "arrow.down.right")
-                .font(.caption2.weight(.bold))
-            Text(abs(change).formatted(.percent.precision(.fractionLength(0))))
-                .font(.caption.weight(.semibold))
-                .monospacedDigit()
-            Text("dashboard_vs_last_month".localized)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+    private var setIncomeButton: some View {
+        Button {
+            showingMonthlySalary = true
+        } label: {
+            HStack(spacing: 12) {
+                rowIcon(HeroIcon("wallet", size: 17))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("set_income_for_budget".localized)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                    Text("dash_set_income_hint".localized)
+                        .font(.caption)
+                        .foregroundStyle(NightTheme.secondaryLabel)
+                }
+                Spacer(minLength: 8)
+                HeroIcon("chevron-right", size: 13)
+                    .foregroundStyle(NightTheme.secondaryLabel)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .frame(minHeight: 44)
+            .nightGroup()
+            .contentShape(Rectangle())
         }
-        .foregroundStyle(tint)
-        .padding(.horizontal, 9)
-        .padding(.vertical, 4)
-        .background(Capsule().fill(tint.opacity(0.12)))
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Metric trio
+
+    private var metricTrio: some View {
+        let income = monthlySalary
+        let snapshot = spendableSnapshot
+        let forecastOverIncome = income > 0 && overview.projectedMonthTotal > income
+
+        return HStack(spacing: 0) {
+            if income > 0 {
+                trioItem("dash_safe_per_day".localized, value: money(snapshot.spendableToday),
+                         color: snapshot.availableAfterBills <= 0 ? Color(.systemRed) : .primary, first: true)
+                trioDivider
+            }
+            trioItem("dash_daily_average".localized, value: hasMonthSpending ? money(overview.dailyAverage) : "—",
+                     first: income <= 0)
+            trioDivider
+            trioItem("dash_forecast".localized, value: hasMonthSpending ? money(overview.projectedMonthTotal) : "—",
+                     color: forecastOverIncome ? Color(.systemRed) : .primary)
+        }
+        .overlay(alignment: .top) { Rectangle().fill(NightTheme.hair).frame(height: 1) }
+        .overlay(alignment: .bottom) { Rectangle().fill(NightTheme.hair).frame(height: 1) }
+    }
+
+    private var trioDivider: some View {
+        Rectangle().fill(NightTheme.hair).frame(width: 1)
+    }
+
+    private func trioItem(_ title: String, value: String, color: Color = .primary, first: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(NightTheme.secondaryLabel)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+            Text(value)
+                .font(NightTheme.display(22, weight: .bold, relativeTo: .title2))
+                .monospacedDigit()
+                .foregroundStyle(color)
+                .lineLimit(1)
+                .minimumScaleFactor(0.55)
+                .contentTransition(.numericText())
+        }
+        .padding(.vertical, 12)
+        .padding(.leading, first ? 0 : 12)
+        .padding(.trailing, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
     }
 
     // MARK: - Spending pace
 
-    private var spendingPaceCard: some View {
-        let income = monthlySalary
-        let lastDay = max(overview.daysInMonth, overview.previousMonthCumulative.count)
-        let paceGap = overview.paceDifference(monthlyIncome: income)
+    private var spendingPaceSection: some View {
+        let days = max(overview.daysInMonth, 1)
+        let current = overview.monthCumulative
+        let previous = overview.previousMonthCumulative.filter { $0.day <= days }
+        let maxY = max(current.last?.amount ?? 0, previous.map(\.amount).max() ?? 0, 1) * 1.1
+        let dailyMax = max(overview.calendarDays.map(\.amount).max() ?? 0, 1)
+        let barScale = maxY * 0.38 / dailyMax
+        let selected = selectedPaceDay.map { min(max(Int($0.rounded()), 1), days) }
+        let soFar = selected.flatMap { day in current.first { $0.day == day }?.amount } ?? overview.monthTotal
+        let lastAtDay = selected.flatMap { day in previous.first { $0.day == day }?.amount } ?? overview.previousMonthToDateTotal
+        let hasPrevious = !previous.isEmpty
 
-        return VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("dash_spending_pace".localized).font(.headline)
-                Spacer()
-                paceReadout(income: income, paceGap: paceGap)
-            }
+        return VStack(alignment: .leading, spacing: 6) {
+            NightSectionHeader(title: "dash_spending_pace".localized)
 
-            Chart {
-                if income > 0 {
-                    ForEach([1, overview.daysInMonth], id: \.self) { day in
-                        LineMark(
-                            x: .value("Day", day),
-                            y: .value("Amount", income * Double(day) / Double(max(overview.daysInMonth, 1))),
-                            series: .value("Month", "even")
-                        )
-                        .foregroundStyle(Color(.systemGreen).opacity(0.7))
-                        .lineStyle(StrokeStyle(lineWidth: 1.2, dash: [2, 4]))
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(alignment: .lastTextBaseline, spacing: 18) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(selected.map { String(format: "dash_day_format".localized, $0) } ?? "dash_so_far".localized)
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(NightTheme.secondaryLabel)
+                        Text(compactMoney(soFar))
+                            .font(NightTheme.display(30))
+                            .monospacedDigit()
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.6)
+                    }
+                    .accessibilityElement(children: .combine)
+                    if hasPrevious {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("dashboard_last_month".localized)
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(NightTheme.secondaryLabel)
+                            Text(compactMoney(lastAtDay))
+                                .font(NightTheme.display(17, weight: .semibold, relativeTo: .headline))
+                                .foregroundStyle(NightTheme.secondaryLabel)
+                                .monospacedDigit()
+                                .lineLimit(1)
+                        }
+                        .accessibilityElement(children: .combine)
+                    }
+                    Spacer(minLength: 0)
+                    if hasPrevious, selected == nil {
+                        paceDeltaChip(current: soFar, previous: lastAtDay)
+                            .alignmentGuide(.lastTextBaseline) { $0[.bottom] - 2 }
                     }
                 }
-                ForEach(overview.previousMonthCumulative) { point in
-                    LineMark(
-                        x: .value("Day", point.day),
-                        y: .value("Amount", point.amount),
-                        series: .value("Month", "previous")
-                    )
-                    .foregroundStyle(Color(.systemGray3))
-                    .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [4, 4]))
-                    .interpolationMethod(.monotone)
+                .padding(.horizontal, 16)
+                .padding(.top, 16)
+
+                paceChart(days: days, current: current, previous: previous, maxY: maxY, barScale: barScale)
+                    .frame(height: 140)
+                    .padding(.horizontal, 10)
+                    .padding(.top, 10)
+                    .accessibilityLabel("dash_spending_pace".localized)
+                    .accessibilityValue(String(format: "dash_pace_a11y_format".localized,
+                                               fullMoney(overview.monthTotal), fullMoney(overview.previousMonthToDateTotal)))
+
+                HStack(spacing: 14) {
+                    paceKey("dash_key_month_total".localized) {
+                        Capsule().fill(NightTheme.accent).frame(width: 14, height: 2)
+                    }
+                    if hasPrevious {
+                        paceKey("dashboard_last_month".localized) {
+                            Capsule()
+                                .stroke(NightTheme.secondaryLabel, style: StrokeStyle(lineWidth: 2, dash: [3, 3]))
+                                .frame(width: 14, height: 1)
+                        }
+                    }
+                    paceKey("dash_key_daily".localized) {
+                        RoundedRectangle(cornerRadius: 1.5).fill(paceBarColor(today: false)).frame(width: 6, height: 9)
+                    }
                 }
-                ForEach(overview.monthCumulative) { point in
-                    AreaMark(x: .value("Day", point.day), y: .value("Amount", point.amount))
+                .padding(.horizontal, 16)
+                .padding(.top, 6)
+                .padding(.bottom, 14)
+                .accessibilityHidden(true)
+            }
+            .nightGroup()
+        }
+    }
+
+    private func paceDeltaChip(current: Double, previous: Double) -> some View {
+        let diff = current - previous
+        let less = diff <= 0
+        let tint = less ? Color(.systemGreen) : Color(.systemRed)
+        return Text(String(format: (less ? "dash_delta_less_format" : "dash_delta_more_format").localized, compactMoney(abs(diff))))
+            .font(.caption.weight(.semibold))
+            .monospacedDigit()
+            .foregroundStyle(tint)
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(Capsule().fill(tint.opacity(0.12)))
+    }
+
+    private func paceBarColor(today: Bool) -> Color {
+        if colorScheme == .dark {
+            return today ? Color(red: 58 / 255, green: 69 / 255, blue: 102 / 255) : Color(red: 34 / 255, green: 43 / 255, blue: 68 / 255)
+        }
+        return NightTheme.ink.opacity(today ? 0.24 : 0.12)
+    }
+
+    private func paceKey<Mark: View>(_ title: String, @ViewBuilder mark: () -> Mark) -> some View {
+        HStack(spacing: 5) {
+            mark()
+            Text(title)
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(NightTheme.secondaryLabel)
+                .lineLimit(1)
+        }
+    }
+
+    /// Daily spend as small buildings along the bottom (today has a lit window), the running
+    /// total as a line with a soft fill, and last month dashed on the same scale.
+    private func paceChart(days: Int, current: [DashboardOverview.DayPoint], previous: [DashboardOverview.DayPoint],
+                           maxY: Double, barScale: Double) -> some View {
+        let todayPoint = current.last
+        let monthStart = calendar.dateInterval(of: .month, for: Date())?.start ?? Date()
+        let firstLabel = "1 " + monthStart.formatted(.dateTime.month(.abbreviated))
+
+        return GeometryReader { proxy in
+            let barWidth = max(proxy.size.width / Double(days) * 0.62, 2)
+            Chart {
+                ForEach(overview.calendarDays) { day in
+                    if day.isFuture {
+                        BarMark(x: .value("Day", Double(day.day)), yStart: .value("Amount", 0.0),
+                                yEnd: .value("Amount", maxY * 0.015), width: .fixed(barWidth))
+                            .foregroundStyle(NightTheme.accent.opacity(0.10))
+                            .cornerRadius(1)
+                    } else if day.amount > 0 {
+                        BarMark(x: .value("Day", Double(day.day)), yStart: .value("Amount", 0.0),
+                                yEnd: .value("Amount", day.amount * barScale), width: .fixed(barWidth))
+                            .foregroundStyle(paceBarColor(today: day.day == todayPoint?.day))
+                            .cornerRadius(1.2)
+                            .annotation(position: .overlay, alignment: .top) {
+                                if day.day == todayPoint?.day {
+                                    Rectangle().fill(NightTheme.window).frame(width: 3.2, height: 4).padding(.top, 3)
+                                }
+                            }
+                    }
+                }
+
+                ForEach(current) { point in
+                    AreaMark(x: .value("Day", Double(point.day)), y: .value("Amount", point.amount))
                         .foregroundStyle(LinearGradient(
-                            colors: [Color.accentColor.opacity(0.16), Color.accentColor.opacity(0)],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        ))
+                            colors: [NightTheme.accent.opacity(0.16), NightTheme.accent.opacity(0)],
+                            startPoint: .top, endPoint: .bottom))
                         .interpolationMethod(.monotone)
-                    LineMark(
-                        x: .value("Day", point.day),
-                        y: .value("Amount", point.amount),
-                        series: .value("Month", "current")
-                    )
-                    .foregroundStyle(Color.accentColor)
-                    .lineStyle(StrokeStyle(lineWidth: 2.5, lineCap: .round))
-                    .interpolationMethod(.monotone)
                 }
+                ForEach(previous) { point in
+                    LineMark(x: .value("Day", Double(point.day)), y: .value("Amount", point.amount),
+                             series: .value("Month", "previous"))
+                        .foregroundStyle(NightTheme.secondaryLabel.opacity(0.6))
+                        .lineStyle(StrokeStyle(lineWidth: 1.4, dash: [3, 4]))
+                        .interpolationMethod(.monotone)
+                }
+                ForEach(current) { point in
+                    LineMark(x: .value("Day", Double(point.day)), y: .value("Amount", point.amount),
+                             series: .value("Month", "current"))
+                        .foregroundStyle(NightTheme.accent)
+                        .lineStyle(StrokeStyle(lineWidth: 2.4, lineCap: .round, lineJoin: .round))
+                        .interpolationMethod(.monotone)
+                }
+
+                RuleMark(y: .value("Amount", 0.0))
+                    .foregroundStyle(NightTheme.accent.opacity(0.18))
+                    .lineStyle(StrokeStyle(lineWidth: 1))
+
                 if let selectedPaceDay {
-                    RuleMark(x: .value("Day", selectedPaceDay))
-                        .foregroundStyle(Color(.systemGray3))
+                    RuleMark(x: .value("Day", selectedPaceDay.rounded()))
+                        .foregroundStyle(NightTheme.secondaryLabel.opacity(0.5))
                         .lineStyle(StrokeStyle(lineWidth: 1))
-                } else if let today = overview.monthCumulative.last {
-                    PointMark(x: .value("Day", today.day), y: .value("Amount", today.amount))
-                        .foregroundStyle(Color.accentColor)
-                        .symbolSize(40)
+                } else if let todayPoint {
+                    PointMark(x: .value("Day", Double(todayPoint.day)), y: .value("Amount", todayPoint.amount))
+                        .symbol {
+                            ZStack {
+                                Circle().fill(NightTheme.accent.opacity(0.14)).frame(width: 16, height: 16)
+                                Circle().fill(NightTheme.accent).frame(width: 7.6, height: 7.6)
+                                    .overlay(Circle().stroke(colorScheme == .dark ? NightTheme.ink : .white, lineWidth: 1.5))
+                            }
+                        }
+                        .annotation(position: .top, spacing: 4) {
+                            Text("dash_today_short".localized)
+                                .font(.caption2)
+                                .foregroundStyle(.primary)
+                        }
                 }
             }
-            .chartXScale(domain: 1...max(lastDay, 2))
+            .chartXScale(domain: 0.5...(Double(days) + 0.5))
+            .chartYScale(domain: 0...maxY)
             .chartXSelection(value: $selectedPaceDay)
-            .chartYAxis {
-                AxisMarks(position: .trailing, values: .automatic(desiredCount: 3)) { value in
-                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [2, 3]))
+            .chartYAxis(.hidden)
+            .chartXAxis {
+                AxisMarks(values: [1.0, 15.0, Double(days)]) { value in
                     AxisValueLabel {
-                        if let amount = value.as(Double.self) {
-                            Text(compactMoney(amount)).font(.caption2)
+                        if let day = value.as(Double.self) {
+                            Text(day == 1 ? firstLabel : String(Int(day)))
+                                .font(.caption2)
+                                .foregroundStyle(NightTheme.secondaryLabel)
                         }
                     }
                 }
             }
-            .chartXAxis {
-                AxisMarks(values: [1, 10, 20, lastDay]) { _ in
-                    AxisValueLabel().font(.caption2)
-                }
-            }
             .chartLegend(.hidden)
-            .frame(height: 150)
-            .accessibilityLabel("dash_spending_pace".localized)
-            .accessibilityValue(CurrencyFormatter.formatFull(overview.monthTotal, currency: currency))
-
-            HStack(spacing: 14) {
-                chartLegendItem("dashboard_this_month".localized, color: Color.accentColor, dashed: false)
-                if !overview.previousMonthCumulative.isEmpty {
-                    chartLegendItem("dashboard_last_month".localized, color: Color(.systemGray3), dashed: true)
-                }
-                if income > 0 {
-                    chartLegendItem("dash_even_pace".localized, color: Color(.systemGreen).opacity(0.7), dashed: true)
-                }
-            }
-        }
-        .dashboardCard()
-    }
-
-    @ViewBuilder
-    private func paceReadout(income: Double, paceGap: Double) -> some View {
-        if let day = selectedPaceDay {
-            let current = overview.monthCumulative.first { $0.day == day }?.amount
-            let previous = overview.previousMonthCumulative.first { $0.day == day }?.amount
-            VStack(alignment: .trailing, spacing: 1) {
-                Text(String(format: "dash_day_format".localized, day))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                Text(current.map(money) ?? previous.map(money) ?? "—")
-                    .font(.subheadline.weight(.semibold))
-                    .fontDesign(.rounded)
-                    .monospacedDigit()
-            }
-        } else if income > 0 {
-            let ahead = paceGap > 0
-            Text(String(format: (ahead ? "dash_pace_above_format" : "dash_pace_below_format").localized, compactMoney(abs(paceGap))))
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(ahead ? Color(.systemRed) : Color(.systemGreen))
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
-        } else {
-            Text(money(overview.monthTotal))
-                .font(.subheadline.weight(.semibold))
-                .fontDesign(.rounded)
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    private func chartLegendItem(_ title: String, color: Color, dashed: Bool) -> some View {
-        HStack(spacing: 5) {
-            Capsule()
-                .stroke(color, style: StrokeStyle(lineWidth: 2, dash: dashed ? [3, 2] : []))
-                .frame(width: 14, height: 2)
-            Text(title)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    // MARK: - Daily spending
-
-    /// This week so far against the same days of last week, so the comparison is fair mid-week.
-    private var calendarHeatmapCard: some View {
-        let now = Date()
-        let weekStart = calendar.dateInterval(of: .weekOfYear, for: now)?.start ?? calendar.startOfDay(for: now)
-        let lastWeekStart = calendar.date(byAdding: .day, value: -7, to: weekStart) ?? weekStart
-        let lastWeekSameTime = calendar.date(byAdding: .day, value: -7, to: now) ?? now
-        let thisWeek = dataManager.expenses
-            .filter { $0.date >= weekStart && $0.date <= now }
-            .reduce(0) { $0 + $1.amount }
-        let lastWeek = dataManager.expenses
-            .filter { $0.date >= lastWeekStart && $0.date <= lastWeekSameTime }
-            .reduce(0) { $0 + $1.amount }
-        let scale = max(thisWeek, lastWeek, 1)
-
-        return VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("dash_this_week".localized).font(.headline)
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(money(thisWeek))
-                        .font(.title2.weight(.semibold))
-                        .fontDesign(.rounded)
-                        .monospacedDigit()
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                    weekChangeLabel(thisWeek: thisWeek, lastWeek: lastWeek)
-                }
-            }
-
-            VStack(alignment: .leading, spacing: 10) {
-                weekBar(title: "dash_this_week".localized, amount: thisWeek, scale: scale, color: Color.accentColor)
-                weekBar(title: "dash_last_week_same_days".localized, amount: lastWeek, scale: scale, color: Color(.systemGray3))
-            }
-        }
-        .dashboardCard()
-        .accessibilityElement(children: .combine)
-    }
-
-    @ViewBuilder
-    private func weekChangeLabel(thisWeek: Double, lastWeek: Double) -> some View {
-        if lastWeek > 0 {
-            let change = (thisWeek - lastWeek) / lastWeek
-            let percent = Int((abs(change) * 100).rounded())
-            Text(String(format: (change > 0 ? "dash_week_more_format" : "dash_week_less_format").localized, percent))
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(change > 0 ? Color(.systemRed) : Color(.systemGreen))
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
-        } else {
-            Text("dash_no_last_week".localized)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
-        }
-    }
-
-    private func weekBar(title: String, amount: Double, scale: Double, color: Color) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack {
-                Text(title)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Text(money(amount))
-                    .font(.caption.weight(.semibold))
-                    .fontDesign(.rounded)
-                    .monospacedDigit()
-            }
-            GeometryReader { proxy in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(Color(.systemGray6))
-                    Capsule()
-                        .fill(color)
-                        .frame(width: amount > 0 ? max(8, proxy.size.width * amount / scale) : 0)
-                }
-            }
-            .frame(height: 10)
         }
     }
 
     // MARK: - Categories
 
-    private var categoryCard: some View {
+    private var categorySection: some View {
         let rows = categoryRows
         let budgets = activeBudgets
         let topAmount = overview.sortedCategories.first?.amount ?? 1
-        let leading = Array(overview.sortedCategories.prefix(5))
-        let otherAmount = overview.sortedCategories.dropFirst(5).reduce(0) { $0 + $1.amount }
 
-        return VStack(alignment: .leading, spacing: 14) {
-            cardHeader("dash_where_it_goes".localized, actionTitle: "dash_budgets".localized) {
+        return VStack(alignment: .leading, spacing: 6) {
+            NightSectionHeader(title: "dash_where_it_goes".localized, figure: .shopper,
+                               actionTitle: "dash_budgets".localized) {
                 showingBudgetSettings = true
             }
 
-            // Whole month at a glance: one stacked bar of category shares.
-            Chart {
-                ForEach(leading, id: \.categoryID) { item in
-                    BarMark(x: .value("Amount", item.amount), y: .value("Month", "total"))
-                        .foregroundStyle(dataManager.resolveCategory(id: item.categoryID).color)
-                }
-                if otherAmount > 0 {
-                    BarMark(x: .value("Amount", otherAmount), y: .value("Month", "total"))
-                        .foregroundStyle(Color(.systemGray4))
-                }
-            }
-            .chartXAxis(.hidden)
-            .chartYAxis(.hidden)
-            .chartLegend(.hidden)
-            .frame(height: 12)
-            .clipShape(Capsule())
-            .accessibilityHidden(true)
-
-            if budgetAlertCount > 0 {
-                HStack(spacing: 6) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.caption)
-                    Text(String(format: "dash_budget_alert_count_format".localized, budgetAlertCount))
-                        .font(.caption.weight(.medium))
-                }
-                .foregroundStyle(.orange)
-            }
-
-            VStack(spacing: 14) {
-                ForEach(rows, id: \.categoryID) { item in
+            VStack(spacing: 0) {
+                ForEach(Array(rows.enumerated()), id: \.element.categoryID) { index, item in
+                    if index > 0 { rowDivider }
                     categoryRow(item, limit: budgets[item.categoryID], topAmount: topAmount)
                 }
-            }
-
-            if overview.sortedCategories.count > rows.count {
-                HStack {
-                    Text("other_categories".localized)
-                    Spacer()
-                    Text(money(overview.sortedCategories.dropFirst(rows.count).reduce(0) { $0 + $1.amount }))
-                        .fontDesign(.rounded)
-                        .monospacedDigit()
+                if overview.sortedCategories.count > rows.count {
+                    rowDivider
+                    HStack {
+                        Text("other_categories".localized)
+                        Spacer()
+                        Text(money(overview.sortedCategories.dropFirst(rows.count).reduce(0) { $0 + $1.amount }))
+                            .monospacedDigit()
+                    }
+                    .font(.footnote)
+                    .foregroundStyle(NightTheme.secondaryLabel)
+                    .padding(.horizontal, 16)
+                    .frame(minHeight: 44)
+                    .accessibilityElement(children: .combine)
                 }
-                .font(.caption)
-                .foregroundStyle(.secondary)
             }
+            .nightGroup()
         }
-        .dashboardCard()
     }
 
     private func categoryRow(_ item: DashboardOverview.CategorySpend, limit: Double?, topAmount: Double) -> some View {
         let category = dataManager.resolveCategory(id: item.categoryID)
-        let share = overview.monthTotal > 0 ? item.amount / overview.monthTotal : 0
-        let progress: Double
-        let barColor: Color
-        let caption: String
-        let captionColor: Color
-
-        if let limit {
-            progress = item.amount / limit
-            barColor = progress > 1 ? Color(.systemRed) : (progress >= 0.8 ? .orange : category.color)
-            caption = progress > 1
+        let progress = limit.map { item.amount / $0 } ?? (topAmount > 0 ? item.amount / topAmount : 0)
+        let isOver = (limit.map { item.amount > $0 }) ?? false
+        let caption: String? = limit.map { limit in
+            isOver
                 ? String(format: "dash_budget_over_format".localized, compactMoney(item.amount - limit))
-                : String(format: "dash_budget_left_format".localized, compactMoney(limit - item.amount))
-            captionColor = progress > 1 ? Color(.systemRed) : (progress >= 0.8 ? .orange : .secondary)
-        } else {
-            progress = topAmount > 0 ? item.amount / topAmount : 0
-            barColor = category.color
-            caption = share.formatted(.percent.precision(.fractionLength(0)))
-            captionColor = .secondary
+                : String(format: "dash_budget_of_format".localized, compactMoney(limit))
         }
 
         return Button {
             selectedBudgetCategory = category
         } label: {
             HStack(spacing: 12) {
-                HeroIcon(systemName: category.iconSystemName, size: 18)
-                    .foregroundStyle(category.color)
-                    .frame(width: 34, height: 34)
-                    .background(category.color.opacity(0.12), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                rowIcon(HeroIcon(systemName: category.iconSystemName, size: 17))
 
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(alignment: .firstTextBaseline) {
-                        Text(category.name)
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(.primary)
-                            .lineLimit(1)
-                        Spacer(minLength: 6)
-                        Text(money(item.amount))
-                            .font(.subheadline.weight(.semibold))
-                            .fontDesign(.rounded)
-                            .monospacedDigit()
-                            .foregroundStyle(.primary)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.7)
-                    }
-
+                VStack(alignment: .leading, spacing: 7) {
+                    Text(category.name)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
                     GeometryReader { proxy in
                         ZStack(alignment: .leading) {
-                            Capsule().fill(Color(.systemGray6))
+                            Capsule().fill(NightTheme.track)
                             Capsule()
-                                .fill(barColor)
+                                .fill(isOver ? Color(.systemRed) : NightTheme.accent)
                                 .frame(width: max(proxy.size.width * min(progress, 1), 4))
                         }
                     }
-                    .frame(height: 6)
+                    .frame(height: 4)
+                }
 
-                    HStack {
-                        if let limit {
-                            Text(String(format: "dash_budget_of_format".localized, compactMoney(limit)))
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer(minLength: 4)
-                        Text(caption).foregroundStyle(captionColor)
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(compactMoney(item.amount))
+                        .font(.subheadline.weight(.semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(isOver ? Color(.systemRed) : .primary)
+                        .lineLimit(1)
+                    if let caption {
+                        Text(caption)
+                            .font(.caption2.weight(.medium))
+                            .monospacedDigit()
+                            .foregroundStyle(isOver ? Color(.systemRed) : NightTheme.secondaryLabel)
+                            .lineLimit(1)
                     }
-                    .font(.caption2)
-                    .monospacedDigit()
                 }
             }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .frame(minHeight: 44)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel([category.name, fullMoney(item.amount), caption].compactMap { $0 }.joined(separator: ", "))
         .accessibilityHint("dash_category_hint".localized)
+        .accessibilityAddTraits(.isButton)
     }
 
     // MARK: - Top places / largest expenses
 
-    private var spotlightCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("dash_spotlight".localized).font(.headline)
-
-            Picker("dash_spotlight".localized, selection: $spotlight) {
-                ForEach(Spotlight.allCases, id: \.self) { item in
-                    Text(item.title).tag(item)
-                }
-            }
-            .pickerStyle(.segmented)
+    private var spotlightSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            NightSectionHeader(title: "dash_spotlight".localized)
 
             VStack(spacing: 0) {
+                Picker("dash_spotlight".localized, selection: $spotlight) {
+                    ForEach(Spotlight.allCases, id: \.self) { item in
+                        Text(item.title).tag(item)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, 12)
+                .padding(.top, 12)
+                .padding(.bottom, 4)
+
                 switch spotlight {
                 case .places:
                     let items = overview.topTitles
-                    let top = items.first?.amount ?? 1
                     ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                        let category = dataManager.resolveCategory(id: item.categoryID)
+                        if index > 0 { rowDivider }
                         rankedRow(
                             rank: index + 1,
-                            icon: category.iconSystemName,
-                            color: category.color,
+                            icon: dataManager.resolveCategory(id: item.categoryID).iconSystemName,
                             title: item.title,
                             subtitle: String(format: "dash_times_format".localized, item.count),
-                            amount: item.amount,
-                            fraction: top > 0 ? item.amount / top : 0
+                            amount: item.amount
                         )
-                        if index < items.count - 1 { Divider().padding(.leading, 46) }
                     }
                 case .largest:
                     let items = overview.largestExpenses
-                    let top = items.first?.amount ?? 1
                     ForEach(Array(items.enumerated()), id: \.element.id) { index, expense in
                         let category = dataManager.resolveCategory(id: expense.categoryId)
+                        if index > 0 { rowDivider }
                         rankedRow(
                             rank: index + 1,
                             icon: category.iconSystemName,
-                            color: category.color,
                             title: expense.title,
                             subtitle: "\(category.name) · \(expense.date.formatted(.dateTime.month(.abbreviated).day()))",
-                            amount: expense.amount,
-                            fraction: top > 0 ? expense.amount / top : 0
+                            amount: expense.amount
                         )
-                        if index < items.count - 1 { Divider().padding(.leading, 46) }
                     }
                 }
             }
             .animation(.snappy, value: spotlight)
+            .nightGroup()
         }
-        .dashboardCard()
     }
 
-    private func rankedRow(rank: Int, icon: String, color: Color, title: String, subtitle: String, amount: Double, fraction: Double) -> some View {
+    private func rankedRow(rank: Int, icon: String, title: String, subtitle: String, amount: Double) -> some View {
         HStack(spacing: 12) {
-            HeroIcon(systemName: icon, size: 18)
-                .foregroundStyle(color)
-                .frame(width: 34, height: 34)
-                .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-
+            rowIcon(HeroIcon(systemName: icon, size: 17))
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.subheadline.weight(.medium))
                     .lineLimit(1)
                 Text(subtitle)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(NightTheme.secondaryLabel)
                     .lineLimit(1)
             }
-
             Spacer(minLength: 8)
-
-            VStack(alignment: .trailing, spacing: 4) {
-                Text(money(amount))
-                    .font(.subheadline.weight(.semibold))
-                    .fontDesign(.rounded)
-                    .monospacedDigit()
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.65)
-                Capsule()
-                    .fill(color.opacity(0.55))
-                    .frame(width: max(54 * fraction, 4), height: 3)
-                    .frame(width: 54, alignment: .trailing)
-            }
+            Text(compactMoney(amount))
+                .font(.subheadline.weight(.semibold))
+                .monospacedDigit()
+                .lineLimit(1)
         }
-        .padding(.vertical, 8)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(rank). \(title), \(CurrencyFormatter.formatFull(amount, currency: currency))")
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .frame(minHeight: 44)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(rank). \(title), \(subtitle), \(fullMoney(amount))")
     }
 
     // MARK: - Weekday pattern
 
-    private var weekdayPatternCard: some View {
-        let items = overview.weekdayAverages
-        let peak = overview.peakWeekday
-        let symbols = calendar.shortWeekdaySymbols
+    /// Ease used by the bars that grow in when a section scrolls into view.
+    private func growIn(delay: Double) -> Animation {
+        .timingCurve(0.16, 1, 0.3, 1, duration: 0.9).delay(delay)
+    }
 
-        return VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text("dash_weekday_pattern".localized).font(.headline)
-                Text("dash_weekday_subtitle".localized)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+    /// A localized lead sentence: the `**%@**` parts read primary semibold, the rest secondary.
+    private func leadText(_ key: String, _ args: [String], strongFont: Font = .subheadline.weight(.semibold)) -> Text {
+        var result = AttributedString()
+        var rest = Substring(key.localized)
+        var index = 0
+        func plain(_ text: Substring) -> AttributedString {
+            var part = AttributedString(String(text))
+            part.swiftUI.foregroundColor = NightTheme.secondaryLabel
+            return part
+        }
+        while let range = rest.range(of: "%@") {
+            var before = rest[..<range.lowerBound]
+            var after = rest[range.upperBound...]
+            let strong = before.hasSuffix("**") && after.hasPrefix("**")
+            if strong {
+                before = before.dropLast(2)
+                after = after.dropFirst(2)
             }
+            result += plain(before)
+            var value = AttributedString(index < args.count ? args[index] : "")
+            value.swiftUI.foregroundColor = strong ? Color.primary : NightTheme.secondaryLabel
+            if strong { value.swiftUI.font = strongFont }
+            result += value
+            index += 1
+            rest = after
+        }
+        result += plain(rest)
+        return Text(result)
+    }
 
-            Chart {
-                ForEach(items) { item in
-                    BarMark(
-                        x: .value("Weekday", symbols[item.weekday - 1]),
-                        y: .value("Average", item.average),
-                        width: .ratio(0.6)
-                    )
-                    .cornerRadius(6)
-                    .foregroundStyle(item.weekday == peak?.weekday ? Color.accentColor : Color(.systemGray4))
+    /// The same sentence as plain text, for VoiceOver.
+    private func leadString(_ key: String, _ args: [String]) -> String {
+        String(format: key.localized.replacingOccurrences(of: "**", with: ""), arguments: args.map { $0 as CVarArg })
+    }
+
+    // MARK: - Weekly highlights
+
+    /// The weekday highlights for the current data; the section shows only with 2 or more.
+    private var weeklyInsights: [DashboardOverview.WeeklyInsight] {
+        overview.weeklyInsights(
+            weekdayName: { weekday in
+                let name = calendar.weekdaySymbols[weekday - 1]
+                let capitalized = name.prefix(1).uppercased() + name.dropFirst()
+                return String(format: "dash_week_days_format".localized, capitalized)
+            },
+            money: compactMoney,
+            category: { id in
+                let category = dataManager.resolveCategory(id: id)
+                return (category.name, category.iconSystemName)
+            }
+        )
+    }
+
+    /// Auto-advance runs only while the card is on screen, the app is active, and neither
+    /// Reduce Motion nor VoiceOver is on.
+    private func autoRotates(_ count: Int) -> Bool {
+        count > 1 && insightsVisible && scenePhase == .active && !reduceMotion && !voiceOverEnabled
+    }
+
+    private func showInsight(_ index: Int, count: Int, manual: Bool) {
+        guard count > 0 else { return }
+        let next = ((index % count) + count) % count
+        withAnimation(.easeOut(duration: 0.45)) { insightIndex = next }
+        if manual { insightTimerToken += 1 }
+    }
+
+    private func insightContent(_ insight: DashboardOverview.WeeklyInsight) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            rowIcon(HeroIcon(systemName: insight.icon, size: 17).foregroundStyle(NightTheme.window))
+            VStack(alignment: .leading, spacing: 4) {
+                leadText(insight.headlineKey, insight.headlineArgs, strongFont: .body.weight(.semibold))
+                    .font(.body)
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(insight.caption)
+                    .font(.footnote)
+                    .foregroundStyle(NightTheme.secondaryLabel)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func weeklyHighlightsSection(_ insights: [DashboardOverview.WeeklyInsight]) -> some View {
+        let count = insights.count
+        let index = insightIndex % count
+        let current = insights[index]
+        let rotates = autoRotates(count)
+        let transition: AnyTransition = reduceMotion
+            ? .opacity
+            : .asymmetric(insertion: .opacity.combined(with: .offset(y: 6)),
+                          removal: .opacity.combined(with: .offset(y: -6)))
+
+        return VStack(alignment: .leading, spacing: 6) {
+            NightSectionHeader(title: "dash_week_title".localized)
+
+            VStack(alignment: .leading, spacing: 14) {
+                // Every insight laid out hidden keeps the card at the tallest one's height,
+                // so rotating never moves the page.
+                ZStack(alignment: .topLeading) {
+                    ForEach(insights) { insight in
+                        insightContent(insight).hidden()
+                    }
+                    insightContent(current)
+                        .id(current.id)
+                        .transition(transition)
                 }
-            }
-            .chartXScale(domain: items.map { symbols[$0.weekday - 1] })
-            .chartYAxis {
-                AxisMarks(position: .trailing, values: .automatic(desiredCount: 3)) { value in
-                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [2, 3]))
-                    AxisValueLabel {
-                        if let amount = value.as(Double.self) {
-                            Text(compactMoney(amount)).font(.caption2)
+
+                HStack(alignment: .center, spacing: 8) {
+                    HStack(spacing: 0) {
+                        ForEach(0..<count, id: \.self) { dot in
+                            Capsule()
+                                .fill(dot == index ? NightTheme.accent : NightTheme.secondaryLabel.opacity(0.35))
+                                .frame(width: dot == index ? 16 : 6, height: 6)
+                                .padding(.horizontal, 3)
+                                .frame(height: 44)
+                                .contentShape(Rectangle())
+                                .onTapGesture { showInsight(dot, count: count, manual: true) }
                         }
                     }
-                }
-            }
-            .chartXAxis {
-                AxisMarks { _ in AxisValueLabel().font(.caption2) }
-            }
-            .frame(height: 130)
-            .accessibilityHidden(true)
+                    .padding(.leading, -3)
+                    // 44 pt tall hit area without making the row taller
+                    .padding(.vertical, -19)
+                    .transaction { if reduceMotion { $0.animation = nil } }
 
-            if let peak {
-                HStack(spacing: 8) {
-                    HeroIcon("sparkles", size: 16)
-                        .foregroundStyle(Color.accentColor)
-                    Text(String(
-                        format: "dash_weekday_peak_format".localized,
-                        calendar.weekdaySymbols[peak.weekday - 1],
-                        money(peak.average)
-                    ))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    Spacer(minLength: 8)
+
+                    Text("dash_week_footnote".localized)
+                        .font(.caption2)
+                        .foregroundStyle(NightTheme.secondaryLabel)
+                        .lineLimit(1)
                 }
-                .accessibilityElement(children: .combine)
+            }
+            .padding(16)
+            .nightGroup()
+            .contentShape(Rectangle())
+            .onTapGesture { showInsight(index + 1, count: count, manual: true) }
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 20).onEnded { value in
+                    let dx = value.translation.width
+                    guard abs(dx) > 40, abs(dx) > abs(value.translation.height) else { return }
+                    showInsight(index + (dx < 0 ? 1 : -1), count: count, manual: true)
+                }
+            )
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(leadString(current.headlineKey, current.headlineArgs) + ". " + current.caption)
+            .accessibilityHint("dash_week_hint".localized)
+            .accessibilityAdjustableAction { direction in
+                let step: Int
+                switch direction {
+                case .increment: step = 1
+                case .decrement: step = -1
+                @unknown default: return
+                }
+                let next = ((index + step) % count + count) % count
+                showInsight(next, count: count, manual: true)
+                let insight = insights[next]
+                AccessibilityNotification.Announcement(
+                    leadString(insight.headlineKey, insight.headlineArgs) + ". " + insight.caption
+                ).post()
+            }
+            .onScrollVisibilityChange(threshold: 0.4) { visible in
+                insightsVisible = visible
+            }
+            .task(id: rotates ? insightTimerToken : -1) {
+                guard rotates else { return }
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(5))
+                    guard !Task.isCancelled else { break }
+                    showInsight(insightIndex + 1, count: count, manual: false)
+                }
             }
         }
-        .dashboardCard()
     }
 
     // MARK: - Monthly history
 
-    private var monthlyHistoryCard: some View {
+    private var monthlyHistorySection: some View {
         let history = overview.monthlyHistory
         let previousNonZero = history.dropLast().map(\.amount).filter { $0 > 0 }
         let average = previousNonZero.isEmpty ? 0 : previousNonZero.reduce(0, +) / Double(previousNonZero.count)
-        let currentMonth = history.last?.month
+        let forecast = max(overview.projectedMonthTotal, history.last?.amount ?? 0)
+        let scale = max(history.map(\.amount).max() ?? 0, forecast, average, 1)
+        let currentName = monthName(history.last?.month ?? Date())
+        let leadKey = forecast - average <= 0 ? "dash_month_less_lead_format" : "dash_month_more_lead_format"
+        let leadArgs = [currentName, compactMoney(abs(forecast - average))]
+        // an empty month would read as "less than average", so no lead until something is spent
+        let hasLead = average > 0 && hasMonthSpending
+        let on = monthsShown || reduceMotion
+        // fixed columns around the track, so the average line can be placed over all rows at once
+        let nameWidth: CGFloat = 66
+        let amountWidth: CGFloat = 70
+        let columnSpacing: CGFloat = 10
 
-        return VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("dash_monthly_history".localized).font(.headline)
-                Spacer()
-                if average > 0 {
-                    Text(String(format: "dash_monthly_average_format".localized, compactMoney(average)))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+        return VStack(alignment: .leading, spacing: 6) {
+            NightSectionHeader(title: "dash_last_six_months".localized)
+
+            VStack(alignment: .leading, spacing: 0) {
+                if hasLead {
+                    leadText(leadKey, leadArgs)
+                        .font(.subheadline)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 14)
                 }
-            }
 
-            Chart {
-                ForEach(history, id: \.month) { item in
-                    BarMark(
-                        x: .value("Month", item.month, unit: .month),
-                        y: .value("Amount", item.amount),
-                        width: .ratio(0.55)
-                    )
-                    .cornerRadius(6)
-                    .foregroundStyle(item.month == currentMonth ? Color.accentColor : Color(.systemGray4))
-                    .annotation(position: .top, spacing: 4) {
-                        if item.amount > 0 {
-                            Text(compactMoney(item.amount))
-                                .font(.system(size: 9, weight: .semibold, design: .rounded))
-                                .foregroundStyle(.secondary)
+                VStack(spacing: 9) {
+                    ForEach(Array(history.enumerated()), id: \.element.month) { index, item in
+                        let isNow = index == history.count - 1
+                        HStack(alignment: .center, spacing: columnSpacing) {
+                            Text(monthName(item.month, short: true))
+                                .font(.footnote.weight(.medium))
+                                .foregroundStyle(isNow ? AnyShapeStyle(.primary) : AnyShapeStyle(NightTheme.secondaryLabel))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.7)
+                                .frame(width: nameWidth, alignment: .leading)
+                                .alignmentGuide(VerticalAlignment.center) { $0[.firstTextBaseline] - 4 }
+                            GeometryReader { proxy in
+                                let width = proxy.size.width
+                                ZStack(alignment: .leading) {
+                                    Capsule().fill(NightTheme.track)
+                                    ZStack(alignment: .leading) {
+                                        if isNow {
+                                            DashedFill(color: NightTheme.accent.opacity(0.45))
+                                                .frame(width: width * forecast / scale)
+                                                .clipShape(Capsule())
+                                        }
+                                        Capsule()
+                                            .fill(isNow ? NightTheme.accent : paceBarColor(today: true))
+                                            .frame(width: max(width * item.amount / scale, item.amount > 0 ? 3 : 0))
+                                    }
+                                    .scaleEffect(x: on ? 1 : 0.001, y: 1, anchor: .leading)
+                                    .animation(reduceMotion ? nil : growIn(delay: 0.1 + Double(index) * 0.06), value: on)
+                                }
+                            }
+                            .frame(height: 10)
+                            VStack(alignment: .trailing, spacing: 1) {
+                                Text(compactNumber(item.amount))
+                                    .font(.footnote.weight(.semibold))
+                                    .monospacedDigit()
+                                    .foregroundStyle(isNow ? AnyShapeStyle(.primary) : AnyShapeStyle(NightTheme.secondaryLabel))
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.7)
+                                if isNow, forecast > 0, compactNumber(forecast) != compactNumber(item.amount) {
+                                    Text("\u{2192} " + compactNumber(forecast))
+                                        .font(.caption2)
+                                        .monospacedDigit()
+                                        .foregroundStyle(NightTheme.secondaryLabel)
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.7)
+                                }
+                            }
+                            .frame(width: amountWidth, alignment: .trailing)
+                            .alignmentGuide(VerticalAlignment.center) { $0[.firstTextBaseline] - 4 }
+                        }
+                        .background {
+                            if isNow {
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .fill(NightTheme.iconFill)
+                                    .padding(.horizontal, -8)
+                                    .padding(.vertical, -6)
+                            }
                         }
                     }
                 }
-                if average > 0 {
-                    RuleMark(y: .value("Average", average))
-                        .foregroundStyle(Color(.systemGray2))
-                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                .overlay {
+                    if average > 0 {
+                        GeometryReader { proxy in
+                            let trackX = nameWidth + columnSpacing
+                            let trackWidth = max(proxy.size.width - trackX - columnSpacing - amountWidth, 0)
+                            let x = trackX + trackWidth * average / scale
+                            StraightLine(vertical: true)
+                                .stroke(NightTheme.window.opacity(0.75), style: StrokeStyle(lineWidth: 1.5, dash: [3, 3]))
+                                .frame(width: 2, height: proxy.size.height + 2)
+                                .position(x: x, y: proxy.size.height / 2 - 1)
+                        }
+                    }
                 }
-            }
-            .chartYAxis(.hidden)
-            .chartXAxis {
-                AxisMarks(values: .stride(by: .month)) { _ in
-                    AxisValueLabel(format: .dateTime.month(.abbreviated), centered: true)
-                        .font(.caption2)
+                .padding(.horizontal, 16)
+                .padding(.top, 14)
+                .padding(.bottom, 12)
+
+                HStack(spacing: 12) {
+                    paceKey("dash_legend_spent".localized) {
+                        RoundedRectangle(cornerRadius: 2).fill(NightTheme.accent).frame(width: 12, height: 8)
+                    }
+                    paceKey("dash_key_forecast".localized) {
+                        DashedFill(color: NightTheme.accent.opacity(0.6)).frame(width: 12, height: 8)
+                    }
+                    if average > 0 {
+                        paceKey(String(format: "dash_key_average_format".localized, compactMoney(average))) {
+                            Rectangle()
+                                .stroke(NightTheme.window.opacity(0.85), style: StrokeStyle(lineWidth: 1.5, dash: [2, 2]))
+                                .frame(width: 0.1, height: 10)
+                        }
+                    }
                 }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 14)
             }
-            .frame(height: 140)
-            .accessibilityLabel("dash_monthly_history".localized)
-            .accessibilityValue(history.map { "\($0.month.formatted(.dateTime.month(.wide))): \(CurrencyFormatter.formatFull($0.amount, currency: currency))" }.joined(separator: ", "))
+            .nightGroup()
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(([hasLead ? leadString(leadKey, leadArgs) : ""] + history.map { "\(monthName($0.month)): \(fullMoney($0.amount))" })
+                .filter { !$0.isEmpty }.joined(separator: ". "))
+            .onScrollVisibilityChange(threshold: 0.4) { visible in
+                if visible { monthsShown = true }
+            }
         }
-        .dashboardCard()
     }
 
-    // MARK: - Lists
+    /// Wide month name, capitalised. `short` gives English "Jun"; other languages keep the wide
+    /// name because their short forms read oddly (Uzbek).
+    private func monthName(_ date: Date, short: Bool = false) -> String {
+        let abbreviated = short && Locale.current.language.languageCode == .english
+        let name = date.formatted(.dateTime.month(abbreviated ? .abbreviated : .wide))
+        return name.prefix(1).uppercased() + name.dropFirst()
+    }
 
-    private var upcomingBillsCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            cardHeader("upcoming_bills".localized, actionTitle: "view_all".localized) {
+    // MARK: - Upcoming bills
+
+    private var upcomingBillsSection: some View {
+        let bills = Array(upcomingBills.prefix(3))
+        return VStack(alignment: .leading, spacing: 6) {
+            NightSectionHeader(title: "upcoming_bills".localized, actionTitle: "view_all".localized) {
                 tabManager.selectedTab = 2
             }
             VStack(spacing: 0) {
-                ForEach(Array(upcomingBills.prefix(3).enumerated()), id: \.element.id) { index, bill in
-                    let cat = dataManager.resolveCategory(id: bill.categoryId)
+                ForEach(Array(bills.enumerated()), id: \.element.id) { index, bill in
+                    if index > 0 { rowDivider }
+                    let category = dataManager.resolveCategory(id: bill.categoryId)
                     HStack(spacing: 12) {
-                        HeroIcon(systemName: cat.iconSystemName, size: 18)
-                            .foregroundStyle(cat.color)
-                            .frame(width: 34, height: 34)
-                            .background(cat.color.opacity(0.12), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        rowIcon(HeroIcon(systemName: category.iconSystemName, size: 17))
                         VStack(alignment: .leading, spacing: 2) {
                             Text(bill.title)
                                 .font(.subheadline.weight(.medium))
                                 .lineLimit(1)
                             Text(dueText(bill.nextDueDate))
                                 .font(.caption)
-                                .foregroundStyle(dueColor(bill.nextDueDate))
+                                .foregroundStyle(NightTheme.secondaryLabel)
                         }
-                        Spacer()
+                        Spacer(minLength: 8)
                         Text(money(bill.amount))
                             .font(.subheadline.weight(.semibold))
-                            .fontDesign(.rounded)
                             .monospacedDigit()
+                            .lineLimit(1)
                     }
-                    .padding(.vertical, 8)
-                    .accessibilityElement(children: .combine)
-                    if index < min(upcomingBills.count, 3) - 1 { Divider().padding(.leading, 46) }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .frame(minHeight: 44)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("\(bill.title), \(dueText(bill.nextDueDate)), \(fullMoney(bill.amount))")
                 }
             }
+            .nightGroup()
         }
-        .dashboardCard()
-    }
-
-    private var emptyMonthCard: some View {
-        Button {
-            showingAddExpense = true
-        } label: {
-            VStack(spacing: 12) {
-                HeroIcon("chart-bar", size: 30)
-                    .foregroundStyle(.secondary)
-                    .frame(width: 60, height: 60)
-                    .background(Color(.tertiarySystemFill), in: Circle())
-                VStack(spacing: 4) {
-                    Text((overview.recentExpenses.isEmpty ? "no_expenses_yet" : "dash_no_expenses_month").localized)
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-                    Text("dash_empty_month_hint".localized)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-                HStack(spacing: 6) {
-                    HeroIcon("plus", size: 15)
-                    Text("add_expense".localized)
-                }
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 18)
-                .frame(minHeight: 44)
-                .background(Color.accentColor, in: Capsule())
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
-        }
-        .buttonStyle(.plain)
-        .dashboardCard()
     }
 
     // MARK: - Helpers
 
-    private func cardHeader(_ title: String, actionTitle: String? = nil, action: (() -> Void)? = nil) -> some View {
-        HStack {
-            Text(title).font(.headline)
-            Spacer()
-            if let actionTitle, let action {
-                Button(actionTitle, action: action)
-                    .font(.subheadline.weight(.semibold))
-                    .padding(.horizontal, 12)
-                    .frame(minHeight: 36)
-                    .liquidGlassSurface(Capsule())
-                    .frame(minHeight: iOSDesignSystem.Size.minimumTapTarget)
-                    .contentShape(Rectangle())
-                    .liquidGlassButtonStyle()
-            }
-        }
+    private var rowDivider: some View {
+        Rectangle().fill(NightTheme.hair).frame(height: 1).padding(.leading, 60)
+    }
+
+    private func rowIcon<Icon: View>(_ icon: Icon) -> some View {
+        icon
+            .foregroundStyle(.primary)
+            .frame(width: 32, height: 32)
+            .background(NightTheme.iconFill, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .accessibilityHidden(true)
     }
 
     private func dueText(_ date: Date) -> String {
@@ -1073,18 +1297,155 @@ struct DashboardView: View {
                                            to: calendar.startOfDay(for: date)).day ?? 0
         return String(format: "due_in_days_format".localized, days)
     }
+}
 
-    private func dueColor(_ date: Date) -> Color {
-        (calendar.isDateInToday(date) || calendar.isDateInTomorrow(date)) ? .orange : .secondary
+/// A somsa stand beside the hero amount (mockup v11): the buyer walks in, hands a warm bill
+/// to the seller and gets a warm bag back, once each time the dashboard appears (~2.6 s).
+/// After that both people keep moving gently: the buyer breathes and swings the bag, the
+/// seller bobs and serves, and steam rises from the counter. Reduce Motion draws the end
+/// state with nothing moving. Decoration only.
+struct PayScene: View {
+    static let size = CGSize(width: 96, height: 30)
+    /// When the bill reaches the seller; the amount ticks down then.
+    static let billLands = 1.85
+    private static let duration = 2.6
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var start: Date?
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1 / 30, paused: reduceMotion || start == nil)) { tl in
+            let t = reduceMotion ? Self.duration : start.map { tl.date.timeIntervalSince($0) } ?? 0
+            Canvas { ctx, _ in draw(ctx, t: min(t, Self.duration), idle: max(t - Self.duration, 0)) }
+        }
+        .frame(width: Self.size.width, height: Self.size.height)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+        .onAppear { if start == nil { start = .now } }
+    }
+
+    private static func progress(_ t: Double, from: Double, length: Double) -> Double {
+        min(max((t - from) / length, 0), 1)
+    }
+
+    /// 0 at the start of the loop, rising to 1 and back over `period` seconds.
+    private static func wave(_ idle: Double, period: Double, phase: Double = 0) -> Double {
+        0.5 * (1 - cos(2 * .pi * (idle / period + phase)))
+    }
+
+    /// `t` drives the intro (clamped to its length); `idle` counts the seconds since it ended.
+    private func draw(_ ctx: GraphicsContext, t: Double, idle: Double) {
+        let ink = NightTheme.figure(colorScheme)
+        let warm = NightTheme.window
+        let dark = colorScheme == .dark
+        let roof = dark ? NightTheme.silver : Color(red: 127 / 255, green: 138 / 255, blue: 160 / 255)
+        let pole = Color(red: 127 / 255, green: 138 / 255, blue: 160 / 255)
+        let counter = dark ? Color(red: 42 / 255, green: 51 / 255, blue: 80 / 255) : NightTheme.ink.opacity(0.75)
+
+        // idle loop: eases in over 0.6 s so nothing jumps when the intro ends
+        let ramp = min(idle / 0.6, 1)
+        let buyerBob = 0.6 * Self.wave(idle, period: 2.4) * ramp
+        let sellerBob = 0.6 * Self.wave(idle, period: 2.4, phase: 0.35) * ramp
+        let bagSwing = sin(2 * .pi * idle / 1.6) * ramp
+        let serve = Self.wave(idle, period: 1.8) * ramp
+
+        // stand: striped awning, poles, seller behind the counter
+        ctx.fill(Path(roundedRect: CGRect(x: 64, y: 4, width: 30, height: 4), cornerRadius: 1), with: .color(roof))
+        for x in stride(from: 64.0, to: 94, by: 6) {
+            ctx.fill(Path(CGRect(x: x, y: 7.5, width: 3, height: 1)), with: .color(NightTheme.ink))
+        }
+        ctx.fill(Path(CGRect(x: 66, y: 8, width: 1.6, height: 8)), with: .color(pole))
+        ctx.fill(Path(CGRect(x: 90.4, y: 8, width: 1.6, height: 8)), with: .color(pole))
+        ctx.fill(Path(ellipseIn: CGRect(x: 77.4, y: 8.4 - sellerBob, width: 5.2, height: 5.2)), with: .color(ink))
+        ctx.fill(Path(CGRect(x: 77, y: 14 - sellerBob, width: 6, height: 4 + sellerBob)), with: .color(ink))
+        ctx.fill(Path(roundedRect: CGRect(x: 63, y: 17, width: 32, height: 12), cornerRadius: 1.5), with: .color(counter))
+        ctx.fill(Path(roundedRect: CGRect(x: 70, y: 20, width: 18, height: 2), cornerRadius: 1), with: .color(warm.opacity(0.85)))
+
+        // seller's arm: rests on the counter, rises and falls as if serving
+        var sellerArm = Path()
+        sellerArm.move(to: CGPoint(x: 77.6, y: 14.8 - sellerBob))
+        sellerArm.addLine(to: CGPoint(x: 74.6, y: 17 - 2.6 * serve))
+        ctx.stroke(sellerArm, with: .color(ink), style: StrokeStyle(lineWidth: 1.6, lineCap: .round))
+
+        // steam: small warm dots rising 6 pt from the warm strip and fading, staggered
+        if ramp > 0 {
+            for (index, x) in [71.5, 75.0, 85.5].enumerated() {
+                let p = (idle / 2 + Double(index) / 3).truncatingRemainder(dividingBy: 1)
+                let fade = p < 0.2 ? p / 0.2 : 1 - (p - 0.2) / 0.8
+                let drift = sin(p * .pi * 2 + Double(index)) * 0.6
+                ctx.fill(Path(ellipseIn: CGRect(x: x + drift - 0.9, y: 19 - 6 * p - 0.9, width: 1.8, height: 1.8)),
+                         with: .color(warm.opacity(0.8 * fade * ramp)))
+            }
+        }
+
+        // buyer walk-in progress (the bill travels with the buyer until it is handed over)
+        let w = Self.progress(t, from: 0.4, length: 0.9)
+        let we = 1 - pow(1 - w, 4)
+
+        // bill: in the buyer's hand, slides 18 pt to the seller, gone once it lands
+        let b = Self.progress(t, from: 1.3, length: 0.7)
+        if b < 1 {
+            let dx = (b < 0.75 ? 17 * (b / 0.75) : 17 + (b - 0.75) / 0.25) - 34 * (1 - we)
+            let alpha = (b < 0.75 ? 1 : 1 - (b - 0.75) / 0.25) * we
+            ctx.fill(Path(roundedRect: CGRect(x: 49 + dx, y: 13, width: 6, height: 3.6), cornerRadius: 0.6), with: .color(warm.opacity(alpha)))
+        }
+
+        // bag: on the counter, handed 20 pt to the buyer, then swings slightly in the hand
+        let g = Self.progress(t, from: 2.0, length: 0.6)
+        let ge = 1 - pow(1 - g, 4)
+        ctx.fill(Path(roundedRect: CGRect(x: 68 - 20 * ge + bagSwing, y: 15 + 2 * ge - buyerBob, width: 5, height: 6), cornerRadius: 1), with: .color(warm))
+
+        // buyer walks in 34 pt and fades in, then breathes (head, body and arm bob; feet stay)
+        var buyer = ctx
+        buyer.opacity = we
+        buyer.translateBy(x: -34 * (1 - we), y: 0)
+        let walking = w > 0 && w < 1
+        let swing = walking ? sin(t * 14) * 1.5 : 0
+        buyer.fill(Path(ellipseIn: CGRect(x: 41.4, y: 7.4 - buyerBob, width: 5.2, height: 5.2)), with: .color(ink))
+        var body = Path()
+        body.move(to: CGPoint(x: 42, y: 13 - buyerBob)); body.addLine(to: CGPoint(x: 46.5, y: 13 - buyerBob))
+        body.addLine(to: CGPoint(x: 47.5, y: 21)); body.addLine(to: CGPoint(x: 41, y: 21)); body.closeSubpath()
+        buyer.fill(body, with: .color(ink))
+        var legs = Path()
+        legs.move(to: CGPoint(x: 43, y: 21)); legs.addLine(to: CGPoint(x: 41 + swing, y: 29))
+        legs.move(to: CGPoint(x: 46, y: 21)); legs.addLine(to: CGPoint(x: 48 - swing, y: 29))
+        buyer.stroke(legs, with: .color(ink), style: StrokeStyle(lineWidth: 1.8, lineCap: .round))
+        var arm = Path()
+        arm.move(to: CGPoint(x: 46, y: 14 - buyerBob)); arm.addLine(to: CGPoint(x: 50, y: 15 - buyerBob))
+        buyer.stroke(arm, with: .color(ink), style: StrokeStyle(lineWidth: 1.6, lineCap: .round))
     }
 }
 
-private extension View {
-    func dashboardCard() -> some View {
-        self
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(iOSDesignSystem.Spacing.screenMargin)
-            .liquidGlassCard()
+/// A straight line through the middle of its frame, for dashed guide lines.
+private struct StraightLine: Shape {
+    var vertical = false
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        if vertical {
+            path.move(to: CGPoint(x: rect.midX, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
+        } else {
+            path.move(to: CGPoint(x: rect.minX, y: rect.midY))
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.midY))
+        }
+        return path
+    }
+}
+
+/// The bills share of the budget meter: short silver dashes.
+private struct DashedFill: View {
+    let color: Color
+
+    var body: some View {
+        Canvas { ctx, size in
+            var x = 0.0
+            while x < size.width {
+                ctx.fill(Path(CGRect(x: x, y: 0, width: min(4, size.width - x), height: size.height)), with: .color(color))
+                x += 7
+            }
+        }
     }
 }
 
@@ -1168,6 +1529,10 @@ struct DashboardOverview {
     let weekdayAverages: [WeekdaySpend]
     /// Days of history behind `weekdayAverages` (from the first recorded expense in the window).
     let weekdaySampleDays: Int
+    /// Same window as `weekdayAverages`: weekday (1 = Sunday … 7 = Saturday) → category → total.
+    let weekdayCategoryTotals: [Int: [UUID: Double]]
+    /// Same window: number of distinct days each category had an expense.
+    let categoryExpenseDays: [UUID: Int]
     /// This month's most expensive titles, highest first (max 5).
     let topTitles: [TitleSpend]
     /// This month's single largest expenses, highest first (max 5).
@@ -1189,6 +1554,136 @@ struct DashboardOverview {
         weekdayAverages
             .filter { $0.average > 0 }
             .max { $0.average < $1.average }
+    }
+
+    /// One written line of the weekly highlights card. `headlineKey` is a lead format whose
+    /// `**%@**` parts read bold.
+    struct WeeklyInsight: Identifiable, Equatable {
+        enum Kind: Hashable {
+            case peakDay, lightestDay, weekendRatio, peakDayCategory, categoryWeekday
+        }
+
+        let kind: Kind
+        /// SF Symbol or Heroicon name, resolved by `HeroIcon`.
+        let icon: String
+        let headlineKey: String
+        let headlineArgs: [String]
+        let caption: String
+        var id: Kind { kind }
+    }
+
+    /// Written highlights from the weekday window, in display order; each one only when its
+    /// data says something. `weekdayName` gets 1 = Sunday … 7 = Saturday and returns the
+    /// plural form used in the sentences ("Saturdays").
+    func weeklyInsights(
+        weekdayName: (Int) -> String,
+        money: (Double) -> String,
+        category: (UUID) -> (name: String, icon: String)
+    ) -> [WeeklyInsight] {
+        var insights: [WeeklyInsight] = []
+        let averages = Dictionary(uniqueKeysWithValues: weekdayAverages.map { ($0.weekday, $0.average) })
+        func average(_ weekday: Int) -> Double { averages[weekday] ?? 0 }
+        func percent(_ share: Double) -> String { share.formatted(.percent.precision(.fractionLength(0))) }
+        func topCategory(_ totals: [UUID: Double]) -> (id: UUID, amount: Double)? {
+            totals
+                .filter { $0.value > 0 }
+                .max { $0.value != $1.value ? $0.value < $1.value : $0.key.uuidString > $1.key.uuidString }
+                .map { ($0.key, $0.value) }
+        }
+
+        // 1. Peak day
+        let peak = peakWeekday
+        if let peak {
+            let others = (1...7).filter { $0 != peak.weekday }.map(average)
+            let othersMean = others.reduce(0, +) / Double(others.count)
+            let above = peak.average - othersMean
+            if above > 0 {
+                insights.append(WeeklyInsight(
+                    kind: .peakDay,
+                    icon: "flame.fill",
+                    headlineKey: "dash_week_peak_format",
+                    headlineArgs: [weekdayName(peak.weekday)],
+                    caption: String(format: "dash_week_peak_caption_format".localized, money(peak.average), money(above))
+                ))
+            }
+        }
+
+        // 2. Lightest day: lowest non-zero average, not the peak
+        if let peak, let light = weekdayAverages
+            .filter({ $0.average > 0 && $0.weekday != peak.weekday && $0.average < peak.average })
+            .min(by: { $0.average < $1.average }) {
+            insights.append(WeeklyInsight(
+                kind: .lightestDay,
+                icon: "arrow-trending-down",
+                headlineKey: "dash_week_light_format",
+                headlineArgs: [weekdayName(light.weekday)],
+                caption: String(format: "dash_week_light_caption_format".localized, money(light.average))
+            ))
+        }
+
+        // 3. Weekends (Sat + Sun) against weekdays (Mon–Fri), per day
+        let weekend = (average(7) + average(1)) / 2
+        let workdays = (2...6).map(average).reduce(0, +) / 5
+        if weekend > 0, workdays > 0 {
+            let ratio = weekend / workdays
+            if ratio < 0.9 || ratio > 1.1 {
+                let more = ratio > 1
+                let times = (more ? ratio : workdays / weekend).formatted(.number.precision(.fractionLength(1)))
+                insights.append(WeeklyInsight(
+                    kind: .weekendRatio,
+                    icon: "calendar",
+                    headlineKey: more ? "dash_week_weekend_more_format" : "dash_week_weekend_less_format",
+                    headlineArgs: [String(format: "dash_week_times_format".localized, times)],
+                    caption: String(format: "dash_week_weekend_caption_format".localized, money(weekend), money(workdays))
+                ))
+            }
+        }
+
+        // 4. The category that takes most of the peak day
+        var peakPair: (category: UUID, weekday: Int)?
+        if let peak, let totals = weekdayCategoryTotals[peak.weekday], let top = topCategory(totals) {
+            let dayTotal = totals.values.reduce(0, +)
+            let share = dayTotal > 0 ? top.amount / dayTotal : 0
+            if share >= 0.25 {
+                let info = category(top.id)
+                peakPair = (top.id, peak.weekday)
+                insights.append(WeeklyInsight(
+                    kind: .peakDayCategory,
+                    icon: info.icon,
+                    headlineKey: "dash_week_day_category_format",
+                    headlineArgs: [weekdayName(peak.weekday), info.name],
+                    caption: String(format: "dash_week_day_category_caption_format".localized, percent(share))
+                ))
+            }
+        }
+
+        // 5. A category that leans on one weekday
+        var best: (category: UUID, weekday: Int, share: Double)?
+        for (categoryID, days) in categoryExpenseDays where days >= 4 {
+            let byWeekday = (1...7).map { ($0, weekdayCategoryTotals[$0]?[categoryID] ?? 0) }
+            let total = byWeekday.reduce(0) { $0 + $1.1 }
+            guard total > 0, let top = byWeekday.max(by: { $0.1 < $1.1 }) else { continue }
+            let share = top.1 / total
+            if let current = best {
+                let better = share > current.share
+                    || (share == current.share && categoryID.uuidString < current.category.uuidString)
+                if !better { continue }
+            }
+            best = (categoryID, top.0, share)
+        }
+        if let best, best.share >= 0.3,
+           !(peakPair?.category == best.category && peakPair?.weekday == best.weekday) {
+            let info = category(best.category)
+            insights.append(WeeklyInsight(
+                kind: .categoryWeekday,
+                icon: info.icon,
+                headlineKey: "dash_week_category_day_format",
+                headlineArgs: [info.name, weekdayName(best.weekday)],
+                caption: String(format: "dash_week_category_day_caption_format".localized, percent(best.share))
+            ))
+        }
+
+        return insights
     }
 
     /// Spending so far minus an even spread of `monthlyIncome` through today.
@@ -1267,6 +1762,20 @@ struct DashboardOverview {
                 day = next
             }
         }
+        // Same window, split by category, for the weekly highlights.
+        var weekdayCategories = [Int: [UUID: Double]]()
+        var categoryDays = [UUID: Set<Date>]()
+        if let firstRecorded {
+            for expense in past {
+                let day = calendar.startOfDay(for: expense.date)
+                guard day >= firstRecorded, day <= today else { continue }
+                let weekday = calendar.component(.weekday, from: day)
+                weekdayCategories[weekday, default: [:]][expense.categoryId, default: 0] += expense.amount
+                categoryDays[expense.categoryId, default: []].insert(day)
+            }
+        }
+        weekdayCategoryTotals = weekdayCategories
+        categoryExpenseDays = categoryDays.mapValues(\.count)
         weekdaySampleDays = sampleDays
         weekdayAverages = (0..<7).map { offset in
             let weekday = (calendar.firstWeekday - 1 + offset) % 7 + 1
