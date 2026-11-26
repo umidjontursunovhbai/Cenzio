@@ -218,7 +218,11 @@ struct AddExpenseView: View {
                 } header: {
                     StreetSectionHeader(title: "expense_details".localized, figure: .cyclist)
                 }
+                .listRowBackground(NightTheme.glassFill)
             }
+            // dashboard look: flat dark ground with clear glass rows in dark mode
+            .scrollContentBackground(.hidden)
+            .background(NightGround())
             .safeAreaInset(edge: .bottom, spacing: 0) { saveBar }
             .scrollDismissesKeyboard(.interactively)
             .scrollIndicators(.hidden)
@@ -268,8 +272,7 @@ struct AddExpenseView: View {
         }
     }
 
-    /// The mini city (hidden while typing and at accessibility text sizes) and the Save capsule
-    /// with the shopper standing on it.
+    /// The mini city (hidden while typing and at accessibility text sizes) and the Save capsule.
     private var saveBar: some View {
         VStack(spacing: 0) {
             if focusedField == nil && !typeSize.isAccessibilitySize {
@@ -282,13 +285,12 @@ struct AddExpenseView: View {
                 .buttonStyle(PrimaryCapsuleButtonStyle())
                 // stays bright during the save moment; saveExpense ignores repeat taps
                 .disabled(!canSave && !saved)
-                .kerbFigure(.shopper, inset: 40, height: 26, turned: saved)
                 .accessibilityIdentifier("expense.save")
                 .padding(.horizontal, 28)
                 .padding(.top, focusedField == nil ? 0 : 30)
                 .padding(.bottom, 10)
         }
-        .background(Color(.systemGroupedBackground))
+        .background(NightGround())
     }
 
     private let calendar = Calendar.current
