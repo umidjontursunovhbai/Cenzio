@@ -76,6 +76,8 @@ struct CurrencySelectionView: View {
                 }
             }
             .listStyle(.insetGrouped)
+            .scrollContentBackground(.hidden)
+            .background(NightGround())
             .navigationTitle("currency".localized)
             .navigationBarTitleDisplayMode(.inline)
             .searchable(
@@ -89,6 +91,7 @@ struct CurrencySelectionView: View {
                 }
             }
         }
+        .tint(NightTheme.accent)
     }
 }
 
@@ -111,7 +114,7 @@ struct CurrencyRowView: View {
                 Spacer()
 
                 Text(currency.rawValue)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(NightTheme.secondaryLabel)
 
                 if isSelected {
                     HeroIcon(systemName: "checkmark")
@@ -122,6 +125,8 @@ struct CurrencyRowView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .listRowBackground(NightTheme.glassFill)
+        .listRowSeparatorTint(NightTheme.hair)
     }
 }
 
