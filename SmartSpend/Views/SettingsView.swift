@@ -281,7 +281,7 @@ struct SettingsView: View {
                 }
             }
         } header: {
-            StreetSectionHeader(title: "settings_your_data".localized, figure: .snacker, loops: true, reach: 0.30)
+            StreetSectionHeader(title: "settings_your_data".localized, figure: .snacker, loops: true, reach: 0.45)
         }
     }
 
