@@ -275,6 +275,9 @@ struct StreetLoopView: View {
     @State private var lowPower = ProcessInfo.processInfo.isLowPowerModeEnabled
     @State private var clock = StreetClock()
 
+    /// The lamp beside the cyclist is drawn this many times the row height.
+    static let lampGrow: CGFloat = 1.8
+
     private var still: Bool { reduceMotion || lowPower }
     private var paused: Bool { still || scrolling || !visible || scenePhase != .active }
 
@@ -290,16 +293,8 @@ struct StreetLoopView: View {
             TimelineView(.animation(minimumInterval: 1.0 / 24, paused: paused)) { tl in
                 let t = paused ? clock.t : clock.tick(tl.date)
                 Canvas { ctx, _ in
-                    let lampBox = StreetFigure.lamp.box
-                    let lampScale = height / lampBox.height
-                    let lampW = lamp ? lampBox.width * lampScale : 0
-                    if lamp {
-                        var l = ctx
-                        l.translateBy(x: max(0, lane - lampW), y: 0)
-                        l.scaleBy(x: lampScale, y: lampScale)
-                        l.translateBy(x: -lampBox.minX, y: -lampBox.minY)
-                        StreetCast.lamp(l, color: ink)
-                    }
+                    // the cyclist's turning point stays where it was with the small lamp
+                    let lampW = lamp ? StreetFigure.lamp.box.width * height / StreetFigure.lamp.box.height : 0
                     var c = ctx
                     let w = box.width * scale
                     let (x, dir) = position(t: t, lane: lane - lampW * 0.6, width: w)
@@ -311,6 +306,16 @@ struct StreetLoopView: View {
                     c.scaleBy(x: scale, y: scale)
                     c.translateBy(x: -box.minX, y: -box.minY)
                     draw(c, color: ink, t: t, dir: dir)
+                }
+            }
+            .overlay(alignment: .bottomLeading) {
+                if lamp {
+                    // drawn taller than the header row; it overflows upward and does not change the layout
+                    let lampBox = StreetFigure.lamp.box
+                    let small = lampBox.width * height / lampBox.height
+                    let tall = height * Self.lampGrow
+                    StreetFigureView(figure: .lamp, height: tall, color: color)
+                        .offset(x: max(0, lane - small) + small / 2 - lampBox.width * tall / lampBox.height / 2)
                 }
             }
             .onChange(of: paused) { _, isPaused in if isPaused { clock.last = nil } }
