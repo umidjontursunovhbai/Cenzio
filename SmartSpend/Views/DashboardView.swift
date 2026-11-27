@@ -1323,7 +1323,9 @@ struct PayScene: View {
     var body: some View {
         TimelineView(.animation(minimumInterval: 1 / 30, paused: reduceMotion || start == nil)) { tl in
             let e = reduceMotion ? Self.duration : start.map { tl.date.timeIntervalSince($0) } ?? 0
-            Canvas { ctx, _ in draw(ctx, t: Self.pingPong(e), idle: max(e - Self.duration, 0), fadesIn: e < Self.duration) }
+            let (t, back) = Self.pingPong(e)
+            let facing = e < Self.duration ? 1 : Self.facing(t, back: back)
+            Canvas { ctx, _ in draw(ctx, t: t, idle: max(e - Self.duration, 0), fadesIn: e < Self.duration, facing: facing) }
         }
         .frame(width: Self.size.width, height: Self.size.height)
         .allowsHitTesting(false)
@@ -1337,13 +1339,23 @@ struct PayScene: View {
 
     /// Scene time for `elapsed` seconds: forward, hold, backward, hold, repeat. Every step of
     /// the scene eases out at its end and nothing moves at t = 0, so the turns do not jump.
-    private static func pingPong(_ elapsed: Double) -> Double {
+    /// `back` is true while the scene plays in reverse.
+    private static func pingPong(_ elapsed: Double) -> (t: Double, back: Bool) {
         let period = 2 * duration + holdEnd + holdStart
         let u = elapsed.truncatingRemainder(dividingBy: period)
-        if u < duration { return u }
-        if u < duration + holdEnd { return duration }
-        if u < 2 * duration + holdEnd { return 2 * duration + holdEnd - u }
-        return 0
+        if u < duration { return (u, false) }
+        if u < duration + holdEnd { return (duration, false) }
+        if u < 2 * duration + holdEnd { return (2 * duration + holdEnd - u, true) }
+        return (0, false)
+    }
+
+    /// Which way the buyer faces: 1 = toward the stall, -1 = away. The buyer turns (a quick 0.15-0.2 s
+    /// horizontal flip) while standing still: at the stall before walking away (scene time
+    /// 1.45 -> 1.3 on the way back), and at the left end before walking in again (0.15 -> 0.35).
+    private static func facing(_ t: Double, back: Bool) -> Double {
+        let k = back ? (t - 1.3) / 0.15 : (t - 0.15) / 0.2
+        let c = min(max(k, 0), 1)
+        return -1 + 2 * c * c * (3 - 2 * c)
     }
 
     /// 0 at the start of the loop, rising to 1 and back over `period` seconds.
@@ -1354,7 +1366,10 @@ struct PayScene: View {
     /// `t` drives the intro (clamped to its length); `idle` counts the seconds since it ended.
     /// `fadesIn` is true only on the first pass; after that the buyer stays visible and walks
     /// backwards out to the left end and in again instead of fading away.
-    private func draw(_ ctx: GraphicsContext, t: Double, idle: Double, fadesIn: Bool) {
+    private func draw(_ ctx: GraphicsContext, t: Double, idle: Double, fadesIn: Bool, facing: Double) {
+        // mirror around the buyer's middle; never fully flat mid-turn
+        let flip = facing < 0 ? min(facing, -0.15) : max(facing, 0.15)
+        let buyerMid = 44.5
         let ink = NightTheme.figure(colorScheme)
         let warm = NightTheme.window
         let dark = colorScheme == .dark
@@ -1405,9 +1420,13 @@ struct PayScene: View {
         // bill: in the buyer's hand, slides 18 pt to the seller, gone once it lands
         let b = Self.progress(t, from: 1.3, length: 0.7)
         if b < 1 {
-            let dx = (b < 0.75 ? 17 * (b / 0.75) : 17 + (b - 0.75) / 0.25) - 34 * (1 - we)
+            let slide = b < 0.75 ? 17 * (b / 0.75) : 17 + (b - 0.75) / 0.25
+            let shift = -34 * (1 - we)
             let alpha = (b < 0.75 ? 1 : 1 - (b - 0.75) / 0.25) * (fadesIn ? we : 1)
-            ctx.fill(Path(roundedRect: CGRect(x: 49 + dx, y: 13, width: 6, height: 3.6), cornerRadius: 0.6), with: .color(warm.opacity(alpha)))
+            // turns with the buyer while in the hand, then slides toward the seller
+            let rel = 49 + 3 - buyerMid
+            let mid = buyerMid + shift + flip * rel + slide
+            ctx.fill(Path(roundedRect: CGRect(x: mid - 3, y: 13, width: 6, height: 3.6), cornerRadius: 0.6), with: .color(warm.opacity(alpha)))
         }
 
         // bag: on the counter, handed 20 pt to the buyer, then swings slightly in the hand
@@ -1418,7 +1437,9 @@ struct PayScene: View {
         // buyer walks in 34 pt and fades in, then breathes (head, body and arm bob; feet stay)
         var buyer = ctx
         buyer.opacity = fadesIn ? we : 1
-        buyer.translateBy(x: -34 * (1 - we), y: 0)
+        buyer.translateBy(x: -34 * (1 - we) + buyerMid, y: 0)
+        buyer.scaleBy(x: flip, y: 1)
+        buyer.translateBy(x: -buyerMid, y: 0)
         let walking = w > 0 && w < 1
         let swing = walking ? sin(t * 14) * 1.5 : 0
         buyer.fill(Path(ellipseIn: CGRect(x: 41.4, y: 7.4 - buyerBob, width: 5.2, height: 5.2)), with: .color(ink))
