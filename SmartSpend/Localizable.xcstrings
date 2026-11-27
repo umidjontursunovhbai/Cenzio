@@ -653,6 +653,29 @@
         }
       }
     },
+    "clear_data_confirm_auth_message": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This can't be undone on this iPhone. Face ID or your passcode is needed to delete."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Это нельзя отменить на этом iPhone. Для удаления нужен Face ID или код-пароль."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Buni bu iPhone’da qaytarib bo‘lmaydi. O‘chirish uchun Face ID yoki parol kerak."
+          }
+        }
+      }
+    },
     "clear_data_footer": {
       "extractionState": "manual",
       "localizations": {
@@ -660,6 +683,29 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nimani o‘chirishni tanlang. Face ID yoki parol buni tasdiqlaydi."
+          }
+        }
+      }
+    },
+    "clear_data_footer_choose": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose what to delete."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выберите, что удалить."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nimani o‘chirishni tanlang."
           }
         }
       }
