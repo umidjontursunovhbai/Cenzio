@@ -359,7 +359,7 @@ struct AddExpenseView: View {
 // MARK: - Category menu
 
 /// Category row that opens a native pop-up menu, built like the Appearance menu in Settings,
-/// with a "Create New Category" action under the list. Shared by Add expense and Edit expense.
+/// with a "Create New Category" action under the list. Shared by Add expense, Edit expense and the recurring form.
 struct CategoryMenuRow: View {
     let categories: [UserCategory]
     @Binding var selectedID: UUID?
@@ -413,64 +413,6 @@ struct CategoryMenuRow: View {
         }
         .buttonStyle(.plain)
         .accessibilityValue(selected?.name ?? "select_category".localized)
-    }
-}
-
-// MARK: - Category tiles
-
-/// Category tiles in a 3-column grid: icon in its color on a soft tile, name under it.
-/// The chosen one gets an accent ring; the last tile creates a new category.
-/// Shared by Add expense and Edit expense.
-struct CategoryTileGrid: View {
-    let categories: [UserCategory]
-    let selectedID: UUID?
-    let onSelect: (UserCategory) -> Void
-    let onCreate: () -> Void
-
-    var body: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
-            ForEach(categories) { category in
-                let isSelected = category.id == selectedID
-                Button {
-                    onSelect(category)
-                } label: {
-                    tile(icon: category.iconSystemName, title: category.name,
-                         tint: category.color, selected: isSelected)
-                }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(isSelected ? .isSelected : [])
-            }
-            Button(action: onCreate) {
-                tile(icon: "plus.circle", title: "create_new_category".localized,
-                     tint: .secondary, selected: false)
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.vertical, 4)
-        .transition(.opacity.combined(with: .move(edge: .top)))
-    }
-
-    private func tile(icon: String, title: String, tint: Color, selected: Bool) -> some View {
-        VStack(spacing: 6) {
-            HeroIcon(systemName: icon, size: 18)
-                .foregroundStyle(tint)
-                .frame(width: 34, height: 34)
-                .background(tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            Text(title)
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.primary)
-                .lineLimit(2)
-                .multilineTextAlignment(.center)
-                .minimumScaleFactor(0.8)
-        }
-        .frame(maxWidth: .infinity, minHeight: 78)
-        .padding(.horizontal, 4)
-        .background(NightTheme.iconFill, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(selected ? NightTheme.accent : .clear, lineWidth: 1.5)
-        )
-        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 }
 

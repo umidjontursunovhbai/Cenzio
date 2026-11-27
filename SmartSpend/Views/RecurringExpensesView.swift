@@ -115,10 +115,10 @@ struct RecurringExpensesView: View {
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(.hidden, for: .navigationBar)
-            .sheet(isPresented: $showingAddRecurring) {
+            .fullScreenCover(isPresented: $showingAddRecurring) {
                 AddRecurringExpenseView()
             }
-            .sheet(item: $selectedRecurring) { recurring in
+            .fullScreenCover(item: $selectedRecurring) { recurring in
                 EditRecurringExpenseView(recurringExpense: recurring)
             }
             .confirmationDialog(
