@@ -496,6 +496,8 @@ extension String {
             "budget_row_spent_of": "%@ of %@",
             "budget_row_left": "%@ left",
             "budget_row_over": "%@ over",
+            "budget_set_limit": "Set limit",
+            "budget_more_actions": "More",
             "budget_goals_section": "Spending goals",
             "budget_goals_section_caption": "Long-term targets that count every expense in a category.",
             "budget_add_goal": "Add goal",

@@ -49,7 +49,7 @@ struct BudgetProgressBar: View {
             let clamped = min(max(progress, 0), 1)
             ZStack(alignment: .leading) {
                 Capsule()
-                    .fill(Color(.systemGray5))
+                    .fill(NightTheme.track)
                 Capsule()
                     .fill(tint)
                     .frame(width: clamped > 0 ? max(proxy.size.width * clamped, height) : 0)
@@ -80,7 +80,7 @@ struct BudgetGoalsInfoContent: View {
             InfoPopupSection("budget_info_why_title".localized, index: 0) {
                 Text("budget_info_why_body".localized)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(NightTheme.secondaryLabel)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -95,14 +95,14 @@ struct BudgetGoalsInfoContent: View {
             InfoPopupSection("budget_info_states_title".localized, index: 2) {
                 VStack(alignment: .leading, spacing: 0) {
                     statusRow(.onTrack, rule: "budget_info_state_on_track".localized, progress: 0.5)
-                    Divider().padding(.leading, 26)
+                    Divider().overlay(NightTheme.hair).padding(.leading, 26)
                     statusRow(.nearLimit, rule: "budget_info_state_near".localized, progress: 0.86)
-                    Divider().padding(.leading, 26)
+                    Divider().overlay(NightTheme.hair).padding(.leading, 26)
                     statusRow(.overBudget, rule: "budget_info_state_over".localized, progress: 1)
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 4)
-                .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .background(NightTheme.glassFill, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
 
             if let example {
@@ -113,7 +113,7 @@ struct BudgetGoalsInfoContent: View {
             InfoPopupSection("budget_info_alerts_title".localized, index: 4) {
                 Text("budget_info_alerts_body".localized)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(NightTheme.secondaryLabel)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -129,9 +129,9 @@ struct BudgetGoalsInfoContent: View {
     private func bullet(icon: String, text: String) -> some View {
         HStack(alignment: .top, spacing: 12) {
             HeroIcon(icon, size: 17)
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(NightTheme.accent)
                 .frame(width: 30, height: 30)
-                .background(Color.accentColor.opacity(0.1), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .background(NightTheme.accent.opacity(0.1), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
                 .accessibilityHidden(true)
             Text(text)
                 .font(.subheadline)
@@ -161,7 +161,7 @@ struct BudgetGoalsInfoContent: View {
                 }
                 Text(rule)
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(NightTheme.secondaryLabel)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -186,7 +186,7 @@ struct BudgetGoalsInfoContent: View {
                 Spacer(minLength: 8)
                 Text(limitText)
                     .font(.subheadline.weight(.semibold).monospacedDigit())
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(NightTheme.secondaryLabel)
                     .lineLimit(1)
             }
 
@@ -198,7 +198,7 @@ struct BudgetGoalsInfoContent: View {
 
             Text("budget_info_example".localized(with: example.name, limitText, warningText))
                 .font(.footnote)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(NightTheme.secondaryLabel)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(14)
