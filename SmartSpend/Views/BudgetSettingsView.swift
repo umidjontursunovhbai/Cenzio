@@ -8,8 +8,6 @@ struct BudgetSettingsView: View {
     @State private var showingAddGoal = false
     @State private var showingResetConfirmation = false
     @State private var showingInfo = false
-    /// Drives the staggered reveal of the inline info sections after the card is inserted.
-    @State private var infoContentVisible = false
     /// Category whose limit is being edited in the small sheet.
     @State private var editingCategory: UserCategory?
 
@@ -64,22 +62,9 @@ struct BudgetSettingsView: View {
                 ScrollViewReader { proxy in
                     ScrollView {
                         VStack(spacing: 28) {
-                            // Fixed scroll target above the animated info, so opening it never overshoots under the bar.
-                            Color.clear.frame(height: 0).id(Self.pageTopID)
-                            if showingInfo {
-                                inlineInfoCard
-                                    .id(Self.infoCardID)
-                                    .transition(.asymmetric(
-                                        insertion: .move(edge: .top).combined(with: .opacity),
-                                        removal: .opacity.combined(with: .scale(scale: 0.96, anchor: .top))
-                                    ))
-                            }
-                            // The info replaces the page while open, so only the info is shown.
-                            if !showingInfo {
-                                monthlyOverview(currentMonthSpent: spentThisMonth)
-                                categoryBudgetsSection(spendingByCategory: spendingByCategory)
-                                spendingGoalsSection
-                            }
+                            monthlyOverview(currentMonthSpent: spentThisMonth)
+                            categoryBudgetsSection(spendingByCategory: spendingByCategory)
+                            spendingGoalsSection
                         }
                         .padding(.horizontal, iOSDesignSystem.Spacing.screenMargin)
                         .padding(.top, 8)
@@ -90,12 +75,6 @@ struct BudgetSettingsView: View {
                     .onAppear {
                         scrollToFocusedCategory(using: proxy)
                     }
-                    .onChange(of: showingInfo) { _, isShowing in
-                        guard isShowing else { return }
-                        withAnimation(.snappy(duration: 0.35)) {
-                            proxy.scrollTo(Self.pageTopID, anchor: .top)
-                        }
-                    }
                 }
             }
             .navigationTitle("budget_goals".localized)
@@ -104,24 +83,18 @@ struct BudgetSettingsView: View {
             .toolbar {
                 // Trailing: the leading side holds the system back button.
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(action: presentInfo) {
+                    Button { showingInfo = true } label: {
                         // The bar already draws the glass circle, so no extra circle here
                         // and a plain "i" instead of a circled one.
-                        Group {
-                            if showingInfo {
-                                HeroIcon("x-mark", size: 20)
-                            } else {
-                                Image(systemName: "info")
-                                    .font(.system(size: 18, weight: .semibold))
-                            }
-                        }
+                        Image(systemName: "info")
+                            .font(.system(size: 18, weight: .semibold))
                         .foregroundStyle(NightTheme.accent)
                         .frame(width: iOSDesignSystem.Size.minimumTapTarget,
                                height: iOSDesignSystem.Size.minimumTapTarget)
                         .contentShape(Circle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(showingInfo ? "close".localized : "budget_info_title".localized)
+                    .accessibilityLabel("budget_info_title".localized)
                     .accessibilityIdentifier("budgetGoals.infoButton")
                 }
                 ToolbarItem(placement: .topBarTrailing) {
@@ -146,6 +119,10 @@ struct BudgetSettingsView: View {
                     .accessibilityLabel("budget_more_actions".localized)
                     .accessibilityIdentifier("budgetGoals.more")
                 }
+            }
+            // Its own page in the same stack: back returns to Budget goals.
+            .navigationDestination(isPresented: $showingInfo) {
+                BudgetGoalsInfoPage(example: infoExample, currency: dataManager.user.currency)
             }
             .sheet(isPresented: $showingAddGoal) {
                 AddSpendingGoalView()
@@ -175,52 +152,6 @@ struct BudgetSettingsView: View {
             }
         }
         .tint(NightTheme.accent)
-    }
-
-    private static let pageTopID = "page.top"
-    private static let infoCardID = "budgetGoals.inlineInfo"
-
-    /// Opens or closes the info card inside the page instead of a separate popup.
-    private func presentInfo() {
-        if showingInfo {
-            infoContentVisible = false
-            withAnimation(.snappy(duration: 0.3)) { showingInfo = false }
-        } else {
-            withAnimation(.spring(response: 0.45, dampingFraction: 0.86)) { showingInfo = true }
-        }
-    }
-
-    private var inlineInfoCard: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(spacing: 10) {
-                HeroIcon("chart-pie", size: 18)
-                    .foregroundStyle(NightTheme.accent)
-                    .frame(width: 34, height: 34)
-                    .background(NightTheme.accent.opacity(0.1), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    .accessibilityHidden(true)
-                Text("budget_info_title".localized)
-                    .font(.headline)
-                Spacer()
-                Button(action: presentInfo) {
-                    HeroIcon("x-mark", size: 16)
-                        .foregroundStyle(NightTheme.secondaryLabel)
-                        .frame(width: 30, height: 30)
-                        .background(NightTheme.iconFill, in: Circle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("close".localized)
-            }
-
-            BudgetGoalsInfoContent(
-                example: infoExample,
-                currency: dataManager.user.currency
-            )
-            .environment(\.infoPopupIsVisible, infoContentVisible)
-        }
-        // No card behind it: the glass background showed as a box while the sections animated in.
-        .padding(.horizontal, 4)
-        .padding(.top, 4)
-        .onAppear { infoContentVisible = true }
     }
 
     // MARK: - Overview

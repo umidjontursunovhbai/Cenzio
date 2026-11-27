@@ -16,31 +16,13 @@ struct DataImportView: View {
     @State private var alertMessage = ""
     @State private var showingConfirmation = false
     @State private var showingFormatInfo = false
-    /// Drives the staggered reveal of the inline guide after it is inserted.
-    @State private var formatInfoVisible = false
-    private static let pageTopID = "page.top"
-    private static let formatInfoID = "import.inlineInfo"
     
     var body: some View {
         Group { // pushed from Settings: the Settings stack gives the back button
             ZStack {
             NightGround()
-            ScrollViewReader { proxy in
             ScrollView {
             VStack(spacing: 20) {
-                // Fixed scroll target above the animated info, so opening it never overshoots under the bar.
-                Color.clear.frame(height: 0).id(Self.pageTopID)
-                if showingFormatInfo {
-                    inlineFormatInfo
-                        .id(Self.formatInfoID)
-                        .transition(.asymmetric(
-                            insertion: .move(edge: .top).combined(with: .opacity),
-                            removal: .opacity.combined(with: .scale(scale: 0.96, anchor: .top))
-                        ))
-                }
-
-                // The guide replaces the page while open, so the two never look joined.
-                if !showingFormatInfo {
                 // Header
                 VStack(spacing: 12) {
                     HeroIcon(systemName: "square.and.arrow.down")
@@ -79,29 +61,23 @@ struct DataImportView: View {
                 if selectedFileURL != nil && previewData != nil {
                     importButton
                 }
-                }
             }
             .padding()
-            }
-            .onChange(of: showingFormatInfo) { _, isShowing in
-                guard isShowing else { return }
-                withAnimation(.snappy(duration: 0.35)) {
-                    proxy.scrollTo(Self.pageTopID, anchor: .top)
-                }
-            }
             }
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(action: toggleFormatInfo) {
-                        HeroIcon(showingFormatInfo ? "x-mark" : "information-circle")
+                    Button { showingFormatInfo = true } label: {
+                        HeroIcon("information-circle")
                     }
-                    .accessibilityLabel(showingFormatInfo ? "close".localized : "csv_format_guide".localized)
+                    .accessibilityLabel("csv_format_guide".localized)
                     .accessibilityIdentifier("import.infoButton")
                 }
 
             }
+            // Its own page in the same stack: back returns here, not to Settings.
+            .navigationDestination(isPresented: $showingFormatInfo) { CSVFormatGuidePage() }
             .sheet(isPresented: $showingFilePicker) {
                 DocumentPicker(selectedURL: $selectedFileURL, onFileSelected: handleFileSelection)
             }
@@ -128,38 +104,6 @@ struct DataImportView: View {
         .tint(NightTheme.accent)
     }
 
-    /// Opens or closes the CSV guide inside the page instead of a separate popup.
-    private func toggleFormatInfo() {
-        if showingFormatInfo {
-            formatInfoVisible = false
-            withAnimation(.snappy(duration: 0.3)) { showingFormatInfo = false }
-        } else {
-            withAnimation(.spring(response: 0.45, dampingFraction: 0.86)) { showingFormatInfo = true }
-        }
-    }
-
-    private var inlineFormatInfo: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(spacing: 10) {
-                HeroIcon("document-text", size: 18)
-                    .foregroundStyle(NightTheme.accent)
-                    .frame(width: 34, height: 34)
-                    .background(NightTheme.accent.opacity(0.1), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    .accessibilityHidden(true)
-                Text("csv_format_guide".localized)
-                    .font(.headline)
-                Spacer()
-            }
-
-            CSVFormatInfoView()
-                .environment(\.infoPopupIsVisible, formatInfoVisible)
-        }
-        .padding(.horizontal, 4)
-        .padding(.top, 4)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .onAppear { formatInfoVisible = true }
-    }
-    
     // MARK: - View Components
     
     private var fileSelectionView: some View {
@@ -410,140 +354,164 @@ struct DocumentPicker: UIViewControllerRepresentable {
     }
 }
 
-// MARK: - CSV Format Info (popup body)
+// MARK: - CSV format guide page
 
-/// Body of the CSV format guide shown in `infoPopup` on the import screen.
-struct CSVFormatInfoView: View {
+/// The CSV format guide, pushed from the import screen's info button.
+struct CSVFormatGuidePage: View {
+    /// Header names the importer accepts for each field (matched case-insensitively, in English).
+    private let customFields: [(field: String, names: [String])] = [
+        ("column_title".localized, ["Title", "Name", "Description"]),
+        ("column_amount".localized, ["Amount", "Price", "Cost"]),
+        ("column_date".localized, ["Date"]),
+        ("column_category".localized, ["Category", "Type"])
+    ]
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Text("csv_format_subtitle".localized)
-                .font(.subheadline)
-                .foregroundStyle(NightTheme.secondaryLabel)
-                .fixedSize(horizontal: false, vertical: true)
-                .infoPopupStaggered(0)
-
-            formatCard(
-                title: "smartspend_format".localized,
-                icon: "check-badge",
-                color: NightTheme.accent,
-                description: "smartspend_format_desc".localized,
-                columns: [
-                    ("column_date".localized, "required".localized),
-                    ("column_title".localized, "required".localized),
-                    ("column_amount".localized, "required".localized),
-                    ("column_category".localized, "required".localized)
-                ],
-                example: "Date,Title,Amount,Category"
-            )
-            .infoPopupStaggered(1)
-
-            formatCard(
-                title: "custom_format".localized,
-                icon: "adjustments-horizontal",
-                color: NightTheme.accent,
-                description: "custom_format_desc".localized,
-                columns: [
-                    ("column_title_name_description".localized, "any_of_these".localized),
-                    ("column_amount_price_cost".localized, "any_of_these".localized),
-                    ("column_date".localized, "required".localized),
-                    ("column_category_type".localized, "any_of_these".localized)
-                ],
-                example: "Description,Price,Date,Type"
-            )
-            .infoPopupStaggered(2)
-
-            InfoPopupSection("tips_title".localized, index: 3) {
+        InfoPage(title: "csv_format_guide".localized, lead: "csv_format_subtitle".localized) {
+            InfoPageSection("smartspend_format".localized, note: "smartspend_format_desc".localized) {
                 VStack(alignment: .leading, spacing: 8) {
-                    tipRow("tip_case_insensitive".localized)
-                    tipRow("tip_date_formats".localized)
-                    tipRow("tip_categories_auto".localized)
-                    tipRow("tip_currency_symbols".localized)
-                }
-            }
-        }
-    }
-
-    private func formatCard(
-        title: String,
-        icon: String,
-        color: Color,
-        description: String,
-        columns: [(name: String, note: String)],
-        example: String
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 10) {
-                HeroIcon(icon, size: 18)
-                    .foregroundStyle(color)
-                    .frame(width: 32, height: 32)
-                    .background(color.opacity(0.15), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-                    .accessibilityHidden(true)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.subheadline.weight(.semibold))
-                    Text(description)
-                        .font(.caption)
-                        .foregroundStyle(NightTheme.secondaryLabel)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text("required_columns".localized)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(NightTheme.secondaryLabel)
-
-                ForEach(columns, id: \.name) { column in
-                    HStack(alignment: .center, spacing: 6) {
-                        HeroIcon("check-circle", size: 14)
-                            .foregroundStyle(color)
-                            .accessibilityHidden(true)
-                        Text(column.name)
-                            .font(.footnote.weight(.medium))
-                        Spacer(minLength: 8)
-                        Text(column.note)
-                            .font(.caption2)
-                            .foregroundStyle(NightTheme.secondaryLabel)
+                    sampleSheet
+                    HStack(spacing: 6) {
+                        Circle().fill(NightTheme.accent).frame(width: 6, height: 6)
+                        Text("required".localized)
                     }
-                    .accessibilityElement(children: .combine)
+                    .font(.caption)
+                    .foregroundStyle(NightTheme.secondaryLabel)
+                    .accessibilityHidden(true)
+                    InfoPageCode(text: "Date,Title,Amount,Category")
                 }
             }
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text("example_header".localized)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(NightTheme.secondaryLabel)
-                Text(example)
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 7)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(NightTheme.iconFill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            InfoPageSection("custom_format".localized, note: "custom_format_desc".localized) {
+                VStack(alignment: .leading, spacing: 10) {
+                    VStack(spacing: 0) {
+                        ForEach(Array(customFields.enumerated()), id: \.offset) { index, item in
+                            if index > 0 {
+                                Divider().overlay(NightTheme.hair).padding(.leading, 14)
+                            }
+                            fieldRow(item.field, names: item.names)
+                        }
+                    }
+                    .nightGroup()
+                    InfoPageCode(text: "Description,Price,Date,Type")
+                }
+            }
+
+            InfoPageSection("tips_title".localized) {
+                InfoPageList(rows: [
+                    ("document-text", "tip_case_insensitive".localized),
+                    ("calendar-days", "tip_date_formats".localized),
+                    ("tag", "tip_categories_auto".localized),
+                    ("banknotes", "tip_currency_symbols".localized)
+                ])
             }
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(NightTheme.glassFill, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(NightTheme.glassLine, lineWidth: 1)
-        )
     }
 
-    private func tipRow(_ text: String) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            HeroIcon("sparkles", size: 14)
-                .foregroundStyle(NightTheme.accent)
-                .padding(.top, 2)
-                .accessibilityHidden(true)
-            Text(text)
-                .font(.footnote)
-                .foregroundStyle(.primary)
-                .fixedSize(horizontal: false, vertical: true)
+    /// Two sample rows under the four required headers, the way the file looks in a spreadsheet.
+    private var sampleSheet: some View {
+        let rows = [
+            ["2026-11-24", "csv_sample_title_1".localized, "12000", "csv_sample_category_1".localized],
+            ["2026-11-25", "csv_sample_title_2".localized, "28000", "csv_sample_category_2".localized]
+        ]
+        return ScrollView(.horizontal, showsIndicators: false) {
+            Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 0) {
+                GridRow {
+                    ForEach(["Date", "Title", "Amount", "Category"], id: \.self) { header in
+                        HStack(spacing: 6) {
+                            Circle().fill(NightTheme.accent).frame(width: 6, height: 6)
+                            Text(verbatim: header).fontWeight(.semibold)
+                        }
+                        .gridColumnAlignment(header == "Amount" ? .trailing : .leading)
+                    }
+                }
+                .padding(.vertical, 11)
+                ForEach(rows, id: \.self) { row in
+                    Divider().overlay(NightTheme.hair)
+                    GridRow {
+                        ForEach(row, id: \.self) { value in
+                            Text(value).foregroundStyle(NightTheme.secondaryLabel)
+                        }
+                    }
+                    .padding(.vertical, 10)
+                }
+            }
+            .font(.system(.footnote, design: .monospaced))
+            .monospacedDigit()
+            .lineLimit(1)
+            .padding(.horizontal, 14)
+        }
+        .nightGroup()
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Date, Title, Amount, Category")
+    }
+
+    private func fieldRow(_ field: String, names: [String]) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text(field)
+                .font(.subheadline.weight(.semibold))
+                .frame(minWidth: 72, alignment: .leading)
+            FlowChips(names: names)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(field): \(names.joined(separator: ", "))")
+    }
+}
+
+/// Header names as small pills, wrapping to a new line when they do not fit.
+private struct FlowChips: View {
+    let names: [String]
+
+    var body: some View {
+        ChipFlowLayout(spacing: 6) {
+            ForEach(names, id: \.self) { name in
+                Text(verbatim: name)
+                    .font(.system(.caption, design: .monospaced))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(NightTheme.iconFill, in: Capsule())
+                    .overlay(Capsule().stroke(NightTheme.glassLine, lineWidth: 1))
+            }
+        }
+    }
+}
+
+/// Minimal wrapping row layout for the chips.
+private struct ChipFlowLayout: Layout {
+    var spacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let maxWidth = proposal.width ?? .infinity
+        var x: CGFloat = 0, y: CGFloat = 0, rowHeight: CGFloat = 0, widest: CGFloat = 0
+        for view in subviews {
+            let size = view.sizeThatFits(.unspecified)
+            if x > 0, x + size.width > maxWidth {
+                y += rowHeight + spacing
+                x = 0
+                rowHeight = 0
+            }
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
+            widest = max(widest, x - spacing)
+        }
+        return CGSize(width: min(widest, maxWidth), height: y + rowHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var x = bounds.minX, y = bounds.minY, rowHeight: CGFloat = 0
+        for view in subviews {
+            let size = view.sizeThatFits(.unspecified)
+            if x > bounds.minX, x + size.width > bounds.maxX {
+                y += rowHeight + spacing
+                x = bounds.minX
+                rowHeight = 0
+            }
+            view.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
         }
     }
 }
