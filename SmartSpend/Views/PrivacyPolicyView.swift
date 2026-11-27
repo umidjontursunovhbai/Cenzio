@@ -306,19 +306,30 @@ private struct StatusChip: View {
 /// The night street as a map of your data: the lit tower is your iPhone (each lit window a
 /// record), the locked cloud is your private iCloud, the dark house is Cenzio, which keeps
 /// no copy. Drawn in a 353 x 236 design box and scaled to the width. On appear the windows
-/// light one by one and the sync line runs twice; then it holds still. Reduce Motion: drawn lit.
+/// light one by one and the sync line runs twice, then the whole thing plays back in reverse
+/// and forward again, forever (ping-pong, short holds at both ends). Reduce Motion: drawn lit.
 private struct PrivacyDataMap: View {
     static let size = CGSize(width: 353, height: 236)
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var scheme
     @State private var start: Date?
-    @State private var done = false
 
     private static let lit = [1, 3, 4, 6, 9, 10, 12, 15, 17, 18, 21, 23, 26, 28, 30]
     private static let lightStart = 0.5, lightStep = 0.11, lightFade = 0.35
     private static let flowStart = 2.1, flowTime = 3.2
     private static let total = flowStart + flowTime
+    private static let holdEnd = 1.2, holdStart = 0.6
+
+    /// Scene time for `elapsed` seconds: forward, hold, backward, hold, repeat.
+    private static func pingPong(_ elapsed: Double) -> Double {
+        let period = 2 * total + holdEnd + holdStart
+        let u = elapsed.truncatingRemainder(dividingBy: period)
+        if u < total { return u }
+        if u < total + holdEnd { return total }
+        if u < 2 * total + holdEnd { return 2 * total + holdEnd - u }
+        return 0
+    }
 
     var body: some View {
         GeometryReader { geo in
@@ -331,28 +342,23 @@ private struct PrivacyDataMap: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Your records live on your iPhone and sync to your private iCloud. Cenzio keeps no copy.")
         .accessibilityAddTraits(.isImage)
-        .task {
-            guard !reduceMotion, start == nil else { return }
-            start = .now
-            try? await Task.sleep(for: .seconds(Self.total + 0.1))
-            done = true
-        }
+        .onAppear { if !reduceMotion, start == nil { start = .now } }
     }
 
-    private var animates: Bool { !reduceMotion && !done }
+    private var animates: Bool { !reduceMotion }
 
     private var map: some View {
         ZStack(alignment: .topLeading) {
-            TimelineView(.animation(paused: !animates || start == nil)) { tl in
+            TimelineView(.animation(minimumInterval: 1 / 30, paused: !animates || start == nil)) { tl in
                 let t: Double = {
                     guard animates else { return Self.total }
                     guard let start else { return 0 }
-                    return tl.date.timeIntervalSince(start)
+                    return Self.pingPong(tl.date.timeIntervalSince(start))
                 }()
                 Canvas { ctx, _ in draw(ctx, t: t) }
             }
 
-            StreetFigureView(figure: .walker, height: 24)
+            StreetFigureView(figure: .walker, height: 24, paces: true)
                 .position(x: 178, y: 206 - 12)
 
             tag("Your iPhone", "Every record lives here", tick: true)

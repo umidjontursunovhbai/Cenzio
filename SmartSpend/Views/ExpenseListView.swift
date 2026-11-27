@@ -1355,8 +1355,14 @@ struct EmptyStreetView: View {
                          with: .color(NightTheme.window))
             }
             if !typeSize.isAccessibilitySize {
-                StreetFigureView(figure: figure, height: 22)
-                    .offset(x: figure == .cyclist ? 22 : 34, y: 88)
+                if figure == .cyclist {
+                    // rides from x 22 past the lamp (x 150) and back, forever
+                    StreetFigureView(figure: figure, height: 22, paces: true, paceDistance: 136)
+                        .offset(x: 22 + 136, y: 88)
+                } else {
+                    StreetFigureView(figure: figure, height: 22)
+                        .offset(x: 34, y: 88)
+                }
             }
         }
         .frame(width: 190, height: 120)
