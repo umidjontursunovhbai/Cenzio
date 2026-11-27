@@ -751,9 +751,9 @@ struct DashboardView: View {
 
         return VStack(alignment: .leading, spacing: 6) {
             NightSectionHeader(title: "dash_where_it_goes".localized, figure: .shopper,
-                               actionTitle: "dash_budgets".localized) {
+                               actionTitle: "dash_budgets".localized, action: {
                 showingBudgetSettings = true
-            }
+            }, loops: true)
 
             VStack(spacing: 0) {
                 ForEach(Array(rows.enumerated()), id: \.element.categoryID) { index, item in

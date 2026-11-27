@@ -207,10 +207,12 @@ private struct CapFigureModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content.overlay(alignment: .topTrailing) {
+            // Placed with offsets, not alignment guides: SwiftUI ignores explicit guides on a
+            // view inside an `if` in the overlay, which left the figure over the last letters.
             if let figure, !typeSize.isAccessibilitySize {
+                let width = figure.box.width * height / figure.box.height
                 StreetFigureView(figure: figure, height: height, paces: paces)
-                    .alignmentGuide(.top) { $0[.bottom] - NightTheme.capDrop(size, weight: weight) }
-                    .alignmentGuide(.trailing) { $0[.leading] - gap }
+                    .offset(x: width + gap, y: NightTheme.capDrop(size, weight: weight) - height)
             }
         }
     }
@@ -223,6 +225,11 @@ struct NightSectionHeader: View {
     var figure: StreetFigure?
     var actionTitle: String?
     var action: (() -> Void)?
+    /// The figure walks back and forth forever in the space between the title and the
+    /// action (like the Settings headers) instead of standing on the title.
+    var loops = false
+
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         HStack(alignment: .lastTextBaseline, spacing: 8) {
@@ -230,9 +237,17 @@ struct NightSectionHeader: View {
                 .font(NightTheme.display(21, weight: .semibold, relativeTo: .title3))
                 .foregroundStyle(.primary)
                 .lineLimit(2)
-                .capFigure(figure, fontSize: 21, relativeTo: .title3, weight: .semibold, height: 22, gap: 6)
+                .capFigure(loops ? nil : figure, fontSize: 21, relativeTo: .title3, weight: .semibold, height: 22, gap: 6)
                 .accessibilityAddTraits(.isHeader)
-            Spacer(minLength: 8)
+            if loops, let figure, !typeSize.isAccessibilitySize {
+                // lane starts 14 pt past the title and ends before the action
+                StreetLoopView(figure: figure, height: 22, reach: 1)
+                    .padding(.leading, 6)
+                    .frame(maxWidth: .infinity)
+                    .alignmentGuide(.lastTextBaseline) { $0[.bottom] - 1 }
+            } else {
+                Spacer(minLength: 8)
+            }
             if let actionTitle, let action {
                 Button(actionTitle, action: action)
                     .font(.subheadline.weight(.medium))
