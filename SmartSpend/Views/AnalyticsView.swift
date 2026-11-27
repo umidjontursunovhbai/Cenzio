@@ -50,7 +50,7 @@ struct AnalyticsView: View {
             }
             .background(iOSDesignSystem.appBackground)
             .navigationBarHidden(true)
-            .sheet(isPresented: $showingAddExpense) {
+            .fullScreenCover(isPresented: $showingAddExpense) {
                 AddExpenseView()
             }
             .onAppear {

@@ -96,11 +96,6 @@ struct AccountView: View {
         .navigationTitle("account_title".localized)
         .navigationBarTitleDisplayMode(.inline)
         .tint(colorScheme == .dark ? .white : OnboardingPalette.ink)
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button("done".localized) { dismiss() }
-            }
-        }
         .alert("account_sign_out_confirm_title".localized, isPresented: $confirmingSignOut) {
             Button("cancel".localized, role: .cancel) { }
             Button("account_sign_out".localized, role: .destructive) {

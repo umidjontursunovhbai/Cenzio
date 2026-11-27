@@ -137,7 +137,7 @@ struct VoiceExpenseView: View {
                     Button(voiceText("Done", "Готово")) { dismiss() }
                 }
             }
-            .sheet(item: $prefill) { item in
+            .fullScreenCover(item: $prefill) { item in
                 AddExpenseView(prefill: item) {
                     drafts.removeAll { $0.id == item.id }
                     savedCount += 1

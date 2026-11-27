@@ -74,7 +74,6 @@ struct AddExpenseView: View {
     @State private var suggestionCategoryUsed = false
     @State private var suggestionPriceUsed = false
     @State private var showingCategoryManagement = false
-    @State private var showingCategoryGrid = false
     @State private var needsDateConfirmation = false
     @State private var isSaving = false
     @State private var saveError: String?
@@ -113,10 +112,6 @@ struct AddExpenseView: View {
             title: title, amount: amount, categoryID: selectedCategoryID,
             availableCategoryIDs: Set(dataManager.userCategories.map(\.id)),
             currencyMatches: currencyMatches)
-    }
-
-    private var hasUnsavedInput: Bool {
-        !AddExpenseDraft.normalizedTitle(title).isEmpty || !amount.isEmpty
     }
 
     var body: some View {
@@ -170,43 +165,18 @@ struct AddExpenseView: View {
                             }
                     }
 
-                    // Category: a row that opens an inline grid of category tiles
-                    Button {
-                        withAnimation(.snappy(duration: 0.3)) { showingCategoryGrid.toggle() }
-                    } label: {
-                        HStack(spacing: 8) {
-                            Text("category".localized)
-                                .foregroundStyle(.primary)
-                            Spacer()
-                            if let userCat = selectedCategory {
-                                HeroIcon(systemName: userCat.iconSystemName)
-                                    .foregroundStyle(userCat.color)
-                                Text(userCat.name)
-                                    .foregroundStyle(.primary)
-                            } else {
-                                Text("select_category".localized)
-                                    .foregroundStyle(.secondary)
+                    CategoryMenuRow(
+                        categories: dataManager.userCategories,
+                        selectedID: Binding(
+                            get: { selectedCategoryID },
+                            set: { id in
+                                selectedCategoryID = id
+                                categoryChosenByUser = true
                             }
-                            HeroIcon(systemName: "chevron.down")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .rotationEffect(.degrees(showingCategoryGrid ? 180 : 0))
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
+                        ),
+                        onCreate: { showingCategoryManagement = true }
+                    )
                     .accessibilityIdentifier("expense.category")
-                    .accessibilityValue(selectedCategory?.name ?? "select_category".localized)
-
-                    if showingCategoryGrid {
-                        CategoryTileGrid(categories: dataManager.userCategories, selectedID: selectedCategoryID) { category in
-                            selectedCategoryID = category.id
-                            categoryChosenByUser = true
-                            withAnimation(.snappy(duration: 0.3)) { showingCategoryGrid = false }
-                        } onCreate: {
-                            showingCategoryManagement = true
-                        }
-                    }
 
                     // Date Picker
                     DatePicker("column_date".localized, selection: $selectedDate,
@@ -245,8 +215,6 @@ struct AddExpenseView: View {
                     Button("done".localized) { focusedField = nil }
                 }
             }
-            // Swiping the sheet away would silently discard a typed expense; Cancel still works.
-            .interactiveDismissDisabled(prefill == nil && hasUnsavedInput)
             .sheet(isPresented: $showingCategoryManagement) {
                 CategoryManagementView()
             }
@@ -268,21 +236,22 @@ struct AddExpenseView: View {
                     selectedCategoryID = dataManager.userCategories.first?.id
                 }
                 if prefill == nil && title.isEmpty {
-                    // Sheets need a beat before a field can become first responder.
+                    // The cover needs a beat before a field can become first responder.
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { focusedField = .title }
                 }
             }
         }
     }
 
-    /// The mini city (hidden while typing and at accessibility text sizes) and the Save capsule.
+    /// The mini city stays on screen while typing (shorter, so the form still fits above the
+    /// keyboard); only accessibility text sizes hide it. The Save capsule sits under it.
     private var saveBar: some View {
         VStack(spacing: 0) {
-            if focusedField == nil && !typeSize.isAccessibilitySize {
+            if !typeSize.isAccessibilitySize {
                 SkylineBandView(litDays: savedLitDays, today: calendar.component(.day, from: Date()),
                                 parkedTaxi: true, glow: saved ? 1 : 0)
-                    .frame(height: 100)
-                    .transition(.opacity)
+                    .frame(height: focusedField == nil ? 100 : 64)
+                    .animation(reduceMotion ? nil : .snappy(duration: 0.25), value: focusedField == nil)
             }
             Button("save".localized, action: saveExpense)
                 .buttonStyle(PrimaryCapsuleButtonStyle())
@@ -290,7 +259,7 @@ struct AddExpenseView: View {
                 .disabled(!canSave && !saved)
                 .accessibilityIdentifier("expense.save")
                 .padding(.horizontal, 28)
-                .padding(.top, focusedField == nil ? 0 : 30)
+                .padding(.top, typeSize.isAccessibilitySize ? 12 : 0)
                 .padding(.bottom, 10)
         }
         .background(NightGround())
@@ -387,61 +356,63 @@ struct AddExpenseView: View {
     }
 }
 
-// MARK: - Category tiles
+// MARK: - Category menu
 
-/// Category tiles in a 3-column grid: icon in its color on a soft tile, name under it.
-/// The chosen one gets an accent ring; the last tile creates a new category.
-/// Shared by Add expense and Edit expense.
-struct CategoryTileGrid: View {
+/// Category row that opens a native pop-up menu, built like the Appearance menu in Settings,
+/// with a "Create New Category" action under the list. Shared by Add expense, Edit expense and the recurring form.
+struct CategoryMenuRow: View {
     let categories: [UserCategory]
-    let selectedID: UUID?
-    let onSelect: (UserCategory) -> Void
+    @Binding var selectedID: UUID?
     let onCreate: () -> Void
 
-    var body: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
-            ForEach(categories) { category in
-                let isSelected = category.id == selectedID
-                Button {
-                    onSelect(category)
-                } label: {
-                    tile(icon: category.iconSystemName, title: category.name,
-                         tint: category.color, selected: isSelected)
-                }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(isSelected ? .isSelected : [])
-            }
-            Button(action: onCreate) {
-                tile(icon: "plus.circle", title: "create_new_category".localized,
-                     tint: .secondary, selected: false)
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.vertical, 4)
-        .transition(.opacity.combined(with: .move(edge: .top)))
+    private var selected: UserCategory? {
+        selectedID.flatMap { id in categories.first { $0.id == id } }
     }
 
-    private func tile(icon: String, title: String, tint: Color, selected: Bool) -> some View {
-        VStack(spacing: 6) {
-            HeroIcon(systemName: icon, size: 18)
-                .foregroundStyle(tint)
-                .frame(width: 34, height: 34)
-                .background(tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            Text(title)
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.primary)
-                .lineLimit(2)
-                .multilineTextAlignment(.center)
-                .minimumScaleFactor(0.8)
+    var body: some View {
+        Menu {
+            Picker(selection: $selectedID) {
+                ForEach(categories) { category in
+                    Label {
+                        Text(category.name)
+                    } icon: {
+                        Image("hero-\(HeroIcon.resolvedName(category.iconSystemName))")
+                    }
+                    .tag(Optional(category.id))
+                }
+            } label: { EmptyView() }
+            .pickerStyle(.inline)
+
+            Divider()
+            Button(action: onCreate) {
+                Label {
+                    Text("create_new_category".localized)
+                } icon: {
+                    Image("hero-\(HeroIcon.resolvedName("plus.circle"))")
+                }
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Text("category".localized)
+                    .foregroundStyle(.primary)
+                Spacer()
+                if let category = selected {
+                    HeroIcon(systemName: category.iconSystemName)
+                        .foregroundStyle(category.color)
+                    Text(category.name)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("select_category".localized)
+                        .foregroundStyle(.secondary)
+                }
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .contentShape(Rectangle())
         }
-        .frame(maxWidth: .infinity, minHeight: 78)
-        .padding(.horizontal, 4)
-        .background(NightTheme.iconFill, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(selected ? NightTheme.accent : .clear, lineWidth: 1.5)
-        )
-        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .buttonStyle(.plain)
+        .accessibilityValue(selected?.name ?? "select_category".localized)
     }
 }
 

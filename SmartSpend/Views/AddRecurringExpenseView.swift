@@ -33,8 +33,9 @@ struct RecurringExpenseFormView: View {
     @State private var isActive: Bool
     @State private var showingCategoryManagement = false
     @State private var showingDeleteConfirmation = false
-    @State private var showingCategoryGrid = false
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var typeSize
     @FocusState private var focusedField: Field?
 
     private enum Field { case title, amount }
@@ -161,16 +162,33 @@ struct RecurringExpenseFormView: View {
         }
     }
 
-    /// Save as the white capsule at the bottom, like Add expense.
+    /// Same bottom as Add expense: the mini city stays while typing (shorter), then Save.
     private var saveBar: some View {
-        Button("save".localized, action: save)
-            .buttonStyle(PrimaryCapsuleButtonStyle())
-            .disabled(!canSave)
-            .accessibilityIdentifier("recurringSaveButton")
-            .padding(.horizontal, 28)
-            .padding(.top, 8)
-            .padding(.bottom, 10)
-            .background(NightGround())
+        VStack(spacing: 0) {
+            if !typeSize.isAccessibilitySize {
+                SkylineBandView(litDays: litDays, today: Calendar.current.component(.day, from: Date()),
+                                parkedTaxi: true, glow: 0)
+                    .frame(height: focusedField == nil ? 100 : 64)
+                    .animation(reduceMotion ? nil : .snappy(duration: 0.25), value: focusedField == nil)
+            }
+            Button("save".localized, action: save)
+                .buttonStyle(PrimaryCapsuleButtonStyle())
+                .disabled(!canSave)
+                .accessibilityIdentifier("recurringSaveButton")
+                .padding(.horizontal, 28)
+                .padding(.top, typeSize.isAccessibilitySize ? 12 : 0)
+                .padding(.bottom, 10)
+        }
+        .background(NightGround())
+    }
+
+    /// Days of this month with expenses: the lit windows of the mini city.
+    private var litDays: Set<Int> {
+        let calendar = Calendar.current
+        let now = Date()
+        return Set(dataManager.expenses
+            .filter { calendar.isDate($0.date, equalTo: now, toGranularity: .month) }
+            .map { calendar.component(.day, from: $0.date) })
     }
 
     private var detailsSection: some View {
@@ -198,42 +216,15 @@ struct RecurringExpenseFormView: View {
                     .foregroundStyle(NightTheme.secondaryLabel)
             }
 
-            // Category: a row that opens the same inline tile grid as Add expense.
-            Button {
-                withAnimation(.snappy(duration: 0.3)) { showingCategoryGrid.toggle() }
-            } label: {
-                HStack(spacing: 8) {
-                    Text("category".localized)
-                        .foregroundStyle(.primary)
-                    Spacer()
-                    if let category = selectedCategory {
-                        HeroIcon(systemName: category.iconSystemName)
-                            .foregroundStyle(category.color)
-                        Text(category.name)
-                            .foregroundStyle(.primary)
-                    } else {
-                        Text("select_category".localized)
-                            .foregroundStyle(.secondary)
-                    }
-                    HeroIcon(systemName: "chevron.down")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .rotationEffect(.degrees(showingCategoryGrid ? 180 : 0))
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
+            CategoryMenuRow(
+                categories: dataManager.userCategories,
+                selectedID: Binding(
+                    get: { selectedCategory?.id },
+                    set: { id in selectedCategory = id.flatMap { dataManager.getCategory(id: $0) } }
+                ),
+                onCreate: { showingCategoryManagement = true }
+            )
             .accessibilityIdentifier("recurringCategoryPicker")
-            .accessibilityValue(selectedCategory?.name ?? "select_category".localized)
-
-            if showingCategoryGrid {
-                CategoryTileGrid(categories: dataManager.userCategories, selectedID: selectedCategory?.id) { category in
-                    selectedCategory = category
-                    withAnimation(.snappy(duration: 0.3)) { showingCategoryGrid = false }
-                } onCreate: {
-                    showingCategoryManagement = true
-                }
-            }
         } header: {
             StreetSectionHeader(title: "expense_details".localized, figure: .walker)
         }
