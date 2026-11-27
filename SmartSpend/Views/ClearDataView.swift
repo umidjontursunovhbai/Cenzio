@@ -24,6 +24,7 @@ struct ClearDataView: View {
                     ))
                     .fontWeight(.medium)
                 }
+                .listRowBackground(NightTheme.glassFill)
 
                 Section {
                     ForEach(Part.allCases) { part in
@@ -38,7 +39,7 @@ struct ClearDataView: View {
                                 Spacer()
                                 if let count = count(of: part) {
                                     Text("\(count)")
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(NightTheme.secondaryLabel)
                                         .monospacedDigit()
                                 }
                             }
@@ -49,6 +50,7 @@ struct ClearDataView: View {
                 } footer: {
                     Text("icloud_sync_clear_note".localized)
                 }
+                .listRowBackground(NightTheme.glassFill)
 
                 if let authError {
                     Section {
@@ -56,6 +58,7 @@ struct ClearDataView: View {
                             .font(.callout)
                             .foregroundStyle(.orange)
                     }
+                    .listRowBackground(NightTheme.glassFill)
                 }
 
                 Section {
@@ -71,7 +74,10 @@ struct ClearDataView: View {
                     }
                     .disabled(selection.isEmpty || isAuthenticating)
                 }
+                .listRowBackground(NightTheme.glassFill)
             }
+            .scrollContentBackground(.hidden)
+            .background(NightGround())
             .navigationTitle("clear_data_title".localized)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -84,9 +90,10 @@ struct ClearDataView: View {
                 Button("cancel".localized, role: .cancel) { }
                 Button("delete".localized, role: .destructive) { authenticateAndClear() }
             } message: {
-                Text("clear_data_confirm_message".localized)
+                Text("clear_data_confirm_auth_message".localized)
             }
         }
+        .tint(NightTheme.accent)
     }
 
     /// Item counts for list-like parts; nil for parts that aren't a list.

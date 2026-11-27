@@ -61,6 +61,8 @@ extension String {
             "clear_data_delete_selected": "Delete selected",
             "clear_data_confirm_title": "Delete selected data?",
             "clear_data_confirm_message": "This can't be undone on this iPhone.",
+            "clear_data_confirm_auth_message": "This can't be undone on this iPhone. Face ID or your passcode is needed to delete.",
+            "clear_data_footer_choose": "Choose what to delete.",
             "clear_data_auth_reason": "Confirm it's you to delete data",
             "clear_data_auth_failed": "Data was not deleted. Confirm with Face ID or your passcode to delete it.",
             "clear_part_expenses": "Expenses",

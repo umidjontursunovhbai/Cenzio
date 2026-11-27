@@ -288,7 +288,7 @@ struct SettingsView: View {
                     .frame(maxWidth: .infinity)
             }
         } footer: {
-            Text("clear_data_footer".localized)
+            Text("clear_data_footer_choose".localized)
         }
     }
 
