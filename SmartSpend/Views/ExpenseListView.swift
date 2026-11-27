@@ -471,7 +471,8 @@ struct ExpenseListView: View {
         .animation(.snappy(duration: 0.25), value: isSelecting)
     }
 
-    /// Big Shoulders day title with the day total; the snacker stands on "Today".
+    /// Big Shoulders day title with the day total; the snacker paces on "Today", never closer
+    /// than 20 pt to the title (the gap is measured from the text's trailing edge, so it holds at any text size).
     private func dayHeader(_ group: ExpenseDayGroup) -> some View {
         let isToday = Calendar.current.isDateInToday(group.day)
         return HStack(alignment: .lastTextBaseline, spacing: 8) {
@@ -480,7 +481,7 @@ struct ExpenseListView: View {
                 .foregroundStyle(.primary)
                 .lineLimit(1)
                 .capFigure(isToday ? .snacker : nil, fontSize: 21, relativeTo: .title3, weight: .semibold, height: 22,
-                            gap: 6 + StreetFigureView.pace + 4, paces: true)
+                            gap: 20 + StreetFigureView.pace, paces: true)
             Spacer(minLength: 8)
             Text(CurrencyFormatter.format(group.total, currency: currency))
                 .font(.subheadline.weight(.semibold))
