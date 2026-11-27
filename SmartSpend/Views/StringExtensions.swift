@@ -237,7 +237,7 @@ extension String {
             "exp_delete_expense": "Delete Expense",
             "exp_delete_footer": "Deleted expenses can be restored for 30 days.",
             "exp_deleted_empty_body": "Expenses you delete stay here for 30 days, so you can restore them.",
-            "exp_deleted_footer": "Swipe right to restore. Expenses are removed for good 30 days after deletion.",
+            "exp_deleted_footer": "Expenses are removed for good 30 days after deletion.",
             "exp_delete_forever_title": "Delete permanently?",
             "exp_delete_forever_message": "This expense will be removed for good. This can't be undone.",
             "exp_days_left_format": "%dd left",

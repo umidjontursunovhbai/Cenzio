@@ -6,6 +6,11 @@ struct DeletedExpensesView: View {
     @State private var searchText = ""
     @State private var pendingPermanentDelete: ArchivedExpense?
 
+    // Night street swipe colors: dusk blue for Restore, brick red for Delete.
+    // Both are dark enough for the system's white label and icon.
+    private static let restoreTint = Color(red: 58 / 255, green: 88 / 255, blue: 138 / 255)
+    private static let deleteTint = Color(red: 176 / 255, green: 52 / 255, blue: 48 / 255)
+
     private var filteredDeletedExpenses: [ArchivedExpense] {
         let sorted = dataManager.deletedExpenses.sorted { $0.archivedDate > $1.archivedDate }
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -34,26 +39,20 @@ struct DeletedExpensesView: View {
                     Section {
                         ForEach(items) { expense in
                             DeletedExpenseRowView(deletedExpense: expense)
-                                .swipeActions(edge: .leading, allowsFullSwipe: true) {
-                                    Button {
-                                        withAnimation { dataManager.restoreExpense(expense) }
-                                    } label: {
-                                        Label("restore_button".localized, systemImage: "arrow.uturn.backward")
-                                    }
-                                    .tint(.green)
-                                }
+                                // Swipe left only: Delete sits at the edge, Restore next to the row.
                                 .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                     Button(role: .destructive) {
                                         pendingPermanentDelete = expense
                                     } label: {
                                         Label("delete_button".localized, systemImage: "trash")
                                     }
+                                    .tint(Self.deleteTint)
                                     Button {
                                         withAnimation { dataManager.restoreExpense(expense) }
                                     } label: {
                                         Label("restore_button".localized, systemImage: "arrow.uturn.backward")
                                     }
-                                    .tint(.green)
+                                    .tint(Self.restoreTint)
                                 }
                                 .contextMenu {
                                     Button {
