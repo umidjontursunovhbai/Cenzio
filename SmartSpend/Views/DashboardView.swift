@@ -1301,7 +1301,7 @@ struct DashboardView: View {
 }
 
 /// A somsa stand beside the hero amount (mockup v11): the buyer walks in, hands a warm bill
-/// to the seller and gets a warm bag back (~2.6 s), then the scene plays back in reverse and
+/// to the seller and gets a warm bag back (~4.3 s), then the scene plays back in reverse and
 /// forward again, forever (ping-pong, short holds at both ends). The buyer fades in only once;
 /// after that the buyer stays visible at the left end between passes. After the first pass both
 /// people also keep moving gently: the buyer breathes and swings the bag, the seller bobs and
@@ -1310,8 +1310,13 @@ struct DashboardView: View {
 struct PayScene: View {
     static let size = CGSize(width: 96, height: 30)
     /// When the bill reaches the seller; the amount ticks down then.
-    static let billLands = 1.85
-    private static let duration = 2.6
+    static let billLands = walkEnd + 0.55
+    /// The buyer walks 34 pt in `walkLength` s: a calm pace (about 13 pt/s) with a soft start and stop.
+    private static let walkStart = 0.4, walkLength = 2.6
+    private static let walkEnd = walkStart + walkLength
+    private static let duration = walkEnd + 1.3
+    /// Distance between feet at full stride, in design points; steps follow the distance walked.
+    private static let footReach = 2.5
     /// Pauses at the finished state and at the empty start of each ping-pong pass.
     private static let holdEnd = 1.2
     private static let holdStart = 0.5
@@ -1337,6 +1342,25 @@ struct PayScene: View {
         min(max((t - from) / length, 0), 1)
     }
 
+    /// Share of the walk done at progress `w`: speeds up over the first 20%, steady, slows
+    /// over the last 20%.
+    private static let walkEase = 0.2
+    private static func walkCurve(_ w: Double) -> Double {
+        let a = walkEase
+        if w < a { return w * w / (2 * a * (1 - a)) }
+        if w < 1 - a { return (w - a / 2) / (1 - a) }
+        return 1 - (1 - w) * (1 - w) / (2 * a * (1 - a))
+    }
+
+    /// Walking speed at progress `w`, relative to the steady middle part (0...1).
+    private static func walkSpeed(_ w: Double) -> Double {
+        let a = walkEase
+        if w <= 0 || w >= 1 { return 0 }
+        if w < a { return w / a }
+        if w < 1 - a { return 1 }
+        return (1 - w) / a
+    }
+
     /// Scene time for `elapsed` seconds: forward, hold, backward, hold, repeat. Every step of
     /// the scene eases out at its end and nothing moves at t = 0, so the turns do not jump.
     /// `back` is true while the scene plays in reverse.
@@ -1351,9 +1375,9 @@ struct PayScene: View {
 
     /// Which way the buyer faces: 1 = toward the stall, -1 = away. The buyer turns (a quick 0.15-0.2 s
     /// horizontal flip) while standing still: at the stall before walking away (scene time
-    /// 1.45 -> 1.3 on the way back), and at the left end before walking in again (0.15 -> 0.35).
+    /// walkEnd + 0.15 -> walkEnd on the way back), and at the left end before walking in again (0.15 -> 0.35).
     private static func facing(_ t: Double, back: Bool) -> Double {
-        let k = back ? (t - 1.3) / 0.15 : (t - 0.15) / 0.2
+        let k = back ? (t - walkEnd) / 0.15 : (t - 0.15) / 0.2
         let c = min(max(k, 0), 1)
         return -1 + 2 * c * c * (3 - 2 * c)
     }
@@ -1414,11 +1438,11 @@ struct PayScene: View {
         }
 
         // buyer walk-in progress (the bill travels with the buyer until it is handed over)
-        let w = Self.progress(t, from: 0.4, length: 0.9)
-        let we = 1 - pow(1 - w, 4)
+        let w = Self.progress(t, from: Self.walkStart, length: Self.walkLength)
+        let we = Self.walkCurve(w)
 
         // bill: in the buyer's hand, slides 18 pt to the seller, gone once it lands
-        let b = Self.progress(t, from: 1.3, length: 0.7)
+        let b = Self.progress(t, from: Self.walkEnd, length: 0.7)
         if b < 1 {
             let slide = b < 0.75 ? 17 * (b / 0.75) : 17 + (b - 0.75) / 0.25
             let shift = -34 * (1 - we)
@@ -1430,29 +1454,42 @@ struct PayScene: View {
         }
 
         // bag: on the counter, handed 20 pt to the buyer, then swings slightly in the hand
-        let g = Self.progress(t, from: 2.0, length: 0.6)
+        let g = Self.progress(t, from: Self.walkEnd + 0.7, length: 0.6)
         let ge = 1 - pow(1 - g, 4)
         ctx.fill(Path(roundedRect: CGRect(x: 68 - 20 * ge + bagSwing, y: 15 + 2 * ge - buyerBob, width: 5, height: 6), cornerRadius: 1), with: .color(warm))
 
-        // buyer walks in 34 pt and fades in, then breathes (head, body and arm bob; feet stay)
+        // buyer walks in 34 pt and fades in, then breathes (head, body and arm bob; feet stay).
+        // Walk cycle: the step phase follows the distance walked, so a planted foot keeps
+        // still on the ground; `stride` (0...1) follows the speed, so steps start and stop softly.
+        let traveled = 34 * we
+        let phase = traveled / Self.footReach
+        let stride = Self.walkSpeed(w)
+        let heading: Double = facing < 0 ? -1 : 1
+        let walkBob = 0.7 * abs(cos(phase)) * stride
+        let up = buyerBob + walkBob
         var buyer = ctx
         buyer.opacity = fadesIn ? we : 1
         buyer.translateBy(x: -34 * (1 - we) + buyerMid, y: 0)
         buyer.scaleBy(x: flip, y: 1)
         buyer.translateBy(x: -buyerMid, y: 0)
-        let walking = w > 0 && w < 1
-        let swing = walking ? sin(t * 14) * 1.5 : 0
-        buyer.fill(Path(ellipseIn: CGRect(x: 41.4, y: 7.4 - buyerBob, width: 5.2, height: 5.2)), with: .color(ink))
+        buyer.fill(Path(ellipseIn: CGRect(x: 41.4, y: 7.4 - up, width: 5.2, height: 5.2)), with: .color(ink))
         var body = Path()
-        body.move(to: CGPoint(x: 42, y: 13 - buyerBob)); body.addLine(to: CGPoint(x: 46.5, y: 13 - buyerBob))
-        body.addLine(to: CGPoint(x: 47.5, y: 21)); body.addLine(to: CGPoint(x: 41, y: 21)); body.closeSubpath()
+        body.move(to: CGPoint(x: 42, y: 13 - up)); body.addLine(to: CGPoint(x: 46.5, y: 13 - up))
+        body.addLine(to: CGPoint(x: 47.5, y: 21 - walkBob)); body.addLine(to: CGPoint(x: 41, y: 21 - walkBob)); body.closeSubpath()
         buyer.fill(body, with: .color(ink))
+        // feet: apart at rest (41 / 48), swinging around the middle while walking; the foot
+        // moving forward lifts a little
+        let reach = Self.footReach * sin(phase)
+        let lift1 = 1.2 * max(0, cos(phase) * heading) * stride
+        let lift2 = 1.2 * max(0, -cos(phase) * heading) * stride
+        let foot1 = 41 + (buyerMid + reach - 41) * stride
+        let foot2 = 48 + (buyerMid - reach - 48) * stride
         var legs = Path()
-        legs.move(to: CGPoint(x: 43, y: 21)); legs.addLine(to: CGPoint(x: 41 + swing, y: 29))
-        legs.move(to: CGPoint(x: 46, y: 21)); legs.addLine(to: CGPoint(x: 48 - swing, y: 29))
+        legs.move(to: CGPoint(x: 43, y: 21 - walkBob)); legs.addLine(to: CGPoint(x: foot1, y: 29 - lift1))
+        legs.move(to: CGPoint(x: 46, y: 21 - walkBob)); legs.addLine(to: CGPoint(x: foot2, y: 29 - lift2))
         buyer.stroke(legs, with: .color(ink), style: StrokeStyle(lineWidth: 1.8, lineCap: .round))
         var arm = Path()
-        arm.move(to: CGPoint(x: 46, y: 14 - buyerBob)); arm.addLine(to: CGPoint(x: 50, y: 15 - buyerBob))
+        arm.move(to: CGPoint(x: 46, y: 14 - up)); arm.addLine(to: CGPoint(x: 50, y: 15 - up))
         buyer.stroke(arm, with: .color(ink), style: StrokeStyle(lineWidth: 1.6, lineCap: .round))
     }
 }
