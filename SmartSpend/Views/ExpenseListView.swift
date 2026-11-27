@@ -112,7 +112,7 @@ struct ExpenseListView: View {
                 .presentationCornerRadius(32)
                 .tint(NightTheme.accent)
             }
-            .sheet(isPresented: $showingDeleted) {
+            .navigationDestination(isPresented: $showingDeleted) {
                 DeletedExpensesView()
                     .tint(NightTheme.accent)
             }

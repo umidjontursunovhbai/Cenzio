@@ -20,7 +20,7 @@ struct DeletedExpensesView: View {
 
     var body: some View {
         let items = filteredDeletedExpenses
-        NavigationStack {
+        Group { // pushed from Settings or Expenses: their stack gives the back button
             List {
                 if items.isEmpty {
                     Group {
@@ -85,12 +85,6 @@ struct DeletedExpensesView: View {
             )
             .navigationTitle("deleted_expenses_title".localized)
             .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("done".localized) { dismiss() }
-                        .fontWeight(.semibold)
-                }
-            }
             // Permanent deletion can't be undone, so it always asks first.
             .confirmationDialog(
                 "exp_delete_forever_title".localized,
