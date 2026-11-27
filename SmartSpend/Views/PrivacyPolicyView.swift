@@ -8,49 +8,43 @@ struct PrivacyPolicyView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
+                VStack(alignment: .leading, spacing: 34) {
                     privacyHero
                     dataPath
 
                     policyGroup(
                         title: "Optional voice and AI drafts",
                         sections: [
-                            PolicySection(icon: "lock-closed", tint: Color.accentColor,
-                                          title: "Your choice before sending",
+                            PolicySection(icon: "lock-closed", title: "Your choice before sending",
                                           text: "Recording starts only after you hold and pull the + button, or tap a microphone, and grant permission. Audio is kept in a temporary protected file on this iPhone, transcribed locally after Stop, and deleted after transcription or cancellation. The first use may download an Apple speech model. Recorded audio is not uploaded. Keyboard dictation follows your iPhone's own settings."),
-                            PolicySection(icon: "arrow-up-tray", tint: Color.accentColor,
-                                          title: "Text sent to AI only with consent",
+                            PolicySection(icon: "arrow-up-tray", title: "Text sent to AI only with consent",
                                           text: "The first time you use AI expense preparation, the app asks permission to send recognized text, current category names and IDs, currency, reference date and timezone through Cenzio's server to OpenRouter/OpenAI. After you agree, stopping a recording automatically sends this context for an AI draft. Past expenses, salary, budgets and audio are not sent. Provider retention policies apply; this is not a zero-retention guarantee. Cenzio's server does not store or log this text. Nothing is saved until you review and tap Save."),
-                            PolicySection(icon: "key", tint: Color.accentColor,
-                                          title: "No credentials on your iPhone",
+                            PolicySection(icon: "key", title: "No credentials on your iPhone",
                                           text: "The AI provider key stays on Cenzio's server. The app stores no AI credential and sends no account or device identifier with the request.")
                         ]
                     )
 
                     policyGroup(
                         title: "Your data",
+                        figure: .shopper,
                         sections: [
                             PolicySection(
                                 icon: "wallet",
-                                tint: Color.accentColor,
                                 title: "What Cenzio stores",
                                 text: "Cenzio stores the expenses, categories, budgets, spending goals, monthly salary values, recurring expenses, archived expenses, learned suggestions, and preferences you add or create in the app."
                             ),
                             PolicySection(
                                 icon: "hand-raised",
-                                tint: Color(.systemIndigo),
                                 title: "Stored on this iPhone",
                                 text: "Your Cenzio records are saved locally in Apple App Group storage on your device and shared only with Cenzio's own widgets."
                             ),
                             PolicySection(
                                 icon: "cloud",
-                                tint: Color(.systemBlue),
                                 title: "iCloud sync between your devices",
                                 text: "Your records are copied to the private iCloud database of the iCloud account signed in on this iPhone, so your other devices with the same account stay up to date. Apple stores this data under its iCloud terms; Cenzio's developer cannot read it. Remove it in the Settings app under your name > iCloud > Manage Storage."
                             ),
                             PolicySection(
                                 icon: "arrow-down-tray",
-                                tint: Color(.systemTeal),
                                 title: "Imports and exports",
                                 text: "CSV imports are read and processed on your device. Export files are created in Cenzio's local app storage only when you request an export. You decide if and where an export is shared."
                             )
@@ -62,19 +56,17 @@ struct PrivacyPolicyView: View {
                         sections: [
                             PolicySection(
                                 icon: "eye",
-                                tint: Color(.systemGreen),
                                 title: "No tracking or advertising",
                                 text: "Cenzio does not track you across apps or websites, sell your data, show third-party ads, or include third-party analytics in the current build."
                             ),
                             PolicySection(
                                 icon: "wifi",
-                                tint: Color(.systemOrange),
                                 title: "Sign in with Apple",
                                 text: "Cenzio asks you to sign in with Apple when it opens. It keeps only Apple's anonymous user ID and, if you share them, your name and email, stored in this iPhone's Keychain. They are not sent to Cenzio's developer. Stop using your Apple ID with Cenzio in the Settings app under your name > Sign-In & Security."
                             ),
                             PolicySection(
                                 icon: "trash",
-                                tint: Color(.systemRed),
+                                destructive: true,
                                 title: "Delete your app data",
                                 text: "Clear All Data removes Cenzio records from this iPhone and resets app preferences. Copies already in your iCloud and on your other devices stay there, and exports you saved elsewhere are not deleted."
                             )
@@ -85,10 +77,10 @@ struct PrivacyPolicyView: View {
                     updatedLabel
                 }
                 .padding(.horizontal, 20)
-                .padding(.top, 18)
-                .padding(.bottom, 36)
+                .padding(.top, 30)
+                .padding(.bottom, 40)
             }
-            .background(Color(.systemGroupedBackground))
+            .background(NightGround())
             .navigationTitle("privacy_policy".localized)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -97,33 +89,28 @@ struct PrivacyPolicyView: View {
                         dismiss()
                     }
                     .fontWeight(.semibold)
+                    .foregroundStyle(NightTheme.accent)
                     .iOSMinimumTapTarget()
                 }
             }
         }
     }
 
+    // MARK: - Hero: the promise stands on the street, no card
+
     private var privacyHero: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(alignment: .top, spacing: 16) {
-                HeroIcon("hand-raised", size: 30)
-                    .foregroundStyle(Color(.systemIndigo))
-                    .frame(width: 58, height: 58)
-                    .background(Color(.systemIndigo).opacity(0.10), in: RoundedRectangle(cornerRadius: 17, style: .continuous))
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Private by default")
+                .font(NightTheme.display(44, weight: .heavy, relativeTo: .largeTitle))
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+                .capFigure(.walker, fontSize: 44, relativeTo: .largeTitle, height: 26, gap: 10)
+                .accessibilityAddTraits(.isHeader)
 
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Private by default")
-                        .font(.system(.title2, design: .rounded, weight: .bold))
-                        .foregroundStyle(.primary)
-
-                    Text("Your spending history stays under your control.")
-                        .font(.body)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-
-            Divider()
+            Text("Your spending history stays under your control.")
+                .font(.body)
+                .foregroundStyle(NightTheme.secondaryLabel)
+                .fixedSize(horizontal: false, vertical: true)
 
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 8) {
@@ -136,72 +123,123 @@ struct PrivacyPolicyView: View {
                     privacyBadge(icon: "check", text: "No tracking")
                 }
             }
+            .padding(.top, 4)
         }
-        .padding(20)
-        .liquidGlassCard(cornerRadius: 24)
+        .padding(.top, 8)
+        .padding(.horizontal, 4)
     }
+
+    // MARK: - Data path: three stops on one line
 
     private var dataPath: some View {
         VStack(alignment: .leading, spacing: 14) {
-            sectionLabel("How your data moves")
+            NightSectionHeader(title: "How your data moves", figure: .cyclist)
+                .padding(.horizontal, 4)
 
             VStack(spacing: 0) {
                 dataPathRow(
                     icon: "document-plus",
-                    tint: Color.accentColor,
                     title: "You add it",
-                    detail: "Expenses, plans, categories, and preferences"
+                    detail: "Expenses, plans, categories, and preferences",
+                    position: .first
                 )
-
-                pathConnector
-
                 dataPathRow(
                     icon: "phone",
-                    tint: Color(.systemIndigo),
                     title: "Cenzio keeps it local",
-                    detail: "Saved in the app's on-device storage"
+                    detail: "Saved in the app's on-device storage",
+                    position: .middle
                 )
-
-                pathConnector
-
                 dataPathRow(
                     icon: "arrow-up-tray",
-                    tint: Color(.systemGreen),
                     title: "You choose when it leaves",
-                    detail: "Synced to your private iCloud; otherwise only through exports, support email, or consented AI drafts"
+                    detail: "Synced to your private iCloud; otherwise only through exports, support email, or consented AI drafts",
+                    position: .last
                 )
             }
             .padding(.horizontal, 18)
-            .padding(.vertical, 8)
-            .liquidGlassCard(cornerRadius: 22)
+            .padding(.vertical, 6)
+            .nightGroup()
         }
     }
 
-    private func policyGroup(title: String, sections: [PolicySection]) -> some View {
+    private enum StopPosition { case first, middle, last }
+
+    /// Text on an accent fill: ink at night, white by day.
+    private static let inverse = Color(UIColor { $0.userInterfaceStyle == .dark ? UIColor(NightTheme.ink) : .white })
+
+    private func dataPathRow(icon: String, title: String, detail: String, position: StopPosition) -> some View {
+        HStack(alignment: .top, spacing: 14) {
+            // The street line runs through every stop; it starts at the first and ends at the last.
+            ZStack(alignment: .top) {
+                VStack(spacing: 0) {
+                    Rectangle()
+                        .fill(position == .first ? Color.clear : NightTheme.hair)
+                        .frame(width: 1, height: 12)
+                    Color.clear.frame(width: 1, height: 40)
+                    Rectangle()
+                        .fill(position == .last ? Color.clear : NightTheme.hair)
+                        .frame(width: 1)
+                        .frame(maxHeight: .infinity)
+                }
+
+                // The last stop is filled: that is the moment you decide.
+                HeroIcon(icon, size: 19)
+                    .foregroundStyle(position == .last ? Self.inverse : NightTheme.accent)
+                    .frame(width: 40, height: 40)
+                    .background(position == .last ? AnyShapeStyle(NightTheme.accent) : AnyShapeStyle(NightTheme.iconFill), in: Circle())
+                    .padding(.top, 12)
+            }
+            .frame(width: 40)
+            .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+
+                Text(detail)
+                    .font(.footnote)
+                    .foregroundStyle(NightTheme.secondaryLabel)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(.vertical, 14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    // MARK: - Policy groups
+
+    private func policyGroup(title: String, figure: StreetFigure? = nil, sections: [PolicySection]) -> some View {
         VStack(alignment: .leading, spacing: 14) {
-            sectionLabel(title)
+            NightSectionHeader(title: title, figure: figure)
+                .padding(.horizontal, 4)
 
             VStack(spacing: 0) {
                 ForEach(Array(sections.enumerated()), id: \.element.id) { index, section in
                     policyRow(section)
 
                     if index < sections.count - 1 {
-                        Divider()
-                            .padding(.leading, 58)
+                        Rectangle()
+                            .fill(NightTheme.hair)
+                            .frame(height: 0.5)
+                            .padding(.leading, 56)
                     }
                 }
             }
             .padding(.horizontal, 18)
-            .liquidGlassCard(cornerRadius: 22)
+            .nightGroup()
         }
     }
 
     private func policyRow(_ section: PolicySection) -> some View {
-        HStack(alignment: .top, spacing: 14) {
-            HeroIcon(section.icon, size: 21)
-                .foregroundStyle(section.tint)
+        let tint = section.destructive ? Color(.systemRed) : NightTheme.accent
+        return HStack(alignment: .top, spacing: 14) {
+            HeroIcon(section.icon, size: 20)
+                .foregroundStyle(tint)
                 .frame(width: 42, height: 42)
-                .background(section.tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .background(section.destructive ? AnyShapeStyle(Color(.systemRed).opacity(0.14)) : AnyShapeStyle(NightTheme.iconFill),
+                            in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 6) {
@@ -211,45 +249,49 @@ struct PrivacyPolicyView: View {
 
                 Text(section.text)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(NightTheme.secondaryLabel)
                     .lineSpacing(3)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.vertical, 17)
+        .padding(.vertical, 18)
+        .accessibilityElement(children: .combine)
     }
+
+    // MARK: - Contact and footer
 
     private var contactCard: some View {
         VStack(alignment: .leading, spacing: 14) {
-            sectionLabel("Contact")
+            NightSectionHeader(title: "Contact", figure: .snacker)
+                .padding(.horizontal, 4)
 
-            VStack(alignment: .leading, spacing: 14) {
-                Text("Questions about this policy or your data can be sent directly to Cenzio support. Your email and anything you include are handled by your email provider and used to respond to your request.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineSpacing(3)
-                    .fixedSize(horizontal: false, vertical: true)
+            Text("Questions about this policy or your data can be sent directly to Cenzio support. Your email and anything you include are handled by your email provider and used to respond to your request.")
+                .font(.subheadline)
+                .foregroundStyle(NightTheme.secondaryLabel)
+                .lineSpacing(3)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 4)
 
-                Link(destination: URL(string: "mailto:umidjon.muydinov@icloud.com")!) {
-                    HStack(spacing: 10) {
-                        HeroIcon("envelope", size: 20)
-                        Text("umidjon.muydinov@icloud.com")
-                            .font(.subheadline.weight(.semibold))
-                            .lineLimit(2)
-                        Spacer(minLength: 4)
-                        HeroIcon("arrow-right", size: 16)
-                    }
-                    .foregroundStyle(Color.accentColor)
-                    .padding(.horizontal, 15)
-                    .frame(minHeight: 48)
-                    .liquidGlassSurface(RoundedRectangle(cornerRadius: 15, style: .continuous))
+            Link(destination: URL(string: "mailto:umidjon.muydinov@icloud.com")!) {
+                HStack(spacing: 10) {
+                    HeroIcon("envelope", size: 19)
+                    Text("umidjon.muydinov@icloud.com")
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.85)
+                    Spacer(minLength: 4)
+                    HeroIcon("arrow-right", size: 15)
                 }
-                .buttonStyle(.plain)
-                .accessibilityHint("Opens your email app")
+                .foregroundStyle(NightTheme.accent)
+                .padding(.horizontal, 20)
+                .frame(minHeight: 52)
+                .background(NightTheme.glassFill, in: Capsule())
+                .overlay(Capsule().stroke(NightTheme.glassLine, lineWidth: 1))
+                .contentShape(Capsule())
             }
-            .padding(18)
-            .liquidGlassCard(cornerRadius: 22)
+            .buttonStyle(.plain)
+            .accessibilityHint("Opens your email app")
         }
     }
 
@@ -262,63 +304,24 @@ struct PrivacyPolicyView: View {
             .padding(.horizontal, 20)
     }
 
-    private func sectionLabel(_ title: String) -> some View {
-        Text(title.uppercased())
-            .font(.caption.weight(.bold))
-            .foregroundStyle(.secondary)
-            .tracking(0.7)
-            .padding(.horizontal, 4)
-    }
-
     private func privacyBadge(icon: String, text: String) -> some View {
         HStack(spacing: 6) {
-            HeroIcon(icon, size: 15)
+            HeroIcon(icon, size: 14)
             Text(text)
                 .lineLimit(1)
         }
-        .font(.caption.weight(.semibold))
-        .foregroundStyle(Color(.systemIndigo))
-        .padding(.horizontal, 11)
+        .font(.footnote.weight(.semibold))
+        .foregroundStyle(NightTheme.accent)
+        .padding(.horizontal, 12)
         .frame(minHeight: 32)
-        .background(Color(.systemIndigo).opacity(0.08), in: Capsule())
-    }
-
-    private func dataPathRow(icon: String, tint: Color, title: String, detail: String) -> some View {
-        HStack(spacing: 14) {
-            HeroIcon(icon, size: 20)
-                .foregroundStyle(tint)
-                .frame(width: 40, height: 40)
-                .background(tint.opacity(0.10), in: Circle())
-                .accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.primary)
-
-                Text(detail)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Spacer(minLength: 0)
-        }
-        .padding(.vertical, 10)
-    }
-
-    private var pathConnector: some View {
-        Rectangle()
-            .fill(Color(.separator).opacity(0.34))
-            .frame(width: 1, height: 10)
-            .padding(.leading, 20)
-            .frame(maxWidth: .infinity, alignment: .leading)
+        .background(NightTheme.glassFill, in: Capsule())
+        .overlay(Capsule().stroke(NightTheme.glassLine, lineWidth: 1))
     }
 }
 
 private struct PolicySection: Identifiable {
     let icon: String
-    let tint: Color
+    var destructive = false
     let title: String
     let text: String
 
