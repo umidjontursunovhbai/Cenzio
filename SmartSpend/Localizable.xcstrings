@@ -11294,29 +11294,6 @@
         }
       }
     },
-    "language_same_as_iphone": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Same as iPhone"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Как на iPhone"
-          }
-        },
-        "uz": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "iPhone tili bilan bir xil"
-          }
-        }
-      }
-    },
     "last_tracked": {
       "extractionState": "manual",
       "localizations": {
