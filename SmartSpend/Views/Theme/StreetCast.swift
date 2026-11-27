@@ -163,7 +163,8 @@ enum StreetFigure {
 
 /// One street figure drawn with Canvas. Decoration only: no hit testing, hidden from
 /// VoiceOver. On appear it walks in about 40 pt over 1.2 s and then stands at rest;
-/// with Reduce Motion it is drawn at rest. Nothing loops.
+/// with Reduce Motion it is drawn at rest. With `paces` it instead walks a few points back
+/// and forth forever (eased ping-pong, short rests at each end).
 struct StreetFigureView: View {
     let figure: StreetFigure
     /// Height of the drawing box in points (feet to the top of the head is about 94% of it).
@@ -173,6 +174,10 @@ struct StreetFigureView: View {
     var turned = false
     /// Overrides the default figure color (white in dark mode, ink in light mode).
     var color: Color?
+    /// Walks `paceDistance` points left and right forever instead of walking in once.
+    var paces = false
+    /// How far a pacing figure travels; it rests at its layout spot and this far to the left.
+    var paceDistance: CGFloat = Self.pace
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
@@ -180,14 +185,65 @@ struct StreetFigureView: View {
     @State private var arrived = false
 
     static let walkTime = 1.2
+    /// Default pacing distance.
+    static let pace: CGFloat = 12
+    /// Long trips (the cyclist) take longer than `walkTime`, at about this speed.
+    private static let paceSpeed: Double = 40
+    private static let paceRestRight = 1.6
+    private static let paceRestLeft = 1.0
 
     private var animates: Bool { walksIn && figure.walksIn && !reduceMotion }
 
     var body: some View {
+        if paces && animates {
+            pacing
+        } else {
+            // a pacing figure at rest stands at the left end of its trip
+            walkIn.offset(x: paces ? -paceDistance : 0)
+        }
+    }
+
+    /// Ping-pong pacing: walk right, rest, walk back left (facing left), rest, repeat.
+    private var pacing: some View {
         let box = figure.box
         let scale = height / box.height
         let ink = color ?? NightTheme.figure(colorScheme)
-        TimelineView(.animation(paused: !animates || arrived || start == nil)) { tl in
+        let w = max(Self.walkTime, Double(paceDistance) / Self.paceSpeed)
+        let rr = Self.paceRestRight, rl = Self.paceRestLeft
+        let period = 2 * w + rr + rl
+        return TimelineView(.animation(minimumInterval: 1 / 30, paused: start == nil)) { tl in
+            let e = start.map { tl.date.timeIntervalSince($0) } ?? 0
+            let u = e.truncatingRemainder(dividingBy: period)
+            // k: 0 = left end, 1 = right end (layout spot); `back` while walking left
+            let (k, walking, back): (Double, Bool, Bool) =
+                u < w ? (u / w, true, false)
+                : u < w + rr ? (1, false, false)
+                : u < 2 * w + rr ? (1 - (u - w - rr) / w, true, true)
+                : (0, false, true)
+            let eased = k * k * (3 - 2 * k)
+            Canvas { ctx, _ in
+                var c = ctx
+                if back {
+                    c.translateBy(x: box.width * scale, y: 0)
+                    c.scaleBy(x: -1, y: 1)
+                }
+                c.scaleBy(x: scale, y: scale)
+                c.translateBy(x: -box.minX, y: -box.minY)
+                draw(c, color: ink, walking: walking, ph: e * 9)
+            }
+            .offset(x: -paceDistance * (1 - eased))
+        }
+        .frame(width: box.width * scale, height: height)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+        .onAppear { if start == nil { start = .now } }
+    }
+
+    private var walkIn: some View {
+        let box = figure.box
+        let scale = height / box.height
+        let ink = color ?? NightTheme.figure(colorScheme)
+        return TimelineView(.animation(paused: !animates || arrived || start == nil)) { tl in
             let t: Double = {
                 guard animates, !arrived else { return Self.walkTime }
                 guard let start else { return 0 }
@@ -225,7 +281,7 @@ struct StreetFigureView: View {
             // the bun stays at the mouth level once at rest
             StreetCast.person(ctx, 0, 0, .init(walk: walking, ph: walking ? ph : 3.5, dir: dir, eat: true, scale: 1), color: color, reduce: false)
         case .cyclist:
-            StreetCast.cyclist(ctx, color: color)
+            StreetCast.cyclist(ctx, color: color, ph: walking && paces ? ph : nil)
         case .lamp:
             StreetCast.lamp(ctx, color: color)
         case .taxi:

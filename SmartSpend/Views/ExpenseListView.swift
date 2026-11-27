@@ -471,7 +471,8 @@ struct ExpenseListView: View {
         .animation(.snappy(duration: 0.25), value: isSelecting)
     }
 
-    /// Big Shoulders day title with the day total; the snacker stands on "Today".
+    /// Big Shoulders day title with the day total; the snacker paces on "Today", never closer
+    /// than 20 pt to the title (the gap is measured from the text's trailing edge, so it holds at any text size).
     private func dayHeader(_ group: ExpenseDayGroup) -> some View {
         let isToday = Calendar.current.isDateInToday(group.day)
         return HStack(alignment: .lastTextBaseline, spacing: 8) {
@@ -479,7 +480,8 @@ struct ExpenseListView: View {
                 .font(NightTheme.display(21, weight: .semibold, relativeTo: .title3))
                 .foregroundStyle(.primary)
                 .lineLimit(1)
-                .capFigure(isToday ? .snacker : nil, fontSize: 21, relativeTo: .title3, weight: .semibold, height: 22, gap: 6)
+                .capFigure(isToday ? .snacker : nil, fontSize: 21, relativeTo: .title3, weight: .semibold, height: 22,
+                            gap: 20 + StreetFigureView.pace, paces: true)
             Spacer(minLength: 8)
             Text(CurrencyFormatter.format(group.total, currency: currency))
                 .font(.subheadline.weight(.semibold))
@@ -1354,8 +1356,14 @@ struct EmptyStreetView: View {
                          with: .color(NightTheme.window))
             }
             if !typeSize.isAccessibilitySize {
-                StreetFigureView(figure: figure, height: 22)
-                    .offset(x: figure == .cyclist ? 22 : 34, y: 88)
+                if figure == .cyclist {
+                    // rides from x 22 past the lamp (x 150) and back, forever
+                    StreetFigureView(figure: figure, height: 22, paces: true, paceDistance: 136)
+                        .offset(x: 22 + 136, y: 88)
+                } else {
+                    StreetFigureView(figure: figure, height: 22)
+                        .offset(x: 34, y: 88)
+                }
             }
         }
         .frame(width: 190, height: 120)

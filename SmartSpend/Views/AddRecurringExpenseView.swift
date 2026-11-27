@@ -389,7 +389,7 @@ struct RecurrencePreviewView: View {
     var amount: Double? = nil
     var currency: Currency? = nil
 
-    private static let limit = 5
+    private static let limit = 2
 
     private var upcomingDates: [Date] {
         RecurrencePreviewView.upcomingDates(recurrenceType: recurrenceType, startDate: startDate, endDate: endDate, limit: Self.limit + 1)
