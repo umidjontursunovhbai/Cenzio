@@ -21,6 +21,7 @@ struct SettingsView: View {
     @State private var showingAccount = false
     @State private var showingPrivacyPolicy = false
     @State private var showingClearData = false
+    @State private var showingLanguage = false
     @AppStorage(AppearanceMode.storageKey) private var appearance = AppearanceMode.system
 
     private var currency: Currency { dataManager.user.currency }
@@ -54,6 +55,7 @@ struct SettingsView: View {
                     .presentationDragIndicator(.visible)
             }
             .sheet(isPresented: $showingCurrencySelection) { CurrencySelectionView() }
+            .sheet(isPresented: $showingLanguage) { LanguageSelectionView() }
             .sheet(isPresented: $showingDeletedExpenses) { DeletedExpensesView() }
             .sheet(isPresented: $showingDataExport) { DataExportView() }
             .sheet(isPresented: $showingDataImport) { DataImportView() }
@@ -227,14 +229,10 @@ struct SettingsView: View {
     private var appSection: some View {
         Section {
             Button {
-                if let url = URL(string: UIApplication.openSettingsURLString) {
-                    UIApplication.shared.open(url)
-                }
+                showingLanguage = true
             } label: {
                 SettingsRow(symbol: "globe", title: "language".localized) {
-                    if let currentLanguageName {
-                        Text(currentLanguageName).foregroundStyle(.secondary)
-                    }
+                    Text(AppLanguage.current.name).foregroundStyle(.secondary)
                 }
             }
 
@@ -250,11 +248,6 @@ struct SettingsView: View {
         } header: {
             StreetSectionHeader(title: "settings_app".localized)
         }
-    }
-
-    private var currentLanguageName: String? {
-        let code = Bundle.main.preferredLocalizations.first ?? "en"
-        return Locale(identifier: code).localizedString(forLanguageCode: code)?.localizedCapitalized
     }
 
     // MARK: - Your data

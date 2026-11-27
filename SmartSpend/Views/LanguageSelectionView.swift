@@ -1,27 +1,25 @@
 import SwiftUI
 
+/// Picks the language of the app's own text. A tap switches at once: the sheet closes and
+/// the whole app redraws in the new language. "Same as iPhone" clears the choice.
 struct LanguageSelectionView: View {
-    @ObservedObject private var dataManager = DataManager.shared
     @Environment(\.dismiss) private var dismiss
-    @State private var selectedLanguage: Language
-    
-    init() {
-        self._selectedLanguage = State(initialValue: DataManager.shared.user.language)
-    }
-    
+    private let selected = AppLanguage.override
+
     var body: some View {
         NavigationStack {
             Form {
                 Section("select_language".localized) {
-                    ForEach(Language.allCases, id: \.self) { language in
+                    systemRow
+                    ForEach(Language.allCases) { language in
                         LanguageRowView(
-                            language: language,
-                            isSelected: selectedLanguage == language,
-                            onTap: { selectedLanguage = language }
+                            title: language.name,
+                            subtitle: language.englishName,
+                            isSelected: selected == language,
+                            onTap: { pick(language) }
                         )
                     }
                 }
-                
                 Section {
                     Text("app_interface_language".localized)
                         .font(.caption)
@@ -35,36 +33,44 @@ struct LanguageSelectionView: View {
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    cancelButton
-                }
-                
-                ToolbarItem(placement: .topBarTrailing) {
-                    saveButton
+                    Button("cancel".localized) { dismiss() }
+                        .foregroundStyle(.tint)
                 }
             }
         }
         .tint(NightTheme.accent)
     }
-    
-    private var cancelButton: some View {
-        Button("cancel".localized) {
-            dismiss()
-        }
-        .foregroundStyle(.tint)
+
+    private var systemRow: some View {
+        LanguageRowView(
+            title: "language_same_as_iphone".localized,
+            subtitle: systemLanguageName,
+            isSelected: selected == nil,
+            onTap: { pick(nil) }
+        )
     }
-    
-    private var saveButton: some View {
-        Button("save".localized) {
-            dataManager.updateLanguage(selectedLanguage)
-            dismiss()
+
+    /// Name of the iPhone's own language, in that language.
+    private var systemLanguageName: String {
+        let code = Locale.preferredLanguages.first.map { String($0.prefix(2)) } ?? "en"
+        return Language(rawValue: code)?.name
+            ?? Locale(identifier: code).localizedString(forLanguageCode: code)?.localizedCapitalized
+            ?? code
+    }
+
+    private func pick(_ language: Language?) {
+        guard language != selected else { dismiss(); return }
+        dismiss()
+        // Let the sheet slide away first; then the app redraws in the new language.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            AppLanguage.override = language
         }
-        .fontWeight(.semibold)
-        .foregroundStyle(.tint)
     }
 }
 
 struct LanguageRowView: View {
-    let language: Language
+    let title: String
+    let subtitle: String
     let isSelected: Bool
     let onTap: () -> Void
     
@@ -72,11 +78,11 @@ struct LanguageRowView: View {
         Button(action: onTap) {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(language.name)
+                    Text(title)
                         .font(.headline)
                         .foregroundStyle(.primary)
                     
-                    Text(language.englishName)
+                    Text(subtitle)
                         .font(.subheadline)
                         .foregroundStyle(NightTheme.secondaryLabel)
                 }

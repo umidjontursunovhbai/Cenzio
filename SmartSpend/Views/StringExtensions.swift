@@ -9,9 +9,9 @@ import Foundation
 
 extension String {
     /// Returns the localized version of the string.
-    /// For now, returns the English translation directly.
+    /// Reads the language picked in the app (`AppLanguage`), else the iPhone language.
     var localized: String {
-        let catalogValue = NSLocalizedString(self, comment: "")
+        let catalogValue = AppLanguage.bundle.localizedString(forKey: self, value: nil, table: nil)
         if catalogValue != self {
             return catalogValue
         }

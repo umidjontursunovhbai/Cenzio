@@ -318,6 +318,7 @@
 			knownRegions = (
 				en,
 				uz,
+				ru,
 				Base,
 			);
 			mainGroup = 9E6DB8592E59C60700476BE0;
