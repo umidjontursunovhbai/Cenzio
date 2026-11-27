@@ -178,8 +178,8 @@ extension View {
             .overlay(shape.stroke(NightTheme.glassLine, lineWidth: 1))
     }
 
-    /// A street figure standing on the cap line of this Big Shoulders text, just past its
-    /// trailing end. Hidden at accessibility text sizes.
+    /// A street figure just past the trailing end of this Big Shoulders text, centered on its
+    /// line. Hidden at accessibility text sizes.
     func capFigure(_ figure: StreetFigure?, fontSize: CGFloat, relativeTo style: Font.TextStyle,
                    weight: UIFont.Weight = .heavy, height: CGFloat = 22, gap: CGFloat = 8,
                    paces: Bool = false) -> some View {
@@ -206,13 +206,13 @@ private struct CapFigureModifier: ViewModifier {
     }
 
     func body(content: Content) -> some View {
-        content.overlay(alignment: .topTrailing) {
-            // Placed with offsets, not alignment guides: SwiftUI ignores explicit guides on a
-            // view inside an `if` in the overlay, which left the figure over the last letters.
+        content.overlay(alignment: .trailing) {
+            // Right of the text, centered on its line. Placed with an offset, not alignment
+            // guides: SwiftUI ignores explicit guides on a view inside an `if` in the overlay.
             if let figure, !typeSize.isAccessibilitySize {
                 let width = figure.box.width * height / figure.box.height
                 StreetFigureView(figure: figure, height: height, paces: paces)
-                    .offset(x: width + gap, y: NightTheme.capDrop(size, weight: weight) - height)
+                    .offset(x: width + gap)
             }
         }
     }
