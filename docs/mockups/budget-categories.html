@@ -1,0 +1,200 @@
+<title>Cenzio Category Budgets</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&display=swap">
+<style>
+/* Layout: two iPhone frames side by side (now / new), stacked on phones; short plan under them. Single dark look = app's night ground. */
+:root {
+  --ink: #05070D; --fg: #EEF1F6; --silver: #C9D3E0; --body: #C3CBDA;
+  --glass: rgba(255,255,255,.07); --line: rgba(255,255,255,.10); --hair: rgba(238,241,246,.14);
+  --track: rgba(255,255,255,.08); --red: #FF453A; --orange: #FF9F0A;
+  --display: "Big Shoulders Display", "Arial Narrow", sans-serif;
+  --text: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+  color-scheme: dark;
+}
+body { background: var(--ink); color: var(--fg); font-family: var(--text); }
+.wrap { max-width: 980px; margin: 0 auto; padding-block: 32px 56px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1 { font-family: var(--display); font-weight: 800; font-size: 40px; margin: 0 0 4px; letter-spacing: .5px; }
+.lead { color: var(--silver); margin: 0 0 28px; font-size: 15px; max-width: 62ch; line-height: 1.5; }
+.phones { display: flex; gap: 32px; flex-wrap: wrap; justify-content: center; align-items: flex-start; }
+.col { display: flex; flex-direction: column; gap: 10px; align-items: center; min-width: 0; }
+.tag { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--silver); font-weight: 600; }
+.phone { width: 375px; max-width: 100%; border-radius: 44px; border: 1px solid var(--line); background: var(--ink);
+  padding: 18px 16px 28px; display: flex; flex-direction: column; gap: 22px; }
+.phone.old { opacity: .72; }
+.nav { display: flex; align-items: center; justify-content: space-between; font-size: 17px; }
+.nav .t { font-weight: 600; } .nav .b { color: var(--silver); }
+.sec { display: flex; align-items: baseline; justify-content: space-between; margin: 0 4px 10px; }
+.sec h2 { font-family: var(--display); font-weight: 600; font-size: 21px; margin: 0; letter-spacing: .3px; }
+.sec span { font-size: 13px; color: var(--silver); }
+.group { background: var(--glass); border: 1px solid var(--line); border-radius: 22px; overflow: hidden; }
+.num { font-variant-numeric: tabular-nums; }
+.ico { flex: none; width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; }
+.ico svg { width: 21px; height: 21px; }
+.bar { height: 6px; border-radius: 3px; background: var(--track); overflow: hidden; }
+.bar i { display: block; height: 100%; border-radius: 3px; }
+
+/* overview (unchanged) */
+.ov { padding: 20px; display: flex; flex-direction: column; gap: 10px; }
+.ov .m { font-size: 11px; font-weight: 700; color: var(--silver); letter-spacing: .04em; }
+.ov .a { font-size: 24px; font-weight: 700; } .ov .a small { font-size: 15px; color: var(--silver); font-weight: 600; }
+.ov .l { font-size: 15px; color: var(--silver); font-weight: 600; }
+
+/* NEW category row */
+.row { display: flex; gap: 14px; padding: 16px; align-items: flex-start; }
+.row + .row { border-top: 1px solid var(--hair); }
+.row .main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 9px; }
+.top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.name { font-size: 17px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.left { font-size: 17px; font-weight: 600; white-space: nowrap; }
+.left em { font-style: normal; font-size: 13px; font-weight: 500; color: var(--silver); margin-left: 3px; }
+.left.over, .left.over em { color: var(--red); }
+.bot { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; color: var(--silver); }
+.bot .pen { display: inline-flex; align-items: center; gap: 5px; }
+.bot .pen svg { width: 11px; height: 11px; opacity: .8; }
+.pct.warn { color: var(--orange); } .pct.over { color: var(--red); }
+
+/* no-limit rows */
+.nl { display: flex; gap: 14px; padding: 12px 16px; align-items: center; }
+.nl + .nl { border-top: 1px solid var(--hair); }
+.nl .main { flex: 1; min-width: 0; }
+.nl .name { font-size: 16px; }
+.nl .sub { font-size: 13px; color: var(--silver); margin-top: 2px; }
+.pill { flex: none; font-size: 14px; font-weight: 600; color: var(--fg); padding: 7px 14px; border-radius: 999px;
+  background: rgba(255,255,255,.10); border: 1px solid var(--line); }
+
+/* OLD row (current) */
+.orow { display: flex; gap: 12px; align-items: center; padding: 0 12px; min-height: 60px; }
+.orow + .orow { border-top: 1px solid var(--hair); }
+.orow .ico { width: 36px; height: 36px; border-radius: 10px; }
+.orow .ico svg { width: 19px; height: 19px; }
+.orow .main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.orow .top .name { font-size: 15px; }
+.orow .top span { font-size: 12px; color: var(--silver); font-weight: 600; }
+.orow .bar { height: 4px; }
+.chev { color: var(--silver); font-size: 15px; }
+
+.plan { margin-top: 44px; display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 28px 36px; }
+.plan h3 { font-family: var(--display); font-weight: 600; font-size: 22px; margin: 0 0 8px; }
+.plan ul { margin: 0; padding-left: 18px; color: var(--body); line-height: 1.6; font-size: 15px; }
+.plan li { margin-bottom: 4px; }
+@media (max-width: 420px) { .phone { border-radius: 32px; padding-inline: 10px; } }
+</style>
+
+<div class="wrap">
+  <h1>Kategoriya byudjetlari</h1>
+  <p class="lead">Chapda hozirgi holat, o'ngda yangi taklif. Har bir kategoriya sahifaning o'zida to'liq ko'rinadi: qancha sarflandi, limit, qancha qoldi yoki oshdi, foiz va chiziq. Detal sahifasi yo'q.</p>
+
+  <div class="phones">
+    <div class="col">
+      <div class="tag">Hozir</div>
+      <div class="phone old" aria-label="Current design">
+        <div class="nav"><span class="b">Settings</span><span class="t">Budget goals</span><span class="b">ⓘ</span></div>
+        <div>
+          <div class="sec"><h2>Category budgets</h2><span>4 of 6 active</span></div>
+          <div class="group" id="old"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="tag">Yangi</div>
+      <div class="phone" aria-label="New design">
+        <div class="nav"><span class="b">Settings</span><span class="t">Budget goals</span><span class="b">ⓘ</span></div>
+        <div class="group ov">
+          <div class="m">NOVEMBER 2026</div>
+          <div class="a num">3 640 000 <small>/ 3 900 000</small></div>
+          <div class="bar"><i style="width:93%;background:var(--orange)"></i></div>
+          <div class="l num">260 000 left</div>
+        </div>
+        <div>
+          <div class="sec"><h2>Category budgets</h2><span>4 of 6 active</span></div>
+          <div class="group" id="new"></div>
+        </div>
+        <div>
+          <div class="sec"><h2>No limit yet</h2><span></span></div>
+          <div class="group" id="nolimit"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="plan">
+    <div>
+      <h3>Har bir qatorda nima bor</h3>
+      <ul>
+        <li>Yuqorida: nomi va asosiy raqam, qancha qoldi (yoki qizilda qancha oshdi).</li>
+        <li>O'rtada: 6 pt chiziq, kategoriya rangida. 80% dan keyin to'q sariq, oshsa qizil.</li>
+        <li>Pastda: "sarflandi / limit" va foiz. Boshqa hech narsa yo'q.</li>
+        <li>Qator 60 pt dan ~86 pt ga kattalashadi, matn 17 pt.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Limitni o'zgartirish</h3>
+      <ul>
+        <li>Qatorga bosilsa, hozirgi kichik oyna ochiladi (limit summasi, yoqish/o'chirish). Faqat tahrir uchun.</li>
+        <li>Chevron (›) olib tashlanadi, o'rniga limit yonida kichik qalam belgisi.</li>
+        <li>Limitsiz kategoriyalar alohida pastki guruhda, "Set limit" tugmasi bilan.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Kodda nima o'zgaradi</h3>
+      <ul>
+        <li>Faqat <code>BudgetSettingsView.swift</code>: <code>CategoryBudgetLine</code> qayta yoziladi, bo'lim ikkiga bo'linadi.</li>
+        <li>Yangi matnlar: "spent", "No limit yet", "this month" (en + uz).</li>
+        <li>Ma'lumot va hisob-kitob o'zgarmaydi. Dynamic Type va VoiceOver saqlanadi.</li>
+        <li>Taxminan 2-3 soat, keyin iPhone'da Debug build va PR.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script>
+const icons = {
+  food: '<path d="M7 3v8a2 2 0 0 0 2 2v8M11 3v8M15 3c-1.5 2-2 4-2 7h3v11" />',
+  car: '<path d="M5 16l1.5-6h11L19 16M4 16h16v3H4zM7 19v2M17 19v2" />',
+  cup: '<path d="M5 8h11v6a5 5 0 0 1-10 0zM16 10h2a2 2 0 0 1 0 4h-2M8 3v2M12 3v2" />',
+  bag: '<path d="M5 8h14l-1 13H6zM9 8V6a3 3 0 0 1 6 0v2" />',
+  heart: '<path d="M12 20s-7-4.5-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.5-7 10-7 10z" />',
+  gift: '<path d="M4 10h16v4H4zM6 14h12v7H6zM12 10v11M12 10c-2-4-6-4-6-1s6 1 6 1c2-4 6-4 6-1s-6 1-6 1" />'
+};
+const svg = k => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${icons[k]}</svg>`;
+const fmt = n => n.toLocaleString('en-US').replace(/,/g, ' ');
+const pen = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>';
+const cats = [
+  { n: 'Food', i: 'food', c: '#4CD07D', s: 1180000, l: 1500000 },
+  { n: 'Cafe', i: 'cup', c: '#FF9F6B', s: 870000, l: 800000 },
+  { n: 'Transport', i: 'car', c: '#64B5FF', s: 420000, l: 600000 },
+  { n: 'Shopping', i: 'bag', c: '#C79BFF', s: 150000, l: 1000000 },
+];
+const free = [
+  { n: 'Health', i: 'heart', c: '#FF7A9A', s: 85000 },
+  { n: 'Gifts', i: 'gift', c: '#F2C230', s: 0 },
+];
+const ico = (c, k) => `<div class="ico" style="color:${c};background:${c}1F" aria-hidden="true">${svg(k)}</div>`;
+
+document.getElementById('new').innerHTML = cats.map(x => {
+  const p = x.s / x.l, rest = x.l - x.s, over = rest < 0;
+  const st = over ? 'over' : p >= .8 ? 'warn' : '';
+  const col = over ? 'var(--red)' : p >= .8 ? 'var(--orange)' : x.c;
+  return `<div class="row">${ico(x.c, x.i)}<div class="main">
+    <div class="top"><span class="name">${x.n}</span>
+      <span class="left num ${over ? 'over' : ''}">${fmt(Math.abs(rest))}<em>${over ? 'over' : 'left'}</em></span></div>
+    <div class="bar"><i style="width:${Math.min(p, 1) * 100}%;background:${col}"></i></div>
+    <div class="bot num"><span class="pen">${fmt(x.s)} of ${fmt(x.l)} ${pen}</span><span class="pct ${st}">${Math.round(p * 100)}%</span></div>
+  </div></div>`;
+}).join('');
+
+document.getElementById('nolimit').innerHTML = free.map(x => `<div class="nl">${ico(x.c, x.i)}<div class="main">
+  <div class="name">${x.n}</div><div class="sub num">${x.s ? fmt(x.s) + ' this month' : 'Nothing spent this month'}</div></div>
+  <span class="pill">Set limit</span></div>`).join('');
+
+document.getElementById('old').innerHTML = [...cats, ...free].map(x => {
+  const lim = x.l, p = lim ? x.s / lim : 0, over = lim && x.s > lim;
+  const col = over ? 'var(--red)' : p >= .8 ? 'var(--orange)' : x.c;
+  return `<div class="orow">${ico(x.c, x.i)}<div class="main">
+    <div class="top"><span class="name">${x.n}</span><span class="num" ${over ? 'style="color:var(--red)"' : ''}>${lim ? fmt(x.s) + ' of ' + fmt(lim) : 'Set limit'}</span></div>
+    ${lim ? `<div class="bar"><i style="width:${Math.min(p, 1) * 100}%;background:${col}"></i></div>` : ''}
+  </div><span class="chev">›</span></div>`;
+}).join('');
+</script>
