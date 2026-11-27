@@ -21,7 +21,6 @@ struct SettingsView: View {
     @State private var showingAccount = false
     @State private var showingPrivacyPolicy = false
     @State private var showingClearData = false
-    @State private var languageExpanded = false
     @AppStorage(AppearanceMode.storageKey) private var appearance = AppearanceMode.system
 
     private var currency: Currency { dataManager.user.currency }
@@ -47,19 +46,19 @@ struct SettingsView: View {
             .background { cityBackground }
             .navigationTitle("settings".localized)
             .navigationBarTitleDisplayMode(.large)
-            .sheet(isPresented: $showingPrivacyPolicy) { PrivacyPolicyView() }
+            .navigationDestination(isPresented: $showingPrivacyPolicy) { PrivacyPolicyView() }
             .sheet(isPresented: $showingAccount) { NavigationStack { AccountView() } }
             .sheet(isPresented: $showingMonthlySalary) {
                 MonthlySalaryView()
                     .presentationDetents([.fraction(0.65), .large])
                     .presentationDragIndicator(.visible)
             }
-            .sheet(isPresented: $showingCurrencySelection) { CurrencySelectionView() }
-            .sheet(isPresented: $showingDeletedExpenses) { DeletedExpensesView() }
-            .sheet(isPresented: $showingDataExport) { DataExportView() }
-            .sheet(isPresented: $showingDataImport) { DataImportView() }
-            .sheet(isPresented: $showingBudgetGoals) { BudgetSettingsView() }
-            .sheet(isPresented: $showingClearData) { ClearDataView() }
+            .navigationDestination(isPresented: $showingCurrencySelection) { CurrencySelectionView() }
+            .navigationDestination(isPresented: $showingDeletedExpenses) { DeletedExpensesView() }
+            .navigationDestination(isPresented: $showingDataExport) { DataExportView() }
+            .navigationDestination(isPresented: $showingDataImport) { DataImportView() }
+            .navigationDestination(isPresented: $showingBudgetGoals) { BudgetSettingsView() }
+            .navigationDestination(isPresented: $showingClearData) { ClearDataView() }
         }
     }
 
@@ -227,22 +226,19 @@ struct SettingsView: View {
 
     private var appSection: some View {
         Section {
-            Button {
-                withAnimation(.snappy) { languageExpanded.toggle() }
-            } label: {
-                SettingsRow(symbol: "globe", title: "language".localized, showsChevron: false) {
-                    Text(AppLanguage.current.name).foregroundStyle(.secondary)
-                    NavigationChevron()
-                        .rotationEffect(.degrees(languageExpanded ? 90 : 0))
-                }
-            }
-            .accessibilityHint(languageExpanded ? "" : "select_language".localized)
-
-            if languageExpanded {
+            // Same small menu as Appearance (owner, 2026-11-27). Picking a language switches the app at once.
+            Picker(selection: Binding(
+                get: { AppLanguage.current },
+                set: { AppLanguage.override = $0 }
+            )) {
                 ForEach(Language.allCases) { language in
-                    languageOption(language)
+                    Text(language.name).tag(language)
                 }
+            } label: {
+                SettingsRow(symbol: "globe", title: "language".localized, showsChevron: false)
             }
+            .pickerStyle(.menu)
+            .accessibilityIdentifier("settings.language")
 
             Picker(selection: $appearance) {
                 ForEach(AppearanceMode.allCases) { mode in
@@ -256,33 +252,6 @@ struct SettingsView: View {
         } header: {
             StreetSectionHeader(title: "settings_app".localized)
         }
-    }
-
-    /// One language under the expanded Language row. A tap switches the app at once;
-    /// the root view is keyed on the language, so the list redraws collapsed.
-    private func languageOption(_ language: Language) -> some View {
-        let isSelected = AppLanguage.current == language
-        return Button {
-            guard !isSelected else {
-                withAnimation(.snappy) { languageExpanded = false }
-                return
-            }
-            AppLanguage.override = language
-        } label: {
-            HStack(spacing: 12) {
-                Color.clear.frame(width: 28, height: 1)
-                Text(language.name)
-                    .foregroundStyle(.primary)
-                Spacer(minLength: 8)
-                if isSelected {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(NightTheme.accent)
-                }
-            }
-            .contentShape(Rectangle())
-        }
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     // MARK: - Your data

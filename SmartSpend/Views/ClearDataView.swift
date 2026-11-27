@@ -15,7 +15,7 @@ struct ClearDataView: View {
     private typealias Part = DataManager.ClearablePart
 
     var body: some View {
-        NavigationStack {
+        Group { // pushed from Settings: the Settings stack gives the back button
             Form {
                 Section {
                     Toggle("clear_data_select_all".localized, isOn: Binding(
@@ -80,11 +80,6 @@ struct ClearDataView: View {
             .background(NightGround())
             .navigationTitle("clear_data_title".localized)
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("cancel".localized) { dismiss() }
-                }
-            }
             // An alert always shows both buttons; a confirmation dialog shown as a popover hides Cancel.
             .alert("clear_data_confirm_title".localized, isPresented: $showingConfirm) {
                 Button("cancel".localized, role: .cancel) { }

@@ -9,7 +9,7 @@ struct PrivacyPolicyView: View {
     private let effectiveDate = "27 October 2026"
 
     var body: some View {
-        NavigationStack {
+        Group { // pushed from Settings: the Settings stack gives the back button
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     header
@@ -37,12 +37,7 @@ struct PrivacyPolicyView: View {
             .toolbar {
                 // The big Big Shoulders title in the page is the visible title.
                 ToolbarItem(placement: .principal) { Color.clear.frame(width: 1, height: 1) }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("done".localized) { dismiss() }
-                        .fontWeight(.semibold)
-                        .foregroundStyle(NightTheme.accent)
-                        .iOSMinimumTapTarget()
-                }
+
             }
         }
     }

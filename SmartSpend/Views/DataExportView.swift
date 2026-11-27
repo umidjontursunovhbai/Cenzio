@@ -17,7 +17,7 @@ struct DataExportView: View {
     @State private var alertMessage = ""
     
     var body: some View {
-        NavigationStack {
+        Group { // pushed from Settings: the Settings stack gives the back button
             Form {
                 Section("export_data_types".localized) {
                     ForEach(DataExporter.ExportData.allCases, id: \.self) { dataType in
@@ -100,20 +100,14 @@ struct DataExportView: View {
             .navigationTitle("export_data_title".localized)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("cancel".localized) {
-                        dismiss()
-                    }
-                }
-                
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: exportData) {
-                        if isExporting {
-                            ProgressView()
-                                .scaleEffect(0.8)
-                        } else {
-                            Text("export_button".localized)
-                        }
+                        // Same width while exporting: the label stays in place, hidden under the spinner.
+                        Text("export_button".localized)
+                            .opacity(isExporting ? 0 : 1)
+                            .overlay {
+                                if isExporting { ProgressView().controlSize(.small) }
+                            }
                     }
                     .disabled(selectedDataTypes.isEmpty || isExporting)
                 }
@@ -169,15 +163,14 @@ struct DataExportView: View {
             DispatchQueue.main.async {
                 isExporting = false
                 
+                // Success opens only the share sheet; an alert at the same time made both glitch.
                 if let url = fileURL {
                     exportedFileURL = url
                     showingShareSheet = true
-                    alertMessage = "export_success".localized
                 } else {
                     alertMessage = "export_failed".localized
+                    showingAlert = true
                 }
-                
-                showingAlert = true
             }
         }
     }

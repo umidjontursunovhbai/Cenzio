@@ -51,7 +51,7 @@ struct CurrencySelectionView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        Group { // pushed from Settings: its stack gives the back button
             List {
                 if searchText.isEmpty {
                     ForEach(CurrencyRegion.allCases, id: \.self) { region in
@@ -85,11 +85,6 @@ struct CurrencySelectionView: View {
                 placement: .navigationBarDrawer(displayMode: .always),
                 prompt: "Search currencies"
             )
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("cancel".localized) { dismiss() }
-                }
-            }
         }
         .tint(NightTheme.accent)
     }

@@ -67,98 +67,119 @@ struct BudgetProgressBar: View {
     }
 }
 
-/// Body of the Budget Goals info popup. Presented with `.infoPopup` from `BudgetSettingsView`,
-/// which supplies the title, icon, backdrop, "Got it" button and animations; each section here
-/// staggers in via `InfoPopupSection`.
-struct BudgetGoalsInfoContent: View {
+/// "How budget goals work", pushed from the Budget goals info button.
+struct BudgetGoalsInfoPage: View {
     /// Optional real example: a category name and its limit.
     var example: (name: String, limit: Double)?
     let currency: Currency
 
+    /// The meter runs from 0 to 120% so the over-budget zone has room.
+    private let meterSpan = 1.2
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 22) {
-            InfoPopupSection("budget_info_why_title".localized, index: 0) {
-                Text("budget_info_why_body".localized)
-                    .font(.subheadline)
-                    .foregroundStyle(NightTheme.secondaryLabel)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            InfoPopupSection("budget_info_calc_title".localized, index: 1) {
-                VStack(alignment: .leading, spacing: 12) {
-                    bullet(icon: "calendar-days", text: "budget_info_calc_month".localized)
-                    bullet(icon: "tag", text: "budget_info_calc_category".localized)
-                    bullet(icon: "check-circle", text: "budget_info_calc_active".localized)
+        InfoPage(title: "budget_info_title".localized, lead: "budget_info_why_body".localized) {
+            InfoPageSection("budget_info_states_title".localized) {
+                VStack(spacing: 0) {
+                    meter
+                        .padding(.horizontal, 14)
+                        .padding(.top, 16)
+                        .padding(.bottom, 10)
+                    Divider().overlay(NightTheme.hair)
+                    statusRow(.onTrack, rule: "budget_info_state_on_track".localized)
+                    Divider().overlay(NightTheme.hair).padding(.leading, 36)
+                    statusRow(.nearLimit, rule: "budget_info_state_near".localized)
+                    Divider().overlay(NightTheme.hair).padding(.leading, 36)
+                    statusRow(.overBudget, rule: "budget_info_state_over".localized)
                 }
-            }
-
-            InfoPopupSection("budget_info_states_title".localized, index: 2) {
-                VStack(alignment: .leading, spacing: 0) {
-                    statusRow(.onTrack, rule: "budget_info_state_on_track".localized, progress: 0.5)
-                    Divider().overlay(NightTheme.hair).padding(.leading, 26)
-                    statusRow(.nearLimit, rule: "budget_info_state_near".localized, progress: 0.86)
-                    Divider().overlay(NightTheme.hair).padding(.leading, 26)
-                    statusRow(.overBudget, rule: "budget_info_state_over".localized, progress: 1)
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 4)
-                .background(NightTheme.glassFill, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .nightGroup()
             }
 
             if let example {
-                exampleRow(example)
-                    .infoPopupStaggered(3)
+                InfoPageSection("example_header".localized) {
+                    exampleCard(example)
+                }
             }
 
-            InfoPopupSection("budget_info_alerts_title".localized, index: 4) {
+            InfoPageSection("budget_info_calc_title".localized) {
+                InfoPageList(rows: [
+                    ("calendar-days", "budget_info_calc_month".localized),
+                    ("tag", "budget_info_calc_category".localized),
+                    ("check-circle", "budget_info_calc_active".localized)
+                ])
+            }
+
+            InfoPageSection("budget_info_alerts_title".localized) {
                 Text("budget_info_alerts_body".localized)
                     .font(.subheadline)
                     .foregroundStyle(NightTheme.secondaryLabel)
                     .fixedSize(horizontal: false, vertical: true)
+                    .padding(14)
+                    .nightGroup()
             }
 
-            InfoPopupSection("budget_info_more_title".localized, index: 5) {
-                VStack(alignment: .leading, spacing: 12) {
-                    bullet(icon: "flag", text: "budget_info_more_goals".localized)
-                    bullet(icon: "sparkles", text: "budget_info_more_suggest".localized)
+            InfoPageSection("budget_info_more_title".localized) {
+                InfoPageList(rows: [
+                    ("flag", "budget_info_more_goals".localized),
+                    ("sparkles", "budget_info_more_suggest".localized)
+                ])
+            }
+        }
+    }
+
+    /// One bar with the three zones and marks at 80% and 100%.
+    private var meter: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            GeometryReader { proxy in
+                let width = proxy.size.width
+                ZStack(alignment: .leading) {
+                    HStack(spacing: 0) {
+                        BudgetGoalStatus.onTrack.color
+                            .frame(width: width * BudgetGoalStatus.warningThreshold / meterSpan)
+                        BudgetGoalStatus.nearLimit.color
+                            .frame(width: width * (1 - BudgetGoalStatus.warningThreshold) / meterSpan)
+                        BudgetGoalStatus.overBudget.color
+                    }
+                    .frame(height: 12)
+                    .clipShape(Capsule())
+                    ForEach([BudgetGoalStatus.warningThreshold, 1.0], id: \.self) { mark in
+                        Capsule()
+                            .fill(NightTheme.accent)
+                            .frame(width: 2, height: 22)
+                            .offset(x: width * mark / meterSpan - 1)
+                    }
+                }
+                .frame(height: 22)
+            }
+            .frame(height: 22)
+
+            GeometryReader { proxy in
+                ZStack(alignment: .topLeading) {
+                    Text(0.0.formatted(.percent))
+                    ForEach([BudgetGoalStatus.warningThreshold, 1.0], id: \.self) { mark in
+                        Text(mark.formatted(.percent))
+                            .fixedSize()
+                            .position(x: proxy.size.width * mark / meterSpan, y: 7)
+                    }
                 }
             }
+            .frame(height: 14)
+            .font(.caption2.monospacedDigit())
+            .foregroundStyle(NightTheme.secondaryLabel)
         }
+        .accessibilityHidden(true)
     }
 
-    private func bullet(icon: String, text: String) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            HeroIcon(icon, size: 17)
-                .foregroundStyle(NightTheme.accent)
-                .frame(width: 30, height: 30)
-                .background(NightTheme.accent.opacity(0.1), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-                .accessibilityHidden(true)
-            Text(text)
-                .font(.subheadline)
-                .foregroundStyle(.primary)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-
-    /// Legend row: colored dot + status name, the rule, and a sample bar in that color.
-    private func statusRow(_ status: BudgetGoalStatus, rule: String, progress: Double) -> some View {
+    private func statusRow(_ status: BudgetGoalStatus, rule: String) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Circle()
                 .fill(status.color)
-                .frame(width: 12, height: 12)
-                .padding(.top, 4)
+                .frame(width: 10, height: 10)
+                .padding(.top, 5)
                 .accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 10) {
-                    Text(status.title)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(status.color)
-                    Spacer(minLength: 8)
-                    BudgetProgressBar(progress: progress, tint: status.color, height: 6)
-                        .frame(width: 56)
-                }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(status.title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(status.color)
                 Text(rule)
                     .font(.footnote)
                     .foregroundStyle(NightTheme.secondaryLabel)
@@ -166,20 +187,18 @@ struct BudgetGoalsInfoContent: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.vertical, 10)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
         .accessibilityElement(children: .combine)
     }
 
     /// Worked example with one of the user's own budgets: where the 80% warning starts.
-    private func exampleRow(_ example: (name: String, limit: Double)) -> some View {
+    private func exampleCard(_ example: (name: String, limit: Double)) -> some View {
         let limitText = CurrencyFormatter.format(example.limit, currency: currency)
         let warningText = CurrencyFormatter.format(example.limit * BudgetGoalStatus.warningThreshold, currency: currency)
 
         return VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
-                HeroIcon("target", size: 15)
-                    .foregroundStyle(Color(.systemOrange))
-                    .accessibilityHidden(true)
                 Text(example.name)
                     .font(.subheadline.weight(.semibold))
                     .lineLimit(1)
@@ -189,28 +208,18 @@ struct BudgetGoalsInfoContent: View {
                     .foregroundStyle(NightTheme.secondaryLabel)
                     .lineLimit(1)
             }
-
             BudgetProgressBar(
                 progress: BudgetGoalStatus.warningThreshold,
                 tint: BudgetGoalStatus.nearLimit.color,
                 height: 8
             )
-
             Text("budget_info_example".localized(with: example.name, limitText, warningText))
                 .font(.footnote)
                 .foregroundStyle(NightTheme.secondaryLabel)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color(.systemOrange).opacity(0.08))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .stroke(Color(.systemOrange).opacity(0.25), lineWidth: 1)
-        )
+        .nightGroup()
         .accessibilityElement(children: .combine)
     }
 }
