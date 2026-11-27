@@ -166,7 +166,6 @@ struct RecurringExpensesView: View {
                     .foregroundStyle(.primary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
-                    .capFigure(isSelectionMode ? nil : .cyclist, fontSize: 46, relativeTo: .largeTitle)
                     .accessibilityAddTraits(.isHeader)
                 headerSubtitle
             }
