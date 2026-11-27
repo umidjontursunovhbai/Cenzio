@@ -101,11 +101,14 @@ struct DataImportView: View {
                     .accessibilityIdentifier("import.infoButton")
                 }
 
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("cancel".localized) {
-                        dismiss()
+                // While the guide is open, the leading X is the only close control.
+                if !showingFormatInfo {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("cancel".localized) {
+                            dismiss()
+                        }
+                        .accessibilityIdentifier("import.cancel")
                     }
-                    .accessibilityIdentifier("import.cancel")
                 }
             }
             .sheet(isPresented: $showingFilePicker) {
@@ -155,14 +158,6 @@ struct DataImportView: View {
                 Text("csv_format_guide".localized)
                     .font(.headline)
                 Spacer()
-                Button(action: toggleFormatInfo) {
-                    HeroIcon("x-mark", size: 16)
-                        .foregroundStyle(NightTheme.secondaryLabel)
-                        .frame(width: 30, height: 30)
-                        .background(NightTheme.iconFill, in: Circle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("close".localized)
             }
 
             CSVFormatInfoView()
