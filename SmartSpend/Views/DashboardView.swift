@@ -128,7 +128,7 @@ struct DashboardView: View {
             }
             // Full pages in the Dashboard stack: the system back button returns here.
             .navigationDestination(item: $selectedBudgetCategory) { category in
-                BudgetSettingsView(focusCategoryID: category.id)
+                CategoryBudgetDetailView(categoryID: category.id)
             }
             .navigationDestination(isPresented: $showingBudgetSettings) {
                 BudgetSettingsView()
