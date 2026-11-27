@@ -165,60 +165,18 @@ struct AddExpenseView: View {
                             }
                     }
 
-                    // Category: a native pop-up menu, built like the Appearance menu in Settings,
-                    // plus a "Create New Category" action under the list.
-                    Menu {
-                        Picker(selection: Binding(
+                    CategoryMenuRow(
+                        categories: dataManager.userCategories,
+                        selectedID: Binding(
                             get: { selectedCategoryID },
                             set: { id in
                                 selectedCategoryID = id
                                 categoryChosenByUser = true
                             }
-                        )) {
-                            ForEach(dataManager.userCategories) { category in
-                                Label {
-                                    Text(category.name)
-                                } icon: {
-                                    Image("hero-\(HeroIcon.resolvedName(category.iconSystemName))")
-                                }
-                                .tag(Optional(category.id))
-                            }
-                        } label: { EmptyView() }
-                        .pickerStyle(.inline)
-
-                        Divider()
-                        Button {
-                            showingCategoryManagement = true
-                        } label: {
-                            Label {
-                                Text("create_new_category".localized)
-                            } icon: {
-                                Image("hero-\(HeroIcon.resolvedName("plus.circle"))")
-                            }
-                        }
-                    } label: {
-                        HStack(spacing: 8) {
-                            Text("category".localized)
-                                .foregroundStyle(.primary)
-                            Spacer()
-                            if let userCat = selectedCategory {
-                                HeroIcon(systemName: userCat.iconSystemName)
-                                    .foregroundStyle(userCat.color)
-                                Text(userCat.name)
-                                    .foregroundStyle(.secondary)
-                            } else {
-                                Text("select_category".localized)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Image(systemName: "chevron.up.chevron.down")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
+                        ),
+                        onCreate: { showingCategoryManagement = true }
+                    )
                     .accessibilityIdentifier("expense.category")
-                    .accessibilityValue(selectedCategory?.name ?? "select_category".localized)
 
                     // Date Picker
                     DatePicker("column_date".localized, selection: $selectedDate,
@@ -395,6 +353,66 @@ struct AddExpenseView: View {
         if formatted != new {
             amount = formatted
         }
+    }
+}
+
+// MARK: - Category menu
+
+/// Category row that opens a native pop-up menu, built like the Appearance menu in Settings,
+/// with a "Create New Category" action under the list. Shared by Add expense and Edit expense.
+struct CategoryMenuRow: View {
+    let categories: [UserCategory]
+    @Binding var selectedID: UUID?
+    let onCreate: () -> Void
+
+    private var selected: UserCategory? {
+        selectedID.flatMap { id in categories.first { $0.id == id } }
+    }
+
+    var body: some View {
+        Menu {
+            Picker(selection: $selectedID) {
+                ForEach(categories) { category in
+                    Label {
+                        Text(category.name)
+                    } icon: {
+                        Image("hero-\(HeroIcon.resolvedName(category.iconSystemName))")
+                    }
+                    .tag(Optional(category.id))
+                }
+            } label: { EmptyView() }
+            .pickerStyle(.inline)
+
+            Divider()
+            Button(action: onCreate) {
+                Label {
+                    Text("create_new_category".localized)
+                } icon: {
+                    Image("hero-\(HeroIcon.resolvedName("plus.circle"))")
+                }
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Text("category".localized)
+                    .foregroundStyle(.primary)
+                Spacer()
+                if let category = selected {
+                    HeroIcon(systemName: category.iconSystemName)
+                        .foregroundStyle(category.color)
+                    Text(category.name)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("select_category".localized)
+                        .foregroundStyle(.secondary)
+                }
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityValue(selected?.name ?? "select_category".localized)
     }
 }
 

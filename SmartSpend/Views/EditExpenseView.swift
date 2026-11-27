@@ -1,10 +1,12 @@
 import SwiftUI
 
-/// Same layout as Add expense: glass rows, inline category tiles, Save at the bottom.
+/// Same layout as Add expense: full-screen page, glass rows, category menu, city and Save at the bottom.
 struct EditExpenseView: View {
     private enum Field: Hashable { case title, amount }
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var typeSize
     @ObservedObject private var dataManager = DataManager.shared
 
     let expense: Expense
@@ -17,7 +19,6 @@ struct EditExpenseView: View {
     @State private var selectedCategory: UserCategory?
     @State private var selectedDate: Date
     @State private var showingCategoryManagement = false
-    @State private var showingCategoryGrid = false
     @State private var confirmingDelete = false
     @FocusState private var focusedField: Field?
 
@@ -59,16 +60,15 @@ struct EditExpenseView: View {
                             }
                     }
 
-                    categoryRow
-
-                    if showingCategoryGrid {
-                        CategoryTileGrid(categories: dataManager.userCategories, selectedID: selectedCategory?.id) { category in
-                            selectedCategory = category
-                            withAnimation(.snappy(duration: 0.3)) { showingCategoryGrid = false }
-                        } onCreate: {
-                            showingCategoryManagement = true
-                        }
-                    }
+                    CategoryMenuRow(
+                        categories: dataManager.userCategories,
+                        selectedID: Binding(
+                            get: { selectedCategory?.id },
+                            set: { id in selectedCategory = id.flatMap { dataManager.getCategory(id: $0) } }
+                        ),
+                        onCreate: { showingCategoryManagement = true }
+                    )
+                    .accessibilityIdentifier("edit-expense.category")
 
                     DatePicker("column_date".localized, selection: $selectedDate, displayedComponents: [.date, .hourAndMinute])
                 } header: {
@@ -127,45 +127,34 @@ struct EditExpenseView: View {
         }
     }
 
+    /// Same bottom as Add expense: the mini city stays while typing (shorter), then Save.
     private var saveBar: some View {
-        Button("save".localized, action: updateExpense)
-            .buttonStyle(PrimaryCapsuleButtonStyle())
-            .disabled(!canSave)
-            .accessibilityIdentifier("edit-expense.save")
-            .padding(.horizontal, 28)
-            .padding(.top, 8)
-            .padding(.bottom, 10)
-            .background(NightGround())
+        VStack(spacing: 0) {
+            if !typeSize.isAccessibilitySize {
+                SkylineBandView(litDays: litDays, today: calendar.component(.day, from: Date()),
+                                parkedTaxi: true, glow: 0)
+                    .frame(height: focusedField == nil ? 100 : 64)
+                    .animation(reduceMotion ? nil : .snappy(duration: 0.25), value: focusedField == nil)
+            }
+            Button("save".localized, action: updateExpense)
+                .buttonStyle(PrimaryCapsuleButtonStyle())
+                .disabled(!canSave)
+                .accessibilityIdentifier("edit-expense.save")
+                .padding(.horizontal, 28)
+                .padding(.top, typeSize.isAccessibilitySize ? 12 : 0)
+                .padding(.bottom, 10)
+        }
+        .background(NightGround())
     }
 
-    /// Opens the inline category tiles, like Add expense.
-    private var categoryRow: some View {
-        Button {
-            withAnimation(.snappy(duration: 0.3)) { showingCategoryGrid.toggle() }
-        } label: {
-            HStack(spacing: 8) {
-                Text("category".localized)
-                    .foregroundStyle(.primary)
-                Spacer()
-                if let category = selectedCategory {
-                    HeroIcon(systemName: category.iconSystemName)
-                        .foregroundStyle(category.color)
-                    Text(category.name)
-                        .foregroundStyle(.primary)
-                } else {
-                    Text("select_category".localized)
-                        .foregroundStyle(.secondary)
-                }
-                HeroIcon(systemName: "chevron.down")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .rotationEffect(.degrees(showingCategoryGrid ? 180 : 0))
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("edit-expense.category")
-        .accessibilityValue(selectedCategory?.name ?? "select_category".localized)
+    private let calendar = Calendar.current
+
+    /// Days of this month with expenses: the lit windows of the mini city.
+    private var litDays: Set<Int> {
+        let now = Date()
+        return Set(dataManager.expenses
+            .filter { calendar.isDate($0.date, equalTo: now, toGranularity: .month) }
+            .map { calendar.component(.day, from: $0.date) })
     }
 
     private func updateExpense() {
