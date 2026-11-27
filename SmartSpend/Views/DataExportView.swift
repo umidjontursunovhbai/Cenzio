@@ -53,34 +53,30 @@ struct DataExportView: View {
                                 .frame(width: 20)
 
                             Text(format.rawValue)
-                                .fontWeight(isSelected ? .semibold : .regular)
 
                             Spacer()
 
+                            // One fixed-size indicator: the ring stays put and the
+                            // inner dot grows in, so the row layout never changes.
                             ZStack {
                                 Circle()
-                                    .strokeBorder(NightTheme.secondaryLabel, lineWidth: 1.5)
-                                    .opacity(isSelected ? 0 : 1)
-                                HeroIcon(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(NightTheme.accent)
+                                    .strokeBorder(isSelected ? NightTheme.accent : NightTheme.secondaryLabel, lineWidth: 1.5)
+                                Circle()
+                                    .fill(NightTheme.accent)
+                                    .padding(5)
+                                    .scaleEffect(isSelected || reduceMotion ? 1 : 0.01)
                                     .opacity(isSelected ? 1 : 0)
-                                    .scaleEffect(isSelected || reduceMotion ? 1 : 0.6)
                             }
                             .frame(width: 22, height: 22)
                         }
                         .contentShape(Rectangle())
                         .onTapGesture {
                             guard selectedFormat != format else { return }
-                            withAnimation(reduceMotion ? .easeInOut(duration: 0.15) : .snappy(duration: 0.22)) {
+                            withAnimation(reduceMotion ? .easeInOut(duration: 0.2) : .smooth(duration: 0.35)) {
                                 selectedFormat = format
                             }
                         }
-                        .listRowBackground(
-                            ZStack {
-                                NightTheme.glassFill
-                                NightTheme.accent.opacity(isSelected ? 0.12 : 0)
-                            }
-                        )
+                        .listRowBackground(NightTheme.glassFill)
                         .accessibilityElement(children: .combine)
                         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
                     }
@@ -94,46 +90,6 @@ struct DataExportView: View {
                     if useDateRange {
                         DatePicker("start_date".localized, selection: $startDate, displayedComponents: .date)
                         DatePicker("end_date".localized, selection: $endDate, in: startDate..., displayedComponents: .date)
-                    }
-                }
-                .listRowBackground(NightTheme.glassFill)
-                .listRowSeparatorTint(NightTheme.hair)
-                
-                Section("preview_section".localized) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("export_summary".localized)
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                        
-                        HStack {
-                            Text("data_types_label".localized)
-                            Spacer()
-                            Text(String(format: "selected_count".localized, selectedDataTypes.count))
-                                .foregroundStyle(NightTheme.secondaryLabel)
-                        }
-                        
-                        HStack {
-                            Text("format_label".localized)
-                            Spacer()
-                            Text(selectedFormat.rawValue)
-                                .foregroundStyle(NightTheme.secondaryLabel)
-                        }
-                        
-                        if useDateRange {
-                            HStack {
-                                Text("date_range_label".localized)
-                                Spacer()
-                                Text("\(DateFormatter.shortStyle.string(from: startDate)) - \(DateFormatter.shortStyle.string(from: endDate))")
-                                    .foregroundStyle(NightTheme.secondaryLabel)
-                            }
-                        }
-                        
-                        HStack {
-                            Text("estimated_size_label".localized)
-                            Spacer()
-                            Text(estimatedFileSize)
-                                .foregroundStyle(NightTheme.secondaryLabel)
-                        }
                     }
                 }
                 .listRowBackground(NightTheme.glassFill)
@@ -199,36 +155,6 @@ struct DataExportView: View {
         }
     }
     
-    private var estimatedFileSize: String {
-        let dataManager = DataManager.shared
-        var itemCount = 0
-        
-        if selectedDataTypes.contains(.expenses) || selectedDataTypes.contains(.all) {
-            itemCount += dataManager.expenses.count
-        }
-        if selectedDataTypes.contains(.recurringExpenses) || selectedDataTypes.contains(.all) {
-            itemCount += dataManager.recurringExpenses.count
-        }
-        if selectedDataTypes.contains(.budgets) || selectedDataTypes.contains(.all) {
-            itemCount += dataManager.categoryBudgets.count
-        }
-        if selectedDataTypes.contains(.spendingGoals) || selectedDataTypes.contains(.all) {
-            itemCount += dataManager.spendingGoals.count
-        }
-        if selectedDataTypes.contains(.monthlySalaries) || selectedDataTypes.contains(.all) {
-            itemCount += dataManager.monthlySalaries.count
-        }
-        
-        let estimatedKB = max(1, itemCount / 10)
-        
-        if estimatedKB < 1024 {
-            return "\(estimatedKB) KB"
-        } else {
-            let estimatedMB = Double(estimatedKB) / 1024.0
-            return String(format: "%.1f MB", estimatedMB)
-        }
-    }
-    
     private func exportData() {
         isExporting = true
         
@@ -267,15 +193,6 @@ struct ShareSheet: UIViewControllerRepresentable {
     }
     
     func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
-}
-
-// MARK: - DateFormatter Extension
-extension DateFormatter {
-    static let shortStyle: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "M/d/yy"
-        return formatter
-    }()
 }
 
 #Preview {
