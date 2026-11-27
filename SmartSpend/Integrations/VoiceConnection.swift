@@ -15,7 +15,7 @@ enum VoiceServiceError: LocalizedError {
 }
 
 func voiceText(_ english: String, _ russian: String) -> String {
-    LocalizationManager.shared.currentLanguage == .russian ? russian : english
+    AppLanguage.current == .russian ? russian : english
 }
 
 private final class VoiceNoRedirects: NSObject, URLSessionTaskDelegate {

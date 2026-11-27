@@ -21,6 +21,7 @@ struct SettingsView: View {
     @State private var showingAccount = false
     @State private var showingPrivacyPolicy = false
     @State private var showingClearData = false
+    @State private var languageExpanded = false
     @AppStorage(AppearanceMode.storageKey) private var appearance = AppearanceMode.system
 
     private var currency: Currency { dataManager.user.currency }
@@ -227,14 +228,19 @@ struct SettingsView: View {
     private var appSection: some View {
         Section {
             Button {
-                if let url = URL(string: UIApplication.openSettingsURLString) {
-                    UIApplication.shared.open(url)
-                }
+                withAnimation(.snappy) { languageExpanded.toggle() }
             } label: {
-                SettingsRow(symbol: "globe", title: "language".localized) {
-                    if let currentLanguageName {
-                        Text(currentLanguageName).foregroundStyle(.secondary)
-                    }
+                SettingsRow(symbol: "globe", title: "language".localized, showsChevron: false) {
+                    Text(AppLanguage.current.name).foregroundStyle(.secondary)
+                    NavigationChevron()
+                        .rotationEffect(.degrees(languageExpanded ? 90 : 0))
+                }
+            }
+            .accessibilityHint(languageExpanded ? "" : "select_language".localized)
+
+            if languageExpanded {
+                ForEach(Language.allCases) { language in
+                    languageOption(language)
                 }
             }
 
@@ -252,9 +258,31 @@ struct SettingsView: View {
         }
     }
 
-    private var currentLanguageName: String? {
-        let code = Bundle.main.preferredLocalizations.first ?? "en"
-        return Locale(identifier: code).localizedString(forLanguageCode: code)?.localizedCapitalized
+    /// One language under the expanded Language row. A tap switches the app at once;
+    /// the root view is keyed on the language, so the list redraws collapsed.
+    private func languageOption(_ language: Language) -> some View {
+        let isSelected = AppLanguage.current == language
+        return Button {
+            guard !isSelected else {
+                withAnimation(.snappy) { languageExpanded = false }
+                return
+            }
+            AppLanguage.override = language
+        } label: {
+            HStack(spacing: 12) {
+                Color.clear.frame(width: 28, height: 1)
+                Text(language.name)
+                    .foregroundStyle(.primary)
+                Spacer(minLength: 8)
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(NightTheme.accent)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     // MARK: - Your data
