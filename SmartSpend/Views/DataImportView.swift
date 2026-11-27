@@ -3,6 +3,7 @@ import UniformTypeIdentifiers
 
 struct DataImportView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
     @ObservedObject private var importer = DataImporter.shared
     @ObservedObject private var dataManager = DataManager.shared
     
@@ -22,6 +23,8 @@ struct DataImportView: View {
     
     var body: some View {
         NavigationStack {
+            ZStack {
+            NightGround()
             ScrollViewReader { proxy in
             ScrollView {
             VStack(spacing: 20) {
@@ -36,11 +39,13 @@ struct DataImportView: View {
                         ))
                 }
 
+                // The guide replaces the page while open, so the two never look joined.
+                if !showingFormatInfo {
                 // Header
                 VStack(spacing: 12) {
                     HeroIcon(systemName: "square.and.arrow.down")
                         .font(.system(size: 50))
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(NightTheme.accent)
                     
                     Text("import_expenses_title".localized)
                         .font(.title2)
@@ -48,12 +53,12 @@ struct DataImportView: View {
                     
                     Text("import_expenses_subtitle".localized)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(NightTheme.secondaryLabel)
                         .multilineTextAlignment(.center)
 
                     Text("import_scope_note".localized)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(NightTheme.secondaryLabel)
                         .multilineTextAlignment(.center)
                 }
                 .padding(.top, 20)
@@ -74,6 +79,7 @@ struct DataImportView: View {
                 if selectedFileURL != nil && previewData != nil {
                     importButton
                 }
+                }
             }
             .padding()
             }
@@ -82,6 +88,7 @@ struct DataImportView: View {
                 withAnimation(.snappy(duration: 0.35)) {
                     proxy.scrollTo(Self.pageTopID, anchor: .top)
                 }
+            }
             }
             }
             .navigationBarTitleDisplayMode(.inline)
@@ -124,6 +131,7 @@ struct DataImportView: View {
                 Text("confirm_import_message".localized)
             }
         }
+        .tint(NightTheme.accent)
     }
 
     /// Opens or closes the CSV guide inside the page instead of a separate popup.
@@ -140,18 +148,18 @@ struct DataImportView: View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(spacing: 10) {
                 HeroIcon("document-text", size: 18)
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(NightTheme.accent)
                     .frame(width: 34, height: 34)
-                    .background(Color.accentColor.opacity(0.1), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .background(NightTheme.accent.opacity(0.1), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                     .accessibilityHidden(true)
                 Text("csv_format_guide".localized)
                     .font(.headline)
                 Spacer()
                 Button(action: toggleFormatInfo) {
                     HeroIcon("x-mark", size: 16)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(NightTheme.secondaryLabel)
                         .frame(width: 30, height: 30)
-                        .background(Color(.systemGray6), in: Circle())
+                        .background(NightTheme.iconFill, in: Circle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("close".localized)
@@ -176,7 +184,7 @@ struct DataImportView: View {
                 VStack(spacing: 12) {
                     HeroIcon(systemName: "doc.badge.plus")
                         .font(.system(size: 40))
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(NightTheme.accent)
                     
                     Text("select_csv_file".localized)
                         .font(.headline)
@@ -184,13 +192,13 @@ struct DataImportView: View {
                     
                     Text("select_csv_subtitle".localized)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(NightTheme.secondaryLabel)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 40)
                 .background(
                     RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.accentColor.opacity(0.3), style: StrokeStyle(lineWidth: 2, dash: [5]))
+                        .stroke(NightTheme.accent.opacity(0.3), style: StrokeStyle(lineWidth: 2, dash: [5]))
                 )
             }
             .buttonStyle(.plain)
@@ -206,13 +214,13 @@ struct DataImportView: View {
                     ForEach(["import_step_1", "import_step_2", "import_step_3"], id: \.self) { key in
                         Text(key.localized)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(NightTheme.secondaryLabel)
                     }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding()
-            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 8))
+            .background(NightTheme.glassFill, in: RoundedRectangle(cornerRadius: 8))
         }
     }
     
@@ -220,7 +228,7 @@ struct DataImportView: View {
         VStack(spacing: 12) {
             HStack {
                 HeroIcon(systemName: "doc.text")
-                    .foregroundStyle(.green)
+                    .foregroundStyle(NightTheme.accent)
                 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(fileURL.lastPathComponent)
@@ -229,7 +237,7 @@ struct DataImportView: View {
                     
                     Text("file_selected".localized)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(NightTheme.secondaryLabel)
                 }
                 
                 Spacer()
@@ -239,10 +247,10 @@ struct DataImportView: View {
                     previewData = nil
                 }
                 .font(.caption)
-                .foregroundStyle(.blue)
+                .foregroundStyle(NightTheme.accent)
             }
             .padding()
-            .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 8))
+            .background(NightTheme.glassFill, in: RoundedRectangle(cornerRadius: 8))
         }
     }
     
@@ -250,7 +258,7 @@ struct DataImportView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 HeroIcon(systemName: "eye")
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(NightTheme.accent)
                 
                 Text("preview".localized)
                     .font(.headline)
@@ -260,7 +268,7 @@ struct DataImportView: View {
                 
                 Text(String(format: "total_rows_format".localized, previewData.totalRows))
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(NightTheme.secondaryLabel)
             }
             
             // Headers
@@ -275,7 +283,7 @@ struct DataImportView: View {
                             .font(.caption)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
-                            .background(Color.accentColor.opacity(0.1), in: RoundedRectangle(cornerRadius: 4))
+                            .background(NightTheme.accent.opacity(0.1), in: RoundedRectangle(cornerRadius: 4))
                     }
                 }
             }
@@ -291,7 +299,7 @@ struct DataImportView: View {
                         Text(String(format: "row_number_format".localized, index + 1))
                             .font(.caption)
                             .fontWeight(.medium)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(NightTheme.secondaryLabel)
                         
                         Text(row.joined(separator: ", "))
                             .font(.caption)
@@ -300,12 +308,12 @@ struct DataImportView: View {
                     }
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
-                    .background(Color(.systemGray6), in: RoundedRectangle(cornerRadius: 4))
+                    .background(NightTheme.iconFill, in: RoundedRectangle(cornerRadius: 4))
                 }
             }
         }
         .padding()
-        .background(Color(.systemGray6).opacity(0.5), in: RoundedRectangle(cornerRadius: 12))
+        .background(NightTheme.glassFill, in: RoundedRectangle(cornerRadius: 12))
     }
     
     private var importButton: some View {
@@ -316,7 +324,7 @@ struct DataImportView: View {
                 if isImporting {
                     ProgressView()
                         .scaleEffect(0.8)
-                        .tint(.white)
+                        .tint(colorScheme == .dark ? NightTheme.ink : Color.white)
                 } else {
                     HeroIcon(systemName: "square.and.arrow.down")
                 }
@@ -327,10 +335,10 @@ struct DataImportView: View {
             .frame(maxWidth: .infinity)
             .padding()
             .background(
-                isImporting ? Color.gray : Color.accentColor,
+                isImporting ? NightTheme.track : NightTheme.accent,
                 in: RoundedRectangle(cornerRadius: 12)
             )
-            .foregroundStyle(.white)
+            .foregroundStyle(colorScheme == .dark ? NightTheme.ink : Color.white)
         }
         .disabled(isImporting)
     }
@@ -424,14 +432,14 @@ struct CSVFormatInfoView: View {
         VStack(alignment: .leading, spacing: 18) {
             Text("csv_format_subtitle".localized)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(NightTheme.secondaryLabel)
                 .fixedSize(horizontal: false, vertical: true)
                 .infoPopupStaggered(0)
 
             formatCard(
                 title: "smartspend_format".localized,
                 icon: "check-badge",
-                color: .green,
+                color: NightTheme.accent,
                 description: "smartspend_format_desc".localized,
                 columns: [
                     ("column_date".localized, "required".localized),
@@ -446,7 +454,7 @@ struct CSVFormatInfoView: View {
             formatCard(
                 title: "custom_format".localized,
                 icon: "adjustments-horizontal",
-                color: .purple,
+                color: NightTheme.accent,
                 description: "custom_format_desc".localized,
                 columns: [
                     ("column_title_name_description".localized, "any_of_these".localized),
@@ -490,7 +498,7 @@ struct CSVFormatInfoView: View {
                         .font(.subheadline.weight(.semibold))
                     Text(description)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(NightTheme.secondaryLabel)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -498,7 +506,7 @@ struct CSVFormatInfoView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("required_columns".localized)
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(NightTheme.secondaryLabel)
 
                 ForEach(columns, id: \.name) { column in
                     HStack(alignment: .center, spacing: 6) {
@@ -510,7 +518,7 @@ struct CSVFormatInfoView: View {
                         Spacer(minLength: 8)
                         Text(column.note)
                             .font(.caption2)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(NightTheme.secondaryLabel)
                     }
                     .accessibilityElement(children: .combine)
                 }
@@ -519,7 +527,7 @@ struct CSVFormatInfoView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("example_header".localized)
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(NightTheme.secondaryLabel)
                 Text(example)
                     .font(.system(.caption, design: .monospaced))
                     .foregroundStyle(.primary)
@@ -528,22 +536,22 @@ struct CSVFormatInfoView: View {
                     .padding(.horizontal, 10)
                     .padding(.vertical, 7)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .background(NightTheme.iconFill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(.tertiarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(NightTheme.glassFill, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(color.opacity(0.25), lineWidth: 1)
+                .stroke(NightTheme.glassLine, lineWidth: 1)
         )
     }
 
     private func tipRow(_ text: String) -> some View {
         HStack(alignment: .top, spacing: 8) {
             HeroIcon("sparkles", size: 14)
-                .foregroundStyle(.orange)
+                .foregroundStyle(NightTheme.accent)
                 .padding(.top, 2)
                 .accessibilityHidden(true)
             Text(text)
