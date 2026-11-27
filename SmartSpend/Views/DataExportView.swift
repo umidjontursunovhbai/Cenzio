@@ -2,6 +2,7 @@ import SwiftUI
 
 struct DataExportView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject private var exporter = DataExporter.shared
     
     @State private var selectedDataTypes: Set<DataExporter.ExportData> = [.expenses]
@@ -45,30 +46,46 @@ struct DataExportView: View {
                 
                 Section("export_format_section".localized) {
                     ForEach(DataExporter.ExportFormat.allCases, id: \.self) { format in
+                        let isSelected = selectedFormat == format
                         HStack {
                             HeroIcon(systemName: format.icon)
                                 .foregroundStyle(NightTheme.accent)
                                 .frame(width: 20)
-                            
+
                             Text(format.rawValue)
-                            
+                                .fontWeight(isSelected ? .semibold : .regular)
+
                             Spacer()
-                            
-                            if selectedFormat == format {
+
+                            ZStack {
+                                Circle()
+                                    .strokeBorder(NightTheme.secondaryLabel, lineWidth: 1.5)
+                                    .opacity(isSelected ? 0 : 1)
                                 HeroIcon(systemName: "checkmark.circle.fill")
                                     .foregroundStyle(NightTheme.accent)
-                            } else {
-                                HeroIcon(systemName: "circle")
-                                    .foregroundStyle(NightTheme.secondaryLabel)
+                                    .opacity(isSelected ? 1 : 0)
+                                    .scaleEffect(isSelected || reduceMotion ? 1 : 0.6)
                             }
+                            .frame(width: 22, height: 22)
                         }
                         .contentShape(Rectangle())
                         .onTapGesture {
-                            selectedFormat = format
+                            guard selectedFormat != format else { return }
+                            withAnimation(reduceMotion ? .easeInOut(duration: 0.15) : .snappy(duration: 0.22)) {
+                                selectedFormat = format
+                            }
                         }
+                        .listRowBackground(
+                            ZStack {
+                                NightTheme.glassFill
+                                NightTheme.accent.opacity(isSelected ? 0.12 : 0)
+                            }
+                        )
+                        .accessibilityElement(children: .combine)
+                        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
                     }
                 }
-                .listRowBackground(NightTheme.glassFill)
+                .sensoryFeedback(.selection, trigger: selectedFormat)
                 .listRowSeparatorTint(NightTheme.hair)
                 
                 Section("date_range_section".localized) {
