@@ -181,8 +181,9 @@ extension View {
     /// A street figure standing on the cap line of this Big Shoulders text, just past its
     /// trailing end. Hidden at accessibility text sizes.
     func capFigure(_ figure: StreetFigure?, fontSize: CGFloat, relativeTo style: Font.TextStyle,
-                   weight: UIFont.Weight = .heavy, height: CGFloat = 22, gap: CGFloat = 8) -> some View {
-        modifier(CapFigureModifier(figure: figure, fontSize: fontSize, style: style, weight: weight, height: height, gap: gap))
+                   weight: UIFont.Weight = .heavy, height: CGFloat = 22, gap: CGFloat = 8,
+                   paces: Bool = false) -> some View {
+        modifier(CapFigureModifier(figure: figure, fontSize: fontSize, style: style, weight: weight, height: height, gap: gap, paces: paces))
     }
 }
 
@@ -191,11 +192,13 @@ private struct CapFigureModifier: ViewModifier {
     let weight: UIFont.Weight
     let height: CGFloat
     let gap: CGFloat
+    let paces: Bool
     @ScaledMetric private var size: CGFloat
     @Environment(\.dynamicTypeSize) private var typeSize
 
-    init(figure: StreetFigure?, fontSize: CGFloat, style: Font.TextStyle, weight: UIFont.Weight, height: CGFloat, gap: CGFloat) {
+    init(figure: StreetFigure?, fontSize: CGFloat, style: Font.TextStyle, weight: UIFont.Weight, height: CGFloat, gap: CGFloat, paces: Bool) {
         self.figure = figure
+        self.paces = paces
         self.weight = weight
         self.height = height
         self.gap = gap
@@ -205,7 +208,7 @@ private struct CapFigureModifier: ViewModifier {
     func body(content: Content) -> some View {
         content.overlay(alignment: .topTrailing) {
             if let figure, !typeSize.isAccessibilitySize {
-                StreetFigureView(figure: figure, height: height)
+                StreetFigureView(figure: figure, height: height, paces: paces)
                     .alignmentGuide(.top) { $0[.bottom] - NightTheme.capDrop(size, weight: weight) }
                     .alignmentGuide(.trailing) { $0[.leading] - gap }
             }

@@ -1301,15 +1301,19 @@ struct DashboardView: View {
 }
 
 /// A somsa stand beside the hero amount (mockup v11): the buyer walks in, hands a warm bill
-/// to the seller and gets a warm bag back, once each time the dashboard appears (~2.6 s).
-/// After that both people keep moving gently: the buyer breathes and swings the bag, the
-/// seller bobs and serves, and steam rises from the counter. Reduce Motion draws the end
-/// state with nothing moving. Decoration only.
+/// to the seller and gets a warm bag back (~2.6 s), then the scene plays back in reverse and
+/// forward again, forever (ping-pong, short holds at both ends). After the first pass both
+/// people also keep moving gently: the buyer breathes and swings the bag, the seller bobs and
+/// serves, and steam rises from the counter. Reduce Motion draws the end state with nothing
+/// moving. Decoration only.
 struct PayScene: View {
     static let size = CGSize(width: 96, height: 30)
     /// When the bill reaches the seller; the amount ticks down then.
     static let billLands = 1.85
     private static let duration = 2.6
+    /// Pauses at the finished state and at the empty start of each ping-pong pass.
+    private static let holdEnd = 1.2
+    private static let holdStart = 0.5
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
@@ -1317,8 +1321,8 @@ struct PayScene: View {
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 1 / 30, paused: reduceMotion || start == nil)) { tl in
-            let t = reduceMotion ? Self.duration : start.map { tl.date.timeIntervalSince($0) } ?? 0
-            Canvas { ctx, _ in draw(ctx, t: min(t, Self.duration), idle: max(t - Self.duration, 0)) }
+            let e = reduceMotion ? Self.duration : start.map { tl.date.timeIntervalSince($0) } ?? 0
+            Canvas { ctx, _ in draw(ctx, t: Self.pingPong(e), idle: max(e - Self.duration, 0)) }
         }
         .frame(width: Self.size.width, height: Self.size.height)
         .allowsHitTesting(false)
@@ -1328,6 +1332,17 @@ struct PayScene: View {
 
     private static func progress(_ t: Double, from: Double, length: Double) -> Double {
         min(max((t - from) / length, 0), 1)
+    }
+
+    /// Scene time for `elapsed` seconds: forward, hold, backward, hold, repeat. Every step of
+    /// the scene eases out at its end and nothing moves at t = 0, so the turns do not jump.
+    private static func pingPong(_ elapsed: Double) -> Double {
+        let period = 2 * duration + holdEnd + holdStart
+        let u = elapsed.truncatingRemainder(dividingBy: period)
+        if u < duration { return u }
+        if u < duration + holdEnd { return duration }
+        if u < 2 * duration + holdEnd { return 2 * duration + holdEnd - u }
+        return 0
     }
 
     /// 0 at the start of the loop, rising to 1 and back over `period` seconds.

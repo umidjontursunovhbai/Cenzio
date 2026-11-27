@@ -479,7 +479,8 @@ struct ExpenseListView: View {
                 .font(NightTheme.display(21, weight: .semibold, relativeTo: .title3))
                 .foregroundStyle(.primary)
                 .lineLimit(1)
-                .capFigure(isToday ? .snacker : nil, fontSize: 21, relativeTo: .title3, weight: .semibold, height: 22, gap: 6)
+                .capFigure(isToday ? .snacker : nil, fontSize: 21, relativeTo: .title3, weight: .semibold, height: 22,
+                            gap: 6 + StreetFigureView.pace + 4, paces: true)
             Spacer(minLength: 8)
             Text(CurrencyFormatter.format(group.total, currency: currency))
                 .font(.subheadline.weight(.semibold))
