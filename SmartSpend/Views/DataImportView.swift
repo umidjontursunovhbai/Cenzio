@@ -22,7 +22,7 @@ struct DataImportView: View {
     private static let formatInfoID = "import.inlineInfo"
     
     var body: some View {
-        NavigationStack {
+        Group { // pushed from Settings: the Settings stack gives the back button
             ZStack {
             NightGround()
             ScrollViewReader { proxy in
@@ -93,7 +93,7 @@ struct DataImportView: View {
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItem(placement: .topBarTrailing) {
                     Button(action: toggleFormatInfo) {
                         HeroIcon(showingFormatInfo ? "x-mark" : "information-circle")
                     }
@@ -101,15 +101,6 @@ struct DataImportView: View {
                     .accessibilityIdentifier("import.infoButton")
                 }
 
-                // While the guide is open, the leading X is the only close control.
-                if !showingFormatInfo {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button("cancel".localized) {
-                            dismiss()
-                        }
-                        .accessibilityIdentifier("import.cancel")
-                    }
-                }
             }
             .sheet(isPresented: $showingFilePicker) {
                 DocumentPicker(selectedURL: $selectedFileURL, onFileSelected: handleFileSelection)

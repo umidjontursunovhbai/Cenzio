@@ -47,7 +47,7 @@ struct SettingsView: View {
             .background { cityBackground }
             .navigationTitle("settings".localized)
             .navigationBarTitleDisplayMode(.large)
-            .sheet(isPresented: $showingPrivacyPolicy) { PrivacyPolicyView() }
+            .navigationDestination(isPresented: $showingPrivacyPolicy) { PrivacyPolicyView() }
             .sheet(isPresented: $showingAccount) { NavigationStack { AccountView() } }
             .sheet(isPresented: $showingMonthlySalary) {
                 MonthlySalaryView()
@@ -56,10 +56,10 @@ struct SettingsView: View {
             }
             .sheet(isPresented: $showingCurrencySelection) { CurrencySelectionView() }
             .sheet(isPresented: $showingDeletedExpenses) { DeletedExpensesView() }
-            .sheet(isPresented: $showingDataExport) { DataExportView() }
-            .sheet(isPresented: $showingDataImport) { DataImportView() }
+            .navigationDestination(isPresented: $showingDataExport) { DataExportView() }
+            .navigationDestination(isPresented: $showingDataImport) { DataImportView() }
             .sheet(isPresented: $showingBudgetGoals) { BudgetSettingsView() }
-            .sheet(isPresented: $showingClearData) { ClearDataView() }
+            .navigationDestination(isPresented: $showingClearData) { ClearDataView() }
         }
     }
 
