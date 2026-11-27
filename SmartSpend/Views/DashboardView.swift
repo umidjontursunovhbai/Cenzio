@@ -1302,7 +1302,8 @@ struct DashboardView: View {
 
 /// A somsa stand beside the hero amount (mockup v11): the buyer walks in, hands a warm bill
 /// to the seller and gets a warm bag back (~2.6 s), then the scene plays back in reverse and
-/// forward again, forever (ping-pong, short holds at both ends). After the first pass both
+/// forward again, forever (ping-pong, short holds at both ends). The buyer fades in only once;
+/// after that the buyer stays visible at the left end between passes. After the first pass both
 /// people also keep moving gently: the buyer breathes and swings the bag, the seller bobs and
 /// serves, and steam rises from the counter. Reduce Motion draws the end state with nothing
 /// moving. Decoration only.
@@ -1322,7 +1323,7 @@ struct PayScene: View {
     var body: some View {
         TimelineView(.animation(minimumInterval: 1 / 30, paused: reduceMotion || start == nil)) { tl in
             let e = reduceMotion ? Self.duration : start.map { tl.date.timeIntervalSince($0) } ?? 0
-            Canvas { ctx, _ in draw(ctx, t: Self.pingPong(e), idle: max(e - Self.duration, 0)) }
+            Canvas { ctx, _ in draw(ctx, t: Self.pingPong(e), idle: max(e - Self.duration, 0), fadesIn: e < Self.duration) }
         }
         .frame(width: Self.size.width, height: Self.size.height)
         .allowsHitTesting(false)
@@ -1351,7 +1352,9 @@ struct PayScene: View {
     }
 
     /// `t` drives the intro (clamped to its length); `idle` counts the seconds since it ended.
-    private func draw(_ ctx: GraphicsContext, t: Double, idle: Double) {
+    /// `fadesIn` is true only on the first pass; after that the buyer stays visible and walks
+    /// backwards out to the left end and in again instead of fading away.
+    private func draw(_ ctx: GraphicsContext, t: Double, idle: Double, fadesIn: Bool) {
         let ink = NightTheme.figure(colorScheme)
         let warm = NightTheme.window
         let dark = colorScheme == .dark
@@ -1403,7 +1406,7 @@ struct PayScene: View {
         let b = Self.progress(t, from: 1.3, length: 0.7)
         if b < 1 {
             let dx = (b < 0.75 ? 17 * (b / 0.75) : 17 + (b - 0.75) / 0.25) - 34 * (1 - we)
-            let alpha = (b < 0.75 ? 1 : 1 - (b - 0.75) / 0.25) * we
+            let alpha = (b < 0.75 ? 1 : 1 - (b - 0.75) / 0.25) * (fadesIn ? we : 1)
             ctx.fill(Path(roundedRect: CGRect(x: 49 + dx, y: 13, width: 6, height: 3.6), cornerRadius: 0.6), with: .color(warm.opacity(alpha)))
         }
 
@@ -1414,7 +1417,7 @@ struct PayScene: View {
 
         // buyer walks in 34 pt and fades in, then breathes (head, body and arm bob; feet stay)
         var buyer = ctx
-        buyer.opacity = we
+        buyer.opacity = fadesIn ? we : 1
         buyer.translateBy(x: -34 * (1 - we), y: 0)
         let walking = w > 0 && w < 1
         let swing = walking ? sin(t * 14) * 1.5 : 0
