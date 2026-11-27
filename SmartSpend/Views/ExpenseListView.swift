@@ -64,10 +64,10 @@ struct ExpenseListView: View {
             .navigationBarTitleDisplayMode(.inline)
             .navigationBarBackButtonHidden(true)
             .toolbar(.hidden, for: .navigationBar)
-            .sheet(isPresented: $showingAddExpense) {
+            .fullScreenCover(isPresented: $showingAddExpense) {
                 AddExpenseView()
             }
-            .sheet(item: $voice.prefill, onDismiss: { voice.reviewDidDismiss() }) { item in
+            .fullScreenCover(item: $voice.prefill, onDismiss: { voice.reviewDidDismiss() }) { item in
                 AddExpenseView(prefill: item) { voice.didSave() }
             }
             .sheet(item: $voice.batch, onDismiss: { voice.batchDidDismiss() }) { batch in

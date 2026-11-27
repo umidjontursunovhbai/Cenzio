@@ -74,7 +74,6 @@ struct AddExpenseView: View {
     @State private var suggestionCategoryUsed = false
     @State private var suggestionPriceUsed = false
     @State private var showingCategoryManagement = false
-    @State private var showingCategoryGrid = false
     @State private var needsDateConfirmation = false
     @State private var isSaving = false
     @State private var saveError: String?
@@ -113,10 +112,6 @@ struct AddExpenseView: View {
             title: title, amount: amount, categoryID: selectedCategoryID,
             availableCategoryIDs: Set(dataManager.userCategories.map(\.id)),
             currencyMatches: currencyMatches)
-    }
-
-    private var hasUnsavedInput: Bool {
-        !AddExpenseDraft.normalizedTitle(title).isEmpty || !amount.isEmpty
     }
 
     var body: some View {
@@ -170,9 +165,37 @@ struct AddExpenseView: View {
                             }
                     }
 
-                    // Category: a row that opens an inline grid of category tiles
-                    Button {
-                        withAnimation(.snappy(duration: 0.3)) { showingCategoryGrid.toggle() }
+                    // Category: a native pop-up menu, built like the Appearance menu in Settings,
+                    // plus a "Create New Category" action under the list.
+                    Menu {
+                        Picker(selection: Binding(
+                            get: { selectedCategoryID },
+                            set: { id in
+                                selectedCategoryID = id
+                                categoryChosenByUser = true
+                            }
+                        )) {
+                            ForEach(dataManager.userCategories) { category in
+                                Label {
+                                    Text(category.name)
+                                } icon: {
+                                    Image("hero-\(HeroIcon.resolvedName(category.iconSystemName))")
+                                }
+                                .tag(Optional(category.id))
+                            }
+                        } label: { EmptyView() }
+                        .pickerStyle(.inline)
+
+                        Divider()
+                        Button {
+                            showingCategoryManagement = true
+                        } label: {
+                            Label {
+                                Text("create_new_category".localized)
+                            } icon: {
+                                Image("hero-\(HeroIcon.resolvedName("plus.circle"))")
+                            }
+                        }
                     } label: {
                         HStack(spacing: 8) {
                             Text("category".localized)
@@ -182,31 +205,20 @@ struct AddExpenseView: View {
                                 HeroIcon(systemName: userCat.iconSystemName)
                                     .foregroundStyle(userCat.color)
                                 Text(userCat.name)
-                                    .foregroundStyle(.primary)
+                                    .foregroundStyle(.secondary)
                             } else {
                                 Text("select_category".localized)
                                     .foregroundStyle(.secondary)
                             }
-                            HeroIcon(systemName: "chevron.down")
-                                .font(.caption)
+                            Image(systemName: "chevron.up.chevron.down")
+                                .font(.caption.weight(.semibold))
                                 .foregroundStyle(.secondary)
-                                .rotationEffect(.degrees(showingCategoryGrid ? 180 : 0))
                         }
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("expense.category")
                     .accessibilityValue(selectedCategory?.name ?? "select_category".localized)
-
-                    if showingCategoryGrid {
-                        CategoryTileGrid(categories: dataManager.userCategories, selectedID: selectedCategoryID) { category in
-                            selectedCategoryID = category.id
-                            categoryChosenByUser = true
-                            withAnimation(.snappy(duration: 0.3)) { showingCategoryGrid = false }
-                        } onCreate: {
-                            showingCategoryManagement = true
-                        }
-                    }
 
                     // Date Picker
                     DatePicker("column_date".localized, selection: $selectedDate,
@@ -245,8 +257,6 @@ struct AddExpenseView: View {
                     Button("done".localized) { focusedField = nil }
                 }
             }
-            // Swiping the sheet away would silently discard a typed expense; Cancel still works.
-            .interactiveDismissDisabled(prefill == nil && hasUnsavedInput)
             .sheet(isPresented: $showingCategoryManagement) {
                 CategoryManagementView()
             }
@@ -268,21 +278,22 @@ struct AddExpenseView: View {
                     selectedCategoryID = dataManager.userCategories.first?.id
                 }
                 if prefill == nil && title.isEmpty {
-                    // Sheets need a beat before a field can become first responder.
+                    // The cover needs a beat before a field can become first responder.
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { focusedField = .title }
                 }
             }
         }
     }
 
-    /// The mini city (hidden while typing and at accessibility text sizes) and the Save capsule.
+    /// The mini city stays on screen while typing (shorter, so the form still fits above the
+    /// keyboard); only accessibility text sizes hide it. The Save capsule sits under it.
     private var saveBar: some View {
         VStack(spacing: 0) {
-            if focusedField == nil && !typeSize.isAccessibilitySize {
+            if !typeSize.isAccessibilitySize {
                 SkylineBandView(litDays: savedLitDays, today: calendar.component(.day, from: Date()),
                                 parkedTaxi: true, glow: saved ? 1 : 0)
-                    .frame(height: 100)
-                    .transition(.opacity)
+                    .frame(height: focusedField == nil ? 100 : 64)
+                    .animation(reduceMotion ? nil : .snappy(duration: 0.25), value: focusedField == nil)
             }
             Button("save".localized, action: saveExpense)
                 .buttonStyle(PrimaryCapsuleButtonStyle())
@@ -290,7 +301,7 @@ struct AddExpenseView: View {
                 .disabled(!canSave && !saved)
                 .accessibilityIdentifier("expense.save")
                 .padding(.horizontal, 28)
-                .padding(.top, focusedField == nil ? 0 : 30)
+                .padding(.top, typeSize.isAccessibilitySize ? 12 : 0)
                 .padding(.bottom, 10)
         }
         .background(NightGround())

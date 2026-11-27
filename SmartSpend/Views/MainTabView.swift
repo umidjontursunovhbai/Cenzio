@@ -37,7 +37,7 @@ struct MainTabView: View {
             CompactTabBar(selection: $tabManager.selectedTab, bottomInset: bottomInset)
                 .ignoresSafeArea(.keyboard)
         }
-        .sheet(isPresented: $showingAddExpense) {
+        .fullScreenCover(isPresented: $showingAddExpense) {
             AddExpenseView()
         }
         .onAppear {

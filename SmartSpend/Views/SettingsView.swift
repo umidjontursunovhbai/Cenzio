@@ -47,7 +47,7 @@ struct SettingsView: View {
             .navigationTitle("settings".localized)
             .navigationBarTitleDisplayMode(.large)
             .navigationDestination(isPresented: $showingPrivacyPolicy) { PrivacyPolicyView() }
-            .sheet(isPresented: $showingAccount) { NavigationStack { AccountView() } }
+            .navigationDestination(isPresented: $showingAccount) { AccountView() }
             .sheet(isPresented: $showingMonthlySalary) {
                 MonthlySalaryView()
                     .presentationDetents([.fraction(0.65), .large])
