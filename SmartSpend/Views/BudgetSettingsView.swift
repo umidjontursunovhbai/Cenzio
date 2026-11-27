@@ -8,8 +8,8 @@ struct BudgetSettingsView: View {
     @State private var showingAddGoal = false
     @State private var showingResetConfirmation = false
     @State private var showingInfo = false
-    /// Category whose limit is being edited in the small sheet.
-    @State private var editingCategory: UserCategory?
+    /// Category whose detail page is pushed.
+    @State private var detailCategory: UserCategory?
 
     init(focusCategoryID: UUID? = nil) {
         self.focusCategoryID = focusCategoryID
@@ -130,13 +130,8 @@ struct BudgetSettingsView: View {
                     .presentationDragIndicator(.visible)
                     .presentationBackground { NightGround() }
             }
-            .sheet(item: $editingCategory) { category in
-                CategoryBudgetEditSheet(category: category) { amount, isEnabled in
-                    updateBudget(for: category.id, amount: amount, isEnabled: isEnabled)
-                }
-                .presentationDetents([.medium])
-                .presentationDragIndicator(.visible)
-                .presentationBackground { NightGround() }
+            .navigationDestination(item: $detailCategory) { category in
+                CategoryBudgetDetailView(categoryID: category.id)
             }
             .alert("budget_reset_title".localized, isPresented: $showingResetConfirmation) {
                 Button("cancel".localized, role: .cancel) { }
@@ -163,31 +158,49 @@ struct BudgetSettingsView: View {
         let progress = hasBudgets ? currentMonthSpent / totalBudget : 0
         let remaining = totalBudget - currentMonthSpent
         let tint = status == .onTrack ? NightTheme.accent : status.color
+        let pace = BudgetMonthPace()
 
-        return VStack(alignment: .leading, spacing: 12) {
-            Text(Date().formatted(.dateTime.month(.wide).year()).uppercased())
-                .font(.caption2.weight(.bold))
-                .foregroundStyle(NightTheme.secondaryLabel)
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 8) {
+                Text(hasBudgets
+                     ? "budget_month_days_left".localized(with: Date().formatted(.dateTime.month(.wide).year()), pace.daysLeft).uppercased()
+                     : Date().formatted(.dateTime.month(.wide).year()).uppercased())
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(NightTheme.secondaryLabel)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                Spacer(minLength: 8)
+                if hasBudgets {
+                    BudgetStatusPill(status: status)
+                }
+            }
 
             if hasBudgets {
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text(CurrencyFormatter.format(currentMonthSpent, currency: currency))
-                        .font(.title2.weight(.bold))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text((remaining < 0 ? "budget_row_over" : "budget_row_left")
+                        .localized(with: CurrencyFormatter.format(abs(remaining), currency: currency)))
+                        .font(.title.weight(.bold))
                         .fontDesign(.rounded)
-                    Text("/ \(CurrencyFormatter.format(totalBudget, currency: currency))")
+                        .monospacedDigit()
+                        .foregroundStyle(remaining < 0 ? Color(.systemRed) : .primary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                    Text("budget_total_used_percent".localized(with: Int((progress * 100).rounded())))
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(NightTheme.secondaryLabel)
                 }
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
 
-                BudgetProgressBar(progress: progress, tint: tint, showsThreshold: false)
+                BudgetPaceBar(progress: progress, tint: tint, todayFraction: pace.elapsedFraction)
 
-                Text(remaining < 0
-                     ? "budget_row_over".localized(with: CurrencyFormatter.format(-remaining, currency: currency))
-                     : "budget_row_left".localized(with: CurrencyFormatter.format(remaining, currency: currency)))
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(remaining < 0 ? Color(.systemRed) : NightTheme.secondaryLabel)
+                BudgetSpentLimitSplit(spent: currentMonthSpent, limit: totalBudget,
+                                      limitLabel: "budget_label_budget".localized, currency: currency)
+
+                if let daily = pace.dailyAllowance(remaining: remaining) {
+                    Text("budget_daily_allowance".localized(with: CurrencyFormatter.format(daily, currency: currency)))
+                        .font(.footnote)
+                        .foregroundStyle(NightTheme.secondaryLabel)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             } else {
                 Text("budget_no_limits_title".localized)
                     .font(.title3.weight(.bold))
@@ -244,7 +257,7 @@ struct BudgetSettingsView: View {
         return budget.amount
     }
 
-    /// One glass group of category rows. Tapping a row opens the small limit editor.
+    /// One glass group of category rows. Tapping a row pushes its detail page.
     private func categoryGroup(_ categories: [UserCategory], spendingByCategory: [UUID: Double]) -> some View {
         VStack(spacing: 0) {
             ForEach(Array(categories.enumerated()), id: \.element.id) { index, category in
@@ -252,7 +265,7 @@ struct BudgetSettingsView: View {
                     Rectangle().fill(NightTheme.hair).frame(height: 1).padding(.leading, 70)
                 }
                 Button {
-                    editingCategory = category
+                    detailCategory = category
                 } label: {
                     CategoryBudgetLine(
                         category: category,
@@ -276,19 +289,6 @@ struct BudgetSettingsView: View {
             withAnimation(.easeInOut(duration: 0.25)) {
                 proxy.scrollTo(focusCategoryID, anchor: .center)
             }
-        }
-    }
-
-    private func updateBudget(for categoryID: UUID, amount: Double, isEnabled: Bool) {
-        if let index = dataManager.categoryBudgets.firstIndex(where: { $0.categoryId == categoryID }) {
-            guard dataManager.categoryBudgets[index].amount != amount
-                    || dataManager.categoryBudgets[index].isEnabled != isEnabled else { return }
-            dataManager.categoryBudgets[index].amount = amount
-            dataManager.categoryBudgets[index].isEnabled = isEnabled
-        } else {
-            dataManager.categoryBudgets.append(
-                CategoryBudget(categoryId: categoryID, amount: amount, isEnabled: isEnabled)
-            )
         }
     }
 
@@ -399,195 +399,10 @@ struct BudgetSettingsView: View {
     }
 }
 
-struct CategoryBudgetSettingRow: View {
-    let category: UserCategory
-    let budget: CategoryBudget?
-    let currentMonthSpent: Double
-    let currency: Currency
-    let onChange: (Double, Bool) -> Void
-
-    @State private var budgetAmount = ""
-    @State private var isEnabled = false
-
-    init(
-        category: UserCategory,
-        budget: CategoryBudget?,
-        currentMonthSpent: Double,
-        currency: Currency,
-        onChange: @escaping (Double, Bool) -> Void
-    ) {
-        self.category = category
-        self.budget = budget
-        self.currentMonthSpent = currentMonthSpent
-        self.currency = currency
-        self.onChange = onChange
-        _budgetAmount = State(
-            initialValue: budget.map { $0.amount > 0 ? AmountInputFormatter.formatValue($0.amount) : "" } ?? ""
-        )
-        _isEnabled = State(initialValue: budget?.isEnabled ?? false)
-    }
-
-    private var enteredAmount: Double {
-        AmountInputFormatter.parse(budgetAmount) ?? 0
-    }
-
-    private var status: BudgetGoalStatus {
-        BudgetGoalStatus.evaluate(spent: currentMonthSpent, limit: enteredAmount, isEnabled: isEnabled)
-    }
-
-    private var progress: Double {
-        guard isEnabled, enteredAmount > 0 else { return 0 }
-        return currentMonthSpent / enteredAmount
-    }
-
-    private var barTint: Color {
-        status == .onTrack ? category.color : status.color
-    }
-
-    private var subtitle: String {
-        if !isEnabled {
-            return "budget_row_no_limit".localized(with: CurrencyFormatter.format(currentMonthSpent, currency: currency))
-        }
-        if enteredAmount <= 0 {
-            return "budget_row_enter_limit".localized
-        }
-        return "budget_row_status".localized(with: status.title, Int((progress * 100).rounded()))
-    }
-
-    var body: some View {
-        VStack(spacing: 14) {
-            HStack(spacing: 12) {
-                HeroIcon(systemName: category.iconSystemName, size: 22)
-                    .foregroundStyle(category.color)
-                    .frame(width: 44, height: 44)
-                    .background(category.color.opacity(0.1), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-                    .accessibilityHidden(true)
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(category.name)
-                        .font(.body.weight(.semibold))
-                        .lineLimit(1)
-
-                    HStack(spacing: 6) {
-                        if status != .noLimit {
-                            Circle()
-                                .fill(status.color)
-                                .frame(width: 7, height: 7)
-                        }
-                        Text(subtitle)
-                            .font(.caption.weight(status == .noLimit ? .regular : .medium))
-                            .foregroundStyle(status == .noLimit || status == .onTrack ? NightTheme.secondaryLabel : status.color)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.8)
-                    }
-                }
-
-                Spacer(minLength: 8)
-
-                Toggle("", isOn: $isEnabled.animation(.easeInOut(duration: 0.18)))
-                    .labelsHidden()
-                    .tint(category.color)
-                    .accessibilityLabel("Budget for \(category.name)")
-            }
-
-            if isEnabled {
-                Divider().overlay(NightTheme.hair)
-
-                HStack(spacing: 12) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("budget_monthly_limit".localized)
-                            .font(.caption)
-                            .foregroundStyle(NightTheme.secondaryLabel)
-                        TextField("0", text: $budgetAmount)
-                            .keyboardType(.decimalPad)
-                            .font(.body.weight(.semibold))
-                            .fontDesign(.rounded)
-                            .multilineTextAlignment(.leading)
-                            .lineLimit(1)
-                            .accessibilityLabel("budget_monthly_limit".localized)
-                    }
-
-                    Text(currency.rawValue)
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(NightTheme.secondaryLabel)
-                }
-                .padding(.horizontal, 12)
-                .frame(minHeight: 54)
-                .background(NightTheme.glassFill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-
-                if enteredAmount > 0 {
-                    VStack(spacing: 8) {
-                        BudgetProgressBar(progress: progress, tint: barTint)
-
-                        HStack(alignment: .firstTextBaseline) {
-                            Text("budget_row_spent_of".localized(with:
-                                CurrencyFormatter.format(currentMonthSpent, currency: currency),
-                                CurrencyFormatter.format(enteredAmount, currency: currency)
-                            ))
-                            .foregroundStyle(NightTheme.secondaryLabel)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.75)
-
-                            Spacer(minLength: 8)
-
-                            Text(status == .overBudget
-                                 ? "budget_row_over".localized(with: CurrencyFormatter.format(currentMonthSpent - enteredAmount, currency: currency))
-                                 : "budget_row_left".localized(with: CurrencyFormatter.format(enteredAmount - currentMonthSpent, currency: currency)))
-                                .fontWeight(.semibold)
-                                .foregroundStyle(status == .overBudget ? Color(.systemRed) : Color.primary)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.75)
-                        }
-                        .font(.caption)
-                    }
-                    .accessibilityElement(children: .combine)
-                }
-            }
-        }
-        .padding(16)
-        .budgetScrollCard(cornerRadius: 18)
-        .onChange(of: isEnabled) { _, _ in
-            updateBudget()
-        }
-        .onChange(of: budgetAmount) { old, _ in
-            formatBudgetInput(previous: old)
-            updateBudget()
-        }
-        .onChange(of: budget) { _, newBudget in
-            updateLocalState(from: newBudget)
-        }
-    }
-
-    private func updateBudget() {
-        let amount = AmountInputFormatter.parse(budgetAmount) ?? 0
-        guard budget?.amount != amount || budget?.isEnabled != isEnabled else { return }
-        onChange(amount, isEnabled)
-    }
-
-    private func updateLocalState(from budget: CategoryBudget?) {
-        guard let budget else {
-            if !budgetAmount.isEmpty { budgetAmount = "" }
-            if isEnabled { isEnabled = false }
-            return
-        }
-
-        let formattedAmount = budget.amount > 0 ? AmountInputFormatter.formatValue(budget.amount) : ""
-        if budgetAmount != formattedAmount { budgetAmount = formattedAmount }
-        if isEnabled != budget.isEnabled { isEnabled = budget.isEnabled }
-    }
-
-    private func formatBudgetInput(previous: String) {
-        let formatted = AmountInputFormatter.formatEditingText(budgetAmount, previous: previous)
-        if formatted != budgetAmount {
-            budgetAmount = formatted
-        }
-    }
-}
-
 /// One category on the Budget goals page, complete without opening anything:
 /// with a limit it shows what is left (or over), a bar, spent of limit and the percent used;
 /// without one it shows this month's spending and a "Set limit" pill.
-/// Tapping it opens `CategoryBudgetEditSheet`.
+/// Tapping it pushes `CategoryBudgetDetailView`.
 struct CategoryBudgetLine: View {
     let category: UserCategory
     let limit: Double
@@ -602,7 +417,7 @@ struct CategoryBudgetLine: View {
     private var progress: Double { limit > 0 ? currentMonthSpent / limit : 0 }
 
     var body: some View {
-        HStack(alignment: limit > 0 ? .top : .center, spacing: 14) {
+        HStack(alignment: .center, spacing: 14) {
             HeroIcon(systemName: category.iconSystemName, size: 21)
                 .foregroundStyle(category.color)
                 .frame(width: 40, height: 40)
@@ -614,6 +429,10 @@ struct CategoryBudgetLine: View {
             } else {
                 unlimitedContent
             }
+
+            HeroIcon("chevron-right", size: 13)
+                .foregroundStyle(Color(.tertiaryLabel))
+                .accessibilityHidden(true)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, limit > 0 ? 16 : 12)
@@ -625,7 +444,7 @@ struct CategoryBudgetLine: View {
             }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityHint("budget_edit_limit".localized)
+        .accessibilityHint("budget_open_detail_hint".localized)
     }
 
     private var limitedContent: some View {
@@ -656,16 +475,12 @@ struct CategoryBudgetLine: View {
             BudgetProgressBar(progress: progress, tint: tint, height: 6, showsThreshold: false)
 
             HStack(alignment: .firstTextBaseline, spacing: 10) {
-                HStack(spacing: 5) {
-                    Text("budget_row_spent_of".localized(with:
-                        CurrencyFormatter.format(currentMonthSpent, currency: currency),
-                        CurrencyFormatter.format(limit, currency: currency)
-                    ))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
-                    HeroIcon("pencil", size: 11)
-                        .accessibilityHidden(true)
-                }
+                Text("budget_row_spent_of".localized(with:
+                    CurrencyFormatter.format(currentMonthSpent, currency: currency),
+                    CurrencyFormatter.format(limit, currency: currency)
+                ))
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
                 .foregroundStyle(NightTheme.secondaryLabel)
                 Spacer(minLength: 8)
                 Text(progress.formatted(.percent.precision(.fractionLength(0))))
@@ -703,49 +518,6 @@ struct CategoryBudgetLine: View {
                 .lineLimit(1)
                 .fixedSize()
         }
-    }
-}
-
-/// Small sheet to switch a category's limit on or off and enter the amount.
-struct CategoryBudgetEditSheet: View {
-    let category: UserCategory
-    let onChange: (Double, Bool) -> Void
-
-    @Environment(\.dismiss) private var dismiss
-    @ObservedObject private var dataManager = DataManager.shared
-
-    var body: some View {
-        let spent = BudgetPeriodCalculator.totalsByCategory(
-            for: dataManager.expenses,
-            in: BudgetPeriodCalculator.monthInterval(containing: Date())
-        )[category.id, default: 0]
-
-        NavigationStack {
-            ScrollView {
-                CategoryBudgetSettingRow(
-                    category: category,
-                    budget: dataManager.categoryBudgets.first { $0.categoryId == category.id },
-                    currentMonthSpent: spent,
-                    currency: dataManager.user.currency,
-                    onChange: onChange
-                )
-                .padding(.horizontal, iOSDesignSystem.Spacing.screenMargin)
-                .padding(.top, 8)
-            }
-            .scrollIndicators(.hidden)
-            .navigationTitle(category.name)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("done".localized) {
-                        dataManager.saveBudgets()
-                        dismiss()
-                    }
-                    .font(.body.weight(.semibold))
-                }
-            }
-        }
-        .tint(NightTheme.accent)
     }
 }
 
