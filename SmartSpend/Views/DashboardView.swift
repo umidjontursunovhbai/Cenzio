@@ -126,10 +126,11 @@ struct DashboardView: View {
             .sheet(isPresented: $showingMonthlySalary) {
                 MonthlySalaryView()
             }
-            .sheet(item: $selectedBudgetCategory) { category in
+            // Full pages in the Dashboard stack: the system back button returns here.
+            .navigationDestination(item: $selectedBudgetCategory) { category in
                 BudgetSettingsView(focusCategoryID: category.id)
             }
-            .sheet(isPresented: $showingBudgetSettings) {
+            .navigationDestination(isPresented: $showingBudgetSettings) {
                 BudgetSettingsView()
             }
             .onAppear(perform: refreshOverview)

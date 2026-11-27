@@ -58,7 +58,7 @@ struct SettingsView: View {
             .navigationDestination(isPresented: $showingDeletedExpenses) { DeletedExpensesView() }
             .navigationDestination(isPresented: $showingDataExport) { DataExportView() }
             .navigationDestination(isPresented: $showingDataImport) { DataImportView() }
-            .sheet(isPresented: $showingBudgetGoals) { BudgetSettingsView() }
+            .navigationDestination(isPresented: $showingBudgetGoals) { BudgetSettingsView() }
             .navigationDestination(isPresented: $showingClearData) { ClearDataView() }
         }
     }

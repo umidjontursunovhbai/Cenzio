@@ -1,7 +1,6 @@
 import SwiftUI
 
 struct BudgetSettingsView: View {
-    @Environment(\.dismiss) private var dismiss
     @ObservedObject private var dataManager = DataManager.shared
 
     private let focusCategoryID: UUID?
@@ -57,7 +56,8 @@ struct BudgetSettingsView: View {
         let spendingByCategory = currentMonthSpendingByCategory
         let spentThisMonth = currentMonthSpent(using: spendingByCategory)
 
-        return NavigationStack {
+        // Pushed from Settings and the Dashboard: their stack gives the back button.
+        return Group {
             ZStack {
                 NightGround()
 
@@ -102,7 +102,8 @@ struct BudgetSettingsView: View {
             .navigationBarTitleDisplayMode(.inline)
             // Default bar: on iOS 26 content scrolls under a soft, see-through top edge.
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                // Trailing: the leading side holds the system back button.
+                ToolbarItem(placement: .topBarTrailing) {
                     Button(action: presentInfo) {
                         // The bar already draws the glass circle, so no extra circle here
                         // and a plain "i" instead of a circled one.
@@ -144,15 +145,6 @@ struct BudgetSettingsView: View {
                     }
                     .accessibilityLabel("budget_more_actions".localized)
                     .accessibilityIdentifier("budgetGoals.more")
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("done".localized) {
-                        dataManager.saveBudgets()
-                        dismiss()
-                    }
-                    .font(.body.weight(.semibold))
-                    .frame(minWidth: iOSDesignSystem.Size.minimumTapTarget,
-                           minHeight: iOSDesignSystem.Size.minimumTapTarget)
                 }
             }
             .sheet(isPresented: $showingAddGoal) {

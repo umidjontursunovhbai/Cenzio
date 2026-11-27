@@ -54,7 +54,8 @@ struct SpendingGoalsView: View {
         .liquidGlassCard()
         .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 4)
         .sheet(isPresented: $showingBudgetSettings) {
-            BudgetSettingsView()
+            // BudgetSettingsView no longer has its own stack; give the sheet one for the bar.
+            NavigationStack { BudgetSettingsView() }
         }
     }
 }
