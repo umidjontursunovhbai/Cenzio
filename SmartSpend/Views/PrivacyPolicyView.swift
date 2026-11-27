@@ -305,25 +305,59 @@ private struct StatusChip: View {
 
 /// The night street as a map of your data: the lit tower is your iPhone (each lit window a
 /// record), the locked cloud is your private iCloud, the dark house is Cenzio, which keeps
-/// no copy. Drawn in a 353 x 236 design box and scaled to the width. On appear the windows
-/// light one by one; the sync line keeps running. An endless 15 s everyday loop plays on the
-/// street: a person walks from the tower to a somsa stall and pays (a "Food" record flies into
-/// the tower and lights a window), a taxi takes them back (a "Transport" record), they walk in,
-/// and the new lights fade before the loop starts again. The Cenzio house stays dark.
-/// Reduce Motion: drawn lit, the person standing at the stall, nothing moving.
+/// no copy. Drawn in a 353 x 236 design box and scaled to the width.
+///
+/// One endless loop (`period` s): a person walks out of the tower to a somsa stall, pays and
+/// gets a bag; a "Food" chip flies into the tower and lights a window while the iCloud lock
+/// blinks. A taxi picks them up and drives back to the tower; a "Transport" chip flies in the
+/// same way. They walk in the door, the taxi leaves, and the new lights fade back. The house
+/// stays dark. Steps follow the distance walked, so feet never slide. Reduce Motion: drawn lit
+/// and still, with nobody on the street.
 private struct PrivacyDataMap: View {
     static let size = CGSize(width: 353, height: 236)
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.scenePhase) private var scenePhase
     @State private var start: Date?
+    @State private var visible = false
 
     private static let lit = [1, 3, 4, 6, 9, 10, 12, 15, 17, 18, 21, 23, 26, 28, 30]
-    private static let lightStart = 0.5, lightStep = 0.11, lightFade = 0.35
-    private static let flowStart = 2.1, flowTime = 3.2
-    private static let total = flowStart + flowTime
-    /// Length of the everyday street loop.
-    private static let loop = 15.0
+
+    // MARK: Timeline (seconds into the loop)
+
+    static let period = 16.2
+    /// Street line, the tower door and the stall.
+    private static let ground = 206.0, doorX = 69.0, stallX = 164.0
+    /// The person is drawn at 0.9x (about 23 pt tall).
+    private static let personScale = 0.9
+    private static let walkOut = (start: 0.2, length: 4.0)          // door -> stall
+    private static let billAt = 4.4, bagAt = 5.0, bagsInHand = 5.5
+    private static let taxiIn = (start: 6.2, length: 2.0)           // from the right to the stall
+    private static let turnAt = 8.3, getIn = (start: 8.5, length: 0.4)
+    private static let ride = (start: 9.2, length: 2.2)             // stall -> tower
+    private static let getOut = (start: 11.6, length: 0.3)
+    private static let walkIn = (start: 11.8, length: 1.6)          // taxi -> door
+    private static let enter = (start: 13.2, length: 0.4)
+    private static let taxiOut = (start: 13.6, length: 1.8)         // away to the left
+    private static let lightsOff = (start: 14.8, length: 1.2)
+    /// Taxi body left edge: arriving, at the stall, at the tower, gone.
+    private static let taxiFrom = 360.0, taxiStall = stallX - 23, taxiTower = 78.0, taxiGone = -130.0
+    private static var getOutX: Double { taxiTower + 23 }
+
+    /// A record chip: where it pops up, when, and the window it lights.
+    private struct Record {
+        let label: String
+        let from: CGPoint
+        let pop: Double
+        let window: Int
+        var lands: Double { pop + 0.5 + 1.0 }
+    }
+
+    private static let records = [
+        Record(label: "Food", from: CGPoint(x: 192, y: 166), pop: 5.2, window: 13),
+        Record(label: "Transport", from: CGPoint(x: getOutX, y: 172), pop: 11.6, window: 19),
+    ]
 
     var body: some View {
         GeometryReader { geo in
@@ -336,22 +370,26 @@ private struct PrivacyDataMap: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Your records live on your iPhone and sync to your private iCloud. Cenzio keeps no copy.")
         .accessibilityAddTraits(.isImage)
-        .onAppear { if !reduceMotion, start == nil { start = .now } }
+        .onAppear {
+            visible = true
+            if !reduceMotion, start == nil { start = .now }
+        }
+        .onDisappear { visible = false }
     }
 
     private var animates: Bool { !reduceMotion }
 
     private var map: some View {
         ZStack(alignment: .topLeading) {
-            TimelineView(.animation(minimumInterval: 1 / 30, paused: !animates || start == nil)) { tl in
-                let t: Double = {
-                    guard animates else { return Self.total }
-                    guard let start else { return 0 }
-                    return tl.date.timeIntervalSince(start)
+            TimelineView(.animation(minimumInterval: 1 / 30,
+                                    paused: !animates || start == nil || !visible || scenePhase != .active)) { tl in
+                let t: Double? = {
+                    guard animates, let start else { return nil }
+                    return tl.date.timeIntervalSince(start).truncatingRemainder(dividingBy: Self.period)
                 }()
                 Canvas { ctx, _ in
                     draw(ctx, t: t)
-                    street(ctx, u: animates ? t.truncatingRemainder(dividingBy: Self.loop) : 3.0, still: !animates)
+                    if let t { drawStory(ctx, t: t) }
                 }
             }
 
@@ -391,7 +429,56 @@ private struct PrivacyDataMap: View {
         Color(red: Double((hex >> 16) & 0xFF) / 255, green: Double((hex >> 8) & 0xFF) / 255, blue: Double(hex & 0xFF) / 255)
     }
 
-    private func draw(_ ctx: GraphicsContext, t: Double) {
+    // MARK: Motion helpers
+
+    private static func prog(_ t: Double, _ from: Double, _ length: Double) -> Double {
+        min(max((t - from) / length, 0), 1)
+    }
+
+    private static func smooth(_ k: Double) -> Double { k * k * (3 - 2 * k) }
+
+    /// Share of a walk done at progress `w`: speeds up over the first 20%, steady, slows
+    /// down over the last 20% (no sudden start or stop).
+    private static func walkCurve(_ w: Double) -> Double {
+        let r = 0.2
+        if w <= 0 { return 0 }
+        if w >= 1 { return 1 }
+        if w < r { return w * w / (2 * r) / (1 - r) }
+        if w > 1 - r { return 1 - (1 - w) * (1 - w) / (2 * r) / (1 - r) }
+        return (r / 2 + (w - r)) / (1 - r)
+    }
+
+    /// Window index -> centre of that window in the tower.
+    private static func windowCenter(_ i: Int) -> CGPoint {
+        CGPoint(x: 31 + Double(i % 4) * 22 + 5, y: 70 + Double(i / 4) * 16 + 4)
+    }
+
+    /// 0...1 brightness of a window a record lit (0 when it is not lit by a record).
+    private static func recordLight(_ i: Int, t: Double?) -> Double {
+        guard let t, let r = records.first(where: { $0.window == i }) else { return 0 }
+        return prog(t, r.lands, 0.3) * (1 - prog(t, lightsOff.start, lightsOff.length))
+    }
+
+    /// 0...1: the iCloud lock blinks twice right after each record lands.
+    private static func lockBlink(_ t: Double?) -> Double {
+        guard let t else { return 0 }
+        for r in records where t >= r.lands && t < r.lands + 0.8 {
+            let k = (t - r.lands) / 0.8
+            return 0.5 - 0.5 * cos(k * 4 * .pi)
+        }
+        return 0
+    }
+
+    /// Seconds the sync line has been running in the current pulse, or nil when it rests.
+    private static func syncRun(_ t: Double?) -> Double? {
+        guard let t else { return nil }
+        for r in records where t >= r.lands && t < r.lands + 1.6 { return t - r.lands }
+        return nil
+    }
+
+    // MARK: Drawing
+
+    private func draw(_ ctx: GraphicsContext, t: Double?) {
         let ink = NightTheme.ink
         let fg = c(NightTheme.fg, ink)
         let back = c(Self.rgb(0x0B1019), ink.opacity(0.10))
@@ -400,6 +487,7 @@ private struct PrivacyDataMap: View {
         let unlit = c(Self.rgb(0x1A2232), Color.white.opacity(0.16))
         let pole = c(Self.rgb(0x2A3142), ink.opacity(0.45))
         let cloud = c(Self.rgb(0x1C2436), ink.opacity(0.12))
+        let warm = NightTheme.window
 
         func rect(_ x: Double, _ y: Double, _ w: Double, _ h: Double) -> Path { Path(CGRect(x: x, y: y, width: w, height: h)) }
         func circle(_ x: Double, _ y: Double, _ r: Double) -> Path { Path(ellipseIn: CGRect(x: x - r, y: y - r, width: 2 * r, height: 2 * r)) }
@@ -409,7 +497,7 @@ private struct PrivacyDataMap: View {
             ctx.fill(rect(r.0, r.1, r.2, r.3), with: .color(back))
         }
 
-        // your iPhone: the tower and its windows
+        // your iPhone: the tower, its windows and its door
         ctx.fill(rect(20, 58, 100, 148), with: .color(tower))
         ctx.fill(rect(20, 58, 100, 1), with: .color(fg.opacity(0.22)))
         ctx.fill(rect(69, 44, 2, 14), with: .color(pole))
@@ -418,33 +506,46 @@ private struct PrivacyDataMap: View {
                 let i = row * 4 + col
                 let frame = rect(31 + Double(col) * 22, 70 + Double(row) * 16, 10, 8)
                 ctx.fill(frame, with: .color(unlit))
-                if let order = Self.lit.firstIndex(of: i) {
-                    let on = min(1, max(0, (t - Self.lightStart - Double(order) * Self.lightStep) / Self.lightFade))
-                    if on > 0 { ctx.fill(frame, with: .color(NightTheme.window.opacity(on))) }
+                if Self.lit.contains(i) {
+                    ctx.fill(frame, with: .color(warm))
+                } else {
+                    let on = Self.recordLight(i, t: t)
+                    if on > 0 { ctx.fill(frame, with: .color(warm.opacity(on))) }
                 }
             }
         }
+        if t != nil {
+            // the door sits between the bottom windows (x 63...75, below y 190)
+            ctx.fill(rect(Self.doorX - 6, 190, 12, Self.ground - 190), with: .color(c(Self.rgb(0x060910), ink)))
+        }
 
-        // sync line to the cloud, running while the clock is in its flow window
+        // sync line to the cloud; its dashes run for a moment after each record lands
         var sync = Path()
         sync.move(to: CGPoint(x: 70, y: 42))
         sync.addCurve(to: CGPoint(x: 100, y: 38), control1: CGPoint(x: 70, y: 24), control2: CGPoint(x: 86, y: 26))
-        let flow = max(t - Self.flowStart, 0)
-        ctx.stroke(sync, with: .color(fg.opacity(0.55)),
-                   style: StrokeStyle(lineWidth: 1.4, dash: [3, 4], dashPhase: -flow / 1.6 * 28))
+        let run = Self.syncRun(t)
+        ctx.stroke(sync, with: .color(fg.opacity(run == nil ? 0.55 : 0.8)),
+                   style: StrokeStyle(lineWidth: 1.4, dash: [3, 4], dashPhase: -(run ?? 0) / 1.6 * 28))
 
-        // your iCloud, locked
+        // your iCloud, locked; the lock blinks warm when a record arrives
         for p in [circle(113, 38, 11), circle(131, 29, 15), circle(151, 36, 12),
                   Path(roundedRect: CGRect(x: 102, y: 36, width: 61, height: 13), cornerRadius: 6.5)] {
             ctx.fill(p, with: .color(cloud))
         }
-        ctx.fill(Path(roundedRect: CGRect(x: 126.5, y: 34, width: 10, height: 8), cornerRadius: 1.6), with: .color(fg))
+        let blink = Self.lockBlink(t)
+        if blink > 0 {
+            ctx.fill(circle(131.5, 35, 11), with: .radialGradient(
+                Gradient(colors: [warm.opacity(0.55 * blink), warm.opacity(0)]),
+                center: CGPoint(x: 131.5, y: 35), startRadius: 0, endRadius: 11))
+        }
+        let lockColor = blink > 0.5 ? warm : fg
+        ctx.fill(Path(roundedRect: CGRect(x: 126.5, y: 34, width: 10, height: 8), cornerRadius: 1.6), with: .color(lockColor))
         var shackle = Path()
         shackle.move(to: CGPoint(x: 128.5, y: 34))
         shackle.addLine(to: CGPoint(x: 128.5, y: 31.4))
         shackle.addArc(center: CGPoint(x: 131.5, y: 31.4), radius: 3, startAngle: .degrees(180), endAngle: .degrees(0), clockwise: false)
         shackle.addLine(to: CGPoint(x: 134.5, y: 34))
-        ctx.stroke(shackle, with: .color(fg), lineWidth: 1.5)
+        ctx.stroke(shackle, with: .color(lockColor), lineWidth: 1.5)
 
         // Cenzio: a dark house with no lit windows
         ctx.fill(rect(262, 126, 68, 80), with: .color(house))
@@ -460,146 +561,164 @@ private struct PrivacyDataMap: View {
         var glow = Path()
         glow.move(to: CGPoint(x: 200, y: 154)); glow.addLine(to: CGPoint(x: 270, y: 154))
         glow.addLine(to: CGPoint(x: 256, y: 206)); glow.addLine(to: CGPoint(x: 214, y: 206)); glow.closeSubpath()
-        ctx.fill(glow, with: .radialGradient(Gradient(colors: [NightTheme.window.opacity(dark ? 0.32 : 0.22), NightTheme.window.opacity(0)]),
+        ctx.fill(glow, with: .radialGradient(Gradient(colors: [warm.opacity(dark ? 0.32 : 0.22), warm.opacity(0)]),
                                              center: CGPoint(x: 235, y: 154), startRadius: 0, endRadius: 60))
         ctx.fill(rect(234, 150, 2, 56), with: .color(pole))
         var head = Path()
         head.move(to: CGPoint(x: 229, y: 150)); head.addLine(to: CGPoint(x: 241, y: 150))
         head.addLine(to: CGPoint(x: 239, y: 154)); head.addLine(to: CGPoint(x: 231, y: 154)); head.closeSubpath()
         ctx.fill(head, with: .color(pole))
-        ctx.fill(circle(235, 154, 1.8), with: .color(NightTheme.window))
+        ctx.fill(circle(235, 154, 1.8), with: .color(warm))
+
+        // somsa stall (only while the story plays)
+        if t != nil {
+            let awning = c(Self.rgb(0x8A94A8), ink.opacity(0.45))
+            let counter = c(Self.rgb(0x2A3350), ink.opacity(0.7))
+            ctx.fill(rect(176, 176, 34, 5), with: .color(awning))
+            for x in stride(from: 176.0, to: 210, by: 7) {
+                ctx.fill(rect(x, 181, 3.5, 2), with: .color(awning.opacity(0.6)))
+            }
+            ctx.fill(rect(178, 183, 2, 10), with: .color(pole))
+            ctx.fill(rect(206, 183, 2, 10), with: .color(pole))
+            ctx.fill(rect(175, 193, 36, 13), with: .color(counter))
+            ctx.fill(rect(182, 196, 22, 2), with: .color(warm))
+        }
 
         // the street
-        ctx.fill(rect(0, 206, Self.size.width, 1), with: .color(fg.opacity(0.22)))
+        ctx.fill(rect(0, Self.ground, Self.size.width, 1), with: .color(fg.opacity(0.22)))
     }
 
-    // MARK: Everyday loop
-
-    private static func prog(_ u: Double, _ from: Double, _ length: Double) -> Double {
-        min(max((u - from) / length, 0), 1)
-    }
-    private static func smooth(_ k: Double) -> Double { k * k * (3 - 2 * k) }
-    /// Walk share done at progress `w`: soft start and stop, steady middle (no skating feet).
-    private static func walked(_ w: Double) -> Double {
-        let a = 0.2
-        if w < a { return w * w / (2 * a * (1 - a)) }
-        if w < 1 - a { return (w - a / 2) / (1 - a) }
-        return 1 - (1 - w) * (1 - w) / (2 * a * (1 - a))
-    }
-
-    /// Tower windows a record lights (not in `lit`), and where they sit.
-    private static let foodWindow = 13, rideWindow = 19
-    private static func windowCenter(_ i: Int) -> CGPoint {
-        CGPoint(x: 36 + Double(i % 4) * 22, y: 74 + Double(i / 4) * 16)
-    }
-
-    /// The loop at loop time `u` (0..<15 s). Timeline: walk to the stall 0-2.6, pay and take
-    /// the bag 2.7-3.8, Food record 3.6, taxi in 4-6, get in 6-6.4, ride back 6.4-8.8,
-    /// Transport record 8.1, get out 9, walk in 9.2-10.8, taxi away 10.8-12.6, lights fade 12-14.
-    private func street(_ ctx: GraphicsContext, u: Double, still: Bool) {
-        let ink = NightTheme.figure(scheme)
+    /// The person, the taxi, the bill and bag, and the flying record chips at time `t`.
+    private func drawStory(_ ctx: GraphicsContext, t: Double) {
         let warm = NightTheme.window
-        let fg = c(NightTheme.fg, NightTheme.ink)
-        func rect(_ x: Double, _ y: Double, _ w: Double, _ h: Double) -> Path { Path(CGRect(x: x, y: y, width: w, height: h)) }
+        let figure = NightTheme.figure(scheme)
 
-        // tower door, and the two records' windows (lit while the loop holds them)
-        ctx.fill(rect(64, 186, 14, 20), with: .color(c(Self.rgb(0x060910), NightTheme.ink.opacity(0.8))))
-        let fadeBack = 1 - Self.prog(u, 12, 2)
-        for (i, from) in [(Self.foodWindow, 4.5), (Self.rideWindow, 8.9)] {
-            let on = Self.prog(u, from, 0.3) * fadeBack
-            if on > 0 {
-                let p = Self.windowCenter(i)
-                ctx.fill(rect(p.x - 5, p.y - 4, 10, 8), with: .color(warm.opacity(on)))
+        // taxi first, so the person stands in front of it on the kerb
+        if let (x, left) = Self.taxiState(t) {
+            var car = ctx
+            if left {
+                car.translateBy(x: 2 * x + 46, y: 0)
+                car.scaleBy(x: -1, y: 1)
             }
+            StreetCast.taxi(car, x, Self.ground, wheel: NightTheme.ink, rims: dark)
         }
 
-        // somsa stall: striped awning, poles, counter with a warm strip
-        let roof = c(NightTheme.silver, Color(red: 127 / 255, green: 138 / 255, blue: 160 / 255))
-        let pole = c(Self.rgb(0x2A3142), NightTheme.ink.opacity(0.45))
-        ctx.fill(Path(roundedRect: CGRect(x: 176, y: 174, width: 36, height: 5), cornerRadius: 1), with: .color(roof))
-        for x in stride(from: 176.0, to: 212, by: 7) { ctx.fill(rect(x, 178.5, 3.5, 1.2), with: .color(NightTheme.ink)) }
-        ctx.fill(rect(178, 179, 1.8, 13), with: .color(pole))
-        ctx.fill(rect(208.2, 179, 1.8, 13), with: .color(pole))
-        ctx.fill(Path(roundedRect: CGRect(x: 175, y: 192, width: 38, height: 14), cornerRadius: 1.5),
-                 with: .color(c(Color(red: 42 / 255, green: 51 / 255, blue: 80 / 255), NightTheme.ink.opacity(0.75))))
-        ctx.fill(Path(roundedRect: CGRect(x: 183, y: 196, width: 22, height: 2), cornerRadius: 1), with: .color(warm.opacity(0.85)))
-
-        // the person: x, facing, walking progress
-        let scale = 0.9
-        var x = 166.0, dir = 1.0, alpha = 1.0, walking = false, bags = false
-        if still {
-            bags = true
-        } else if u < 2.6 {
-            let w = Self.prog(u, 0, 2.6)
-            x = 71 + 95 * Self.walked(w); walking = w > 0 && w < 1; alpha = Self.prog(u, 0, 0.4)
-        } else if u < 6.4 {
-            bags = u > 3.8
-            alpha = 1 - Self.prog(u, 6.0, 0.4)
-        } else if u < 9.0 {
-            alpha = 0
-        } else {
-            let w = Self.prog(u, 9.2, 1.6)
-            x = 104 - 33 * Self.walked(w); dir = -1; walking = w > 0 && w < 1; bags = true
-            alpha = Self.prog(u, 9.0, 0.2) * (1 - Self.prog(u, 10.4, 0.4))
-        }
-        if alpha > 0 {
-            // leg phase follows the distance walked, so feet stay planted
-            StreetCast.person(ctx, x, 206, .init(walk: walking, ph: x / (4.5 * scale), dir: dir, alpha: alpha,
-                                                 bags: bags, scale: scale), color: ink, reduce: still)
+        // the person
+        let p = Self.personState(t)
+        if p.alpha > 0 {
+            let s = Self.personScale
+            StreetCast.person(ctx, p.x, Self.ground + p.drop * s,
+                              .init(walk: true, ph: p.ph, dir: p.dir, alpha: p.alpha, bags: t >= Self.bagsInHand, scale: s),
+                              color: figure, reduce: false)
         }
 
-        // bill to the seller, bag to the buyer
-        let pay = Self.prog(u, 2.7, 0.5)
-        if !still, pay > 0, pay < 1 {
-            ctx.fill(Path(roundedRect: CGRect(x: 170 + 14 * pay, y: 187, width: 5, height: 3.2), cornerRadius: 0.6),
-                     with: .color(warm.opacity(1 - Self.prog(pay, 0.75, 0.25))))
+        // bill to the seller, then the bag to the buyer's hand
+        let bill = Self.prog(t, Self.billAt, 0.5)
+        if bill > 0, bill < 1 {
+            let x = Self.stallX + 4 + 16 * Self.smooth(bill)
+            ctx.fill(Path(roundedRect: CGRect(x: x, y: 193, width: 5, height: 3), cornerRadius: 0.5),
+                     with: .color(warm.opacity(min(1, (1 - bill) * 4))))
         }
-        let bag = Self.smooth(Self.prog(u, 3.3, 0.5))
-        if !still, bag > 0, bag < 1 {
-            ctx.fill(Path(roundedRect: CGRect(x: 190 - 18 * bag, y: 188 + 2 * bag, width: 4, height: 5), cornerRadius: 0.8),
-                     with: .color(warm))
-        }
-
-        // taxi: always facing left; in from the right, stops at the stall, rides to the tower, leaves left
-        if !still {
-            var tx: Double?
-            if u >= 4, u < 6.4 { tx = 360 - 210 * Self.smooth(Self.prog(u, 4, 2)) }
-            else if u >= 6.4, u < 10.8 { tx = 150 - 62 * Self.smooth(Self.prog(u, 6.4, 2.4)) }
-            else if u >= 10.8, u < 12.8 { tx = 88 - 170 * Self.smooth(Self.prog(u, 10.8, 1.8)) }
-            if let tx {
-                var car = ctx
-                let k = 0.45, len = 114 * k
-                car.translateBy(x: tx + len, y: 206)
-                car.scaleBy(x: -k, y: k)
-                StreetCast.taxi(car, 0, 0, wheel: NightTheme.ink, rims: true)
-            }
+        let bag = Self.prog(t, Self.bagAt, 0.5)
+        if bag > 0, t < Self.bagsInHand {
+            let x = 188 - 18 * Self.smooth(bag)
+            ctx.fill(Path(roundedRect: CGRect(x: x, y: 190, width: 5, height: 6), cornerRadius: 1), with: .color(warm))
         }
 
-        // records: a chip pops over the event, then flies into its tower window
-        if !still {
-            record(ctx, u: u, from: 3.6, label: "Food", at: CGPoint(x: 190, y: 164), to: Self.windowCenter(Self.foodWindow), fg: fg, warm: warm)
-            record(ctx, u: u, from: 8.1, label: "Transport", at: CGPoint(x: 120, y: 170), to: Self.windowCenter(Self.rideWindow), fg: fg, warm: warm)
-        }
+        for r in Self.records { chip(ctx, r, t: t) }
     }
 
-    private func record(_ ctx: GraphicsContext, u: Double, from: Double, label: String, at: CGPoint, to: CGPoint,
-                        fg: Color, warm: Color) {
-        let pop = Self.prog(u, from, 0.3), fly = Self.smooth(Self.prog(u, from + 0.6, 0.9))
+    /// Left edge of the taxi body and whether it faces left, or nil when it is off the street.
+    private static func taxiState(_ t: Double) -> (Double, Bool)? {
+        if t < taxiIn.start || t >= taxiOut.start + taxiOut.length { return nil }
+        if t < ride.start {
+            let k = prog(t, taxiIn.start, taxiIn.length)
+            let e = 1 - pow(1 - k, 3) // slows to a stop
+            return (taxiFrom + (taxiStall - taxiFrom) * e, true)
+        }
+        if t < taxiOut.start {
+            let k = smooth(prog(t, ride.start, ride.length))
+            return (taxiStall + (taxiTower - taxiStall) * k, true)
+        }
+        let k = prog(t, taxiOut.start, taxiOut.length)
+        return (taxiTower + (taxiGone - taxiTower) * k * k, true) // pulls away
+    }
+
+    /// Where the person is, which way they face, how visible they are, and the walk pose.
+    /// `drop` lowers the body by the height the angled legs lose, so the planted foot stays on
+    /// the street line (a natural step bob).
+    private struct PersonState { var x = 0.0, dir = 1.0, alpha = 0.0, ph = 0.0, drop = 0.0 }
+
+    private static func personState(_ t: Double) -> PersonState {
+        var p = PersonState()
+        if t < getIn.start + getIn.length {
+            // out of the door to the stall, then waiting there until the taxi comes
+            let distance = stallX - doorX
+            let d = distance * walkCurve(prog(t, walkOut.start, walkOut.length))
+            p.x = doorX + d
+            p.dir = t >= turnAt ? -1 : 1
+            p.alpha = min(prog(t, 0, 0.5), 1 - prog(t, getIn.start, getIn.length))
+            (p.ph, p.drop) = step(d, total: distance)
+        } else if t >= getOut.start, t < enter.start + enter.length {
+            // out of the taxi, back to the door, facing the way they walk (left)
+            let distance = getOutX - doorX
+            let d = distance * walkCurve(prog(t, walkIn.start, walkIn.length))
+            p.x = getOutX - d
+            p.dir = -1
+            p.alpha = min(prog(t, getOut.start, getOut.length), 1 - prog(t, enter.start, enter.length))
+            (p.ph, p.drop) = step(d, total: distance)
+        }
+        return p
+    }
+
+    /// Walk pose for `d` points walked of a `total`-point walk. The stride is fitted so the
+    /// walk is a whole number of steps (feet together at both ends). Over each step the swing
+    /// is linear in distance, so the planted foot moves back exactly as fast as the body moves
+    /// forward: no sliding. Returns the `StreetCast.person` phase and the body drop in units.
+    private static func step(_ d: Double, total: Double) -> (Double, Double) {
+        let s = personScale
+        let leg = 10.0
+        let natural = 2 * leg * sin(0.5) // feet apart at the widest natural stride, in units
+        let steps = max(1, (total / s / natural).rounded(.up))
+        let stride = total / s / steps     // units per step, never wider than natural
+        // Foot A sits at +-half a stride at each step boundary and swaps sides over a step
+        // (planted while it moves back, swinging while it moves forward); foot B mirrors it.
+        // Shifted half a step so the feet are together when standing (d = 0 and d = total).
+        let v = (d / s / stride + 0.5).truncatingRemainder(dividingBy: 2)
+        let tri = v < 1 ? 1 - 2 * v : 2 * (v - 1) - 1
+        // feet at x = +-leg * sin(sw): half a stride apart at step boundaries
+        let sw = asin(min(1, tri * stride / 2 / leg))
+        // StreetCast swings the legs by sin(ph) * 0.5
+        let ph = asin(min(1, max(-1, sw / 0.5)))
+        return (ph, leg * (1 - cos(sw)))
+    }
+
+    /// A record chip: pops up, then flies on a low curve into its window, shrinking as it goes.
+    private func chip(_ ctx: GraphicsContext, _ r: Record, t: Double) {
+        let pop = Self.prog(t, r.pop, 0.3)
+        let fly = Self.smooth(Self.prog(t, r.pop + 0.5, 1.0))
         guard pop > 0, fly < 1 else { return }
-        let text = ctx.resolve(Text(label).font(.system(size: 9, weight: .semibold)).foregroundColor(warm))
-        let size = text.measure(in: CGSize(width: 200, height: 20))
-        let p = CGPoint(x: at.x + (to.x - at.x) * fly, y: at.y - 10 * pop + (to.y - at.y + 10 * pop) * fly)
-        let k = 1 - 0.6 * fly
-        var chip = ctx
-        chip.opacity = pop * (1 - 0.5 * fly)
-        chip.translateBy(x: p.x, y: p.y)
-        chip.scaleBy(x: k, y: k)
-        let w = size.width + 12, h = 16.0
-        chip.fill(Path(roundedRect: CGRect(x: -w / 2, y: -h / 2, width: w, height: h), cornerRadius: h / 2),
-                  with: .color(c(Self.rgb(0x1C2436), Color.white).opacity(0.95)))
-        chip.stroke(Path(roundedRect: CGRect(x: -w / 2, y: -h / 2, width: w, height: h), cornerRadius: h / 2),
-                    with: .color(fg.opacity(0.18)), lineWidth: 0.6)
-        chip.draw(text, at: .zero)
+        let to = Self.windowCenter(r.window)
+        let from = CGPoint(x: r.from.x, y: r.from.y - 8 * Self.smooth(pop))
+        let ctrl = CGPoint(x: to.x + (from.x - to.x) * 0.3, y: max(from.y, to.y) + 6)
+        let a = 1 - fly
+        let pos = CGPoint(x: a * a * from.x + 2 * a * fly * ctrl.x + fly * fly * to.x,
+                          y: a * a * from.y + 2 * a * fly * ctrl.y + fly * fly * to.y)
+        let scale = 1 - 0.65 * fly
+        let alpha = Self.smooth(pop) * (fly < 0.75 ? 1 : 1 - (fly - 0.75) / 0.25)
+
+        var g = ctx
+        g.opacity = alpha
+        g.translateBy(x: pos.x, y: pos.y)
+        g.scaleBy(x: scale, y: scale)
+        let text = g.resolve(Text(r.label).font(.system(size: 10, weight: .semibold))
+            .foregroundColor(c(NightTheme.window, NightTheme.ink)))
+        let size = text.measure(in: CGSize(width: 200, height: 40))
+        let w = size.width + 14, h = 17.0
+        let shape = Path(roundedRect: CGRect(x: -w / 2, y: -h / 2, width: w, height: h), cornerRadius: h / 2)
+        g.fill(shape, with: .color(c(Self.rgb(0x1C2436).opacity(0.96), Color.white.opacity(0.96))))
+        g.stroke(shape, with: .color(NightTheme.window.opacity(dark ? 0.55 : 0.9)), lineWidth: 1)
+        g.draw(text, at: .zero, anchor: .center)
     }
 }
 
