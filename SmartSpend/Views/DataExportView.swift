@@ -22,7 +22,7 @@ struct DataExportView: View {
                     ForEach(DataExporter.ExportData.allCases, id: \.self) { dataType in
                         HStack {
                             HeroIcon(systemName: dataType.icon)
-                                .foregroundColor(.blue)
+                                .foregroundStyle(NightTheme.accent)
                                 .frame(width: 20)
                             
                             Text(dataType.localizedName)
@@ -31,7 +31,7 @@ struct DataExportView: View {
                             
                             if selectedDataTypes.contains(dataType) {
                                 HeroIcon(systemName: "checkmark")
-                                    .foregroundColor(.blue)
+                                    .foregroundStyle(NightTheme.accent)
                             }
                         }
                         .contentShape(Rectangle())
@@ -40,12 +40,14 @@ struct DataExportView: View {
                         }
                     }
                 }
+                .listRowBackground(NightTheme.glassFill)
+                .listRowSeparatorTint(NightTheme.hair)
                 
                 Section("export_format_section".localized) {
                     ForEach(DataExporter.ExportFormat.allCases, id: \.self) { format in
                         HStack {
                             HeroIcon(systemName: format.icon)
-                                .foregroundColor(.blue)
+                                .foregroundStyle(NightTheme.accent)
                                 .frame(width: 20)
                             
                             Text(format.rawValue)
@@ -54,10 +56,10 @@ struct DataExportView: View {
                             
                             if selectedFormat == format {
                                 HeroIcon(systemName: "checkmark.circle.fill")
-                                    .foregroundColor(.blue)
+                                    .foregroundStyle(NightTheme.accent)
                             } else {
                                 HeroIcon(systemName: "circle")
-                                    .foregroundColor(.gray)
+                                    .foregroundStyle(NightTheme.secondaryLabel)
                             }
                         }
                         .contentShape(Rectangle())
@@ -66,6 +68,8 @@ struct DataExportView: View {
                         }
                     }
                 }
+                .listRowBackground(NightTheme.glassFill)
+                .listRowSeparatorTint(NightTheme.hair)
                 
                 Section("date_range_section".localized) {
                     Toggle("use_date_range".localized, isOn: $useDateRange)
@@ -75,6 +79,8 @@ struct DataExportView: View {
                         DatePicker("end_date".localized, selection: $endDate, in: startDate..., displayedComponents: .date)
                     }
                 }
+                .listRowBackground(NightTheme.glassFill)
+                .listRowSeparatorTint(NightTheme.hair)
                 
                 Section("preview_section".localized) {
                     VStack(alignment: .leading, spacing: 8) {
@@ -86,14 +92,14 @@ struct DataExportView: View {
                             Text("data_types_label".localized)
                             Spacer()
                             Text(String(format: "selected_count".localized, selectedDataTypes.count))
-                                .foregroundColor(.secondary)
+                                .foregroundStyle(NightTheme.secondaryLabel)
                         }
                         
                         HStack {
                             Text("format_label".localized)
                             Spacer()
                             Text(selectedFormat.rawValue)
-                                .foregroundColor(.secondary)
+                                .foregroundStyle(NightTheme.secondaryLabel)
                         }
                         
                         if useDateRange {
@@ -101,7 +107,7 @@ struct DataExportView: View {
                                 Text("date_range_label".localized)
                                 Spacer()
                                 Text("\(DateFormatter.shortStyle.string(from: startDate)) - \(DateFormatter.shortStyle.string(from: endDate))")
-                                    .foregroundColor(.secondary)
+                                    .foregroundStyle(NightTheme.secondaryLabel)
                             }
                         }
                         
@@ -109,11 +115,15 @@ struct DataExportView: View {
                             Text("estimated_size_label".localized)
                             Spacer()
                             Text(estimatedFileSize)
-                                .foregroundColor(.secondary)
+                                .foregroundStyle(NightTheme.secondaryLabel)
                         }
                     }
                 }
+                .listRowBackground(NightTheme.glassFill)
+                .listRowSeparatorTint(NightTheme.hair)
             }
+            .scrollContentBackground(.hidden)
+            .background(NightGround())
             .navigationTitle("export_data_title".localized)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -146,6 +156,7 @@ struct DataExportView: View {
                 Text(alertMessage)
             }
         }
+        .tint(NightTheme.accent)
     }
     
     private func toggleDataType(_ dataType: DataExporter.ExportData) {
